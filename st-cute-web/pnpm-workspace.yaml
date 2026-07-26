@@ -1,0 +1,9 @@
+packages:
+  - '.'
+allowBuilds:
+  esbuild: true
+  highlight.js: true
+  vue-demi: true
+minimumReleaseAgeExclude:
+  - marked@18.0.6
+

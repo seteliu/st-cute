@@ -1,0 +1,265 @@
+<template>
+  <div class="folded-message-card">
+    <div class="folded-content">
+      <div class="info-side">
+        <!-- 精致的折叠状态小图标 -->
+        <span class="folded-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14h6v6H4zM14 4h6v6h-6zM4 4h6v6H4zM14 14h6v6h-6z"/>
+          </svg>
+        </span>
+        <span class="folded-text">
+          {{ t('chat.foldedSummary', { assistant: assistantCount, tool: toolCount }) }}
+        </span>
+      </div>
+      <n-button class="detail-btn" size="tiny" quaternary type="primary" @click="openDrawer">
+        {{ t('chat.detail') }}
+      </n-button>
+    </div>
+
+    <!-- 弹窗式详情容器 -->
+    <n-modal
+      v-model:show="showDetail"
+      :style="modalStyle"
+    >
+      <n-card
+        class="folded-detail-card"
+        :style="cardStyle"
+        :content-style="cardContentStyle"
+        :header-style="cardHeaderStyle"
+        closable
+        @close="showDetail = false"
+      >
+        <template #header>
+          <div class="detail-header">
+            <span class="title-text">{{ t('chat.foldedDetailTitle') }}</span>
+            <span class="subtitle-text">{{ t('chat.foldedDetailSubtitle', { assistant: assistantCount, tool: toolCount }) }}</span>
+          </div>
+        </template>
+        
+        <div class="detail-body" :style="contentStyle">
+          <div class="detail-chat-flow">
+            <message-list-flow
+              :messages="foldedItems"
+              :is-sub-agent="true"
+              :cid="cid"
+            />
+          </div>
+        </div>
+      </n-card>
+    </n-modal>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, defineAsyncComponent, type CSSProperties } from 'vue'
+import { useResponsive } from '@/utils/useResponsive'
+import { RenderItem } from './MessageListFlow.vue'
+import { t } from '@/i18n'
+
+const props = defineProps<{
+  foldedItems: RenderItem[]
+  cid?: number | null
+}>()
+
+// 使用异步组件导入，彻底避免 Vue 组件循环引用加载死锁 (MessageListFlow <-> FoldedMessageCard)
+const MessageListFlow = defineAsyncComponent(() => import('./MessageListFlow.vue'))
+const { isMobile } = useResponsive()
+const showDetail = ref(false)
+
+const openDrawer = () => {
+  showDetail.value = true
+}
+
+// 统计助手消息数
+const assistantCount = computed(() => {
+  return props.foldedItems.filter(
+    item => item.type === 'message' &&
+    (item.data.role === 'assistant' || item.data.role === 'branch' || item.data.role === 'compressed')
+  ).length
+})
+
+// 统计工具消息数
+const toolCount = computed(() => {
+  let count = 0
+  for (const item of props.foldedItems) {
+    if (item.type === 'message' && item.tools) {
+      count += item.tools.length
+    } else if (item.type === 'tool_group' && item.tools) {
+      count += item.tools.length
+    }
+  }
+  return count
+})
+
+// 弹窗与样式自适应控制 (自适应适配 PC 和移动端)
+const modalStyle = computed<CSSProperties>(() => {
+  if (isMobile.value) {
+    return {
+      width: '100vw !important',
+      height: '100vh !important',
+      maxHeight: '100vh !important',
+      margin: '0 !important',
+      borderRadius: '0 !important'
+    }
+  } else {
+    return {
+      width: '75vw !important',
+      maxWidth: '1200px'
+    }
+  }
+})
+
+const cardStyle = computed<CSSProperties>(() => {
+  if (isMobile.value) {
+    return {
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      borderRadius: '0'
+    }
+  }
+  return {}
+})
+
+const cardContentStyle = computed<CSSProperties>(() => {
+  return {
+    padding: isMobile.value ? '0 0 12px 0' : '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+    minHeight: 0
+  }
+})
+
+const cardHeaderStyle = computed<CSSProperties | undefined>(() => {
+  return isMobile.value
+    ? { padding: '12px 16px 8px 16px', borderBottom: '1px solid var(--border-color)' }
+    : { borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }
+})
+
+const contentStyle = computed<CSSProperties>(() => {
+  if (isMobile.value) {
+    return {
+      display: 'flex',
+      flexDirection: 'column',
+      flex: 1,
+      minHeight: 0,
+      width: '100%',
+      boxSizing: 'border-box',
+      paddingTop: '0'
+    }
+  } else {
+    return {
+      display: 'flex',
+      flexDirection: 'column',
+      height: '70vh',
+      width: '100%',
+      boxSizing: 'border-box',
+      paddingTop: '8px'
+    }
+  }
+})
+</script>
+
+<style scoped>
+.folded-message-card {
+  width: fit-content;
+  max-width: 85%;
+  margin: 6px 0;
+  box-sizing: border-box;
+}
+
+.folded-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 16px;
+  box-sizing: border-box;
+  transition: border-color 0.25s, background-color 0.25s;
+  gap: 16px;
+}
+
+.folded-content:hover {
+  background-color: rgba(255, 255, 255, 0.035);
+  border-color: var(--primary-color-hover);
+}
+
+.info-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-color-muted);
+}
+
+.folded-icon {
+  display: flex;
+  align-items: center;
+  color: var(--primary-color);
+  opacity: 0.85;
+}
+
+.folded-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.folded-text {
+  user-select: none;
+}
+
+.detail-btn {
+  font-weight: 500;
+  padding: 0 8px;
+}
+
+/* 弹窗样式 */
+.folded-detail-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  background-color: #18181c !important;
+  color: #fff !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title-text {
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--text-color-bright);
+}
+
+.subtitle-text {
+  font-size: 0.75rem;
+  font-weight: normal;
+  color: var(--text-color-muted);
+}
+
+.detail-body {
+  overflow: hidden;
+}
+
+.detail-chat-flow {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+/* 确保详情里的 virtual list 被限制在容器内滚动 */
+:deep(.message-flow-list) {
+  height: 100%;
+  overflow-y: auto;
+}
+</style>

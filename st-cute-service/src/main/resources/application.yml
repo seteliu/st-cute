@@ -1,0 +1,39 @@
+server:
+  port: 9661
+  servlet:
+    session:
+      cookie:
+        name: st-cute-token
+
+spring:
+  application:
+    name: st-cute-service
+
+  datasource:
+    # 存储在用户主目录下的 .st-cute 文件夹内
+    url: jdbc:sqlite:${user.home}/.st-cute/st-cute.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      # 强行锁定单写连接，防止 SQLite 出现 database is locked
+      maximum-pool-size: 1
+      idle-timeout: 30000
+      max-lifetime: 1800000
+      connection-timeout: 5000
+      # 连接初始化时，强制将 SQLite 开启 WAL (Write-Ahead Logging) 模式
+      connection-init-sql: PRAGMA journal_mode=WAL;
+
+mybatis-flex:
+  configuration:
+    map-underscore-to-camel-case: true
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.stioc.cute: INFO
+    com.stioc.cute.repository: INFO
+    org.springframework.web: INFO
+
+st-cute:
+  llm-log:
+    http-log: true

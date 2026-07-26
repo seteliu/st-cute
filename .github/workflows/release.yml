@@ -1,0 +1,324 @@
+name: Release Package Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号（可选，如 0.1.0；留空则自动读取 pom.xml 版本号）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  # 1. 前后端统一编译 Job (仅需编译一次 Fat JAR)
+  build-app:
+    name: Build Frontend & Backend JAR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 11
+
+      - name: Build Frontend
+        run: |
+          cd st-cute-web
+          pnpm install
+          pnpm build
+
+      - name: Copy Frontend Assets to Backend
+        run: |
+          mkdir -p st-cute-service/src/main/resources/static
+          cp -r st-cute-web/dist/* st-cute-service/src/main/resources/static/
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build Backend with Maven
+        run: |
+          cd st-cute-service
+          mvn clean package -DskipTests -B
+
+      - name: Resolve Target Version & Prepare Dist Files
+        run: |
+          mkdir -p dist_app
+          cp st-cute-service/target/st-cute-service-*.jar dist_app/app.jar
+
+          # 解析版本号优先级：输入的版本号 > Git Tag > pom.xml 中的 <version>
+          POM_VERSION=$(grep -m 1 '<version>' st-cute-service/pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r\n')
+          INPUT_VER="${{ inputs.version }}"
+          if [ -n "$INPUT_VER" ]; then
+              FINAL_VERSION="$INPUT_VER"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+              FINAL_VERSION="${GITHUB_REF_NAME}"
+          else
+              FINAL_VERSION="$POM_VERSION"
+          fi
+          echo "$FINAL_VERSION" > dist_app/version.txt
+          echo "Resolved release version: $FINAL_VERSION"
+
+          # 生成 Windows 启动脚本 (st-cute.cmd)
+          cat << 'EOF' > dist_app/st-cute.cmd
+          @echo off
+          setlocal enabledelayedexpansion
+          cd /d "%~dp0"
+          
+          set "JAVA_CMD="
+          if exist "%~dp0jre\bin\java.exe" (
+              set "JAVA_CMD=%~dp0jre\bin\java.exe"
+              goto :RUN
+          )
+          if exist "%~dp0jdk\bin\java.exe" (
+              set "JAVA_CMD=%~dp0jdk\bin\java.exe"
+              goto :RUN
+          )
+          where java >nul 2>nul
+          if %errorlevel% equ 0 (
+              set "JAVA_CMD=java"
+              goto :RUN
+          )
+          
+          echo [ERROR] 未找到 Java 环境！
+          echo 请在当前目录下放置 jre 或 jdk 目录，或者配置系统 Java 环境变量。
+          pause
+          exit /b 1
+          
+          :RUN
+          "%JAVA_CMD%" -jar "%~dp0app.jar"
+          pause
+          EOF
+          # 转换为 Windows CRLF 换行符
+          sed -i 's/$/\r/' dist_app/st-cute.cmd
+
+          # 生成 Linux 启动脚本 (st-cute.sh)
+          cat << 'EOF' > dist_app/st-cute.sh
+          #!/usr/bin/env bash
+          SCRIPT_DIR="$(cd "$(dirname "$0")"; pwd)"
+          cd "$SCRIPT_DIR"
+
+          JAVA_CMD=""
+          if [ -x "$SCRIPT_DIR/jre/bin/java" ]; then
+              JAVA_CMD="$SCRIPT_DIR/jre/bin/java"
+          elif [ -x "$SCRIPT_DIR/jdk/bin/java" ]; then
+              JAVA_CMD="$SCRIPT_DIR/jdk/bin/java"
+          elif command -v java >/dev/null 2>&1; then
+              JAVA_CMD="java"
+          fi
+
+          if [ -z "$JAVA_CMD" ]; then
+              echo "[ERROR] 未找到 Java 环境！"
+              echo "请在当前目录下放置 jre 或 jdk 目录，或者配置系统 Java 环境变量。"
+              exit 1
+          fi
+
+          "$JAVA_CMD" -jar "$SCRIPT_DIR/app.jar" "$@"
+          EOF
+          chmod +x dist_app/st-cute.sh
+
+          # 生成 macOS 双击启动脚本 (st-cute.command)
+          cp dist_app/st-cute.sh dist_app/st-cute.command
+          chmod +x dist_app/st-cute.command
+
+      - name: Upload App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-dist
+          path: dist_app/
+
+  # 2. 矩阵并行构建各平台的 JRE 裁剪包
+  build-jre-packages:
+    name: Build JRE Package (${{ matrix.target }})
+    needs: build-app
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win-x64
+            os: windows-latest
+          - target: linux-x64
+            os: ubuntu-latest
+          - target: mac-arm64
+            os: macos-latest
+          - target: mac-x64
+            os: macos-latest
+
+    steps:
+      - name: Download App Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-dist
+          path: app-dist
+
+      - name: Read Target Version
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(cat app-dist/version.txt | tr -d '\r\n')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      # 默认架构配置 (win-x64, linux-x64, mac-arm64)
+      - name: Set up JDK 25 (Default Architecture)
+        if: matrix.target != 'mac-x64'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      # macOS x64 (Intel) 架构配置
+      - name: Set up JDK 25 (macOS x64 Architecture)
+        if: matrix.target == 'mac-x64'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          architecture: 'x64'
+          distribution: 'temurin'
+
+      # Windows 平台构建 (.zip，保留 st-cute.cmd)
+      - name: Build Windows Package
+        if: matrix.target == 'win-x64'
+        shell: cmd
+        run: |
+          mkdir dist_pkg
+          copy app-dist\app.jar dist_pkg\app.jar
+          copy app-dist\st-cute.cmd dist_pkg\st-cute.cmd
+
+          "%JAVA_HOME%\bin\jlink.exe" ^
+            --module-path "%JAVA_HOME%\jmods" ^
+            --add-modules java.base,java.logging,java.xml,java.naming,java.management,java.instrument,java.sql,java.transaction.xa,java.desktop,java.security.jgss,java.security.sasl,jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.charsets,jdk.localedata,java.net.http ^
+            --include-locales=zh,en ^
+            --compress zip-6 ^
+            --no-header-files ^
+            --no-man-pages ^
+            --strip-debug ^
+            --output dist_pkg\jre
+
+          tar -a -c -f st-cute-${{ matrix.target }}-${{ steps.get_version.outputs.version }}.zip -C dist_pkg .
+
+      # Linux 平台构建 (.tar.gz，保留 st-cute.sh 且 chmod +x)
+      - name: Build Linux Package
+        if: matrix.target == 'linux-x64'
+        shell: bash
+        run: |
+          mkdir dist_pkg
+          cp app-dist/app.jar dist_pkg/app.jar
+          cp app-dist/st-cute.sh dist_pkg/st-cute.sh
+          chmod +x dist_pkg/st-cute.sh
+
+          "$JAVA_HOME/bin/jlink" \
+            --module-path "$JAVA_HOME/jmods" \
+            --add-modules java.base,java.logging,java.xml,java.naming,java.management,java.instrument,java.sql,java.transaction.xa,java.desktop,java.security.jgss,java.security.sasl,jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.charsets,jdk.localedata,java.net.http \
+            --include-locales=zh,en \
+            --compress zip-6 \
+            --no-header-files \
+            --no-man-pages \
+            --strip-debug \
+            --output dist_pkg/jre
+
+          chmod +x dist_pkg/jre/bin/*
+
+          tar -czvf st-cute-${{ matrix.target }}-${{ steps.get_version.outputs.version }}.tar.gz -C dist_pkg .
+
+      # macOS 平台构建 (.tar.gz，保留 st-cute.sh 和 st-cute.command，且 chmod +x)
+      - name: Build macOS Package
+        if: matrix.target == 'mac-arm64' || matrix.target == 'mac-x64'
+        shell: bash
+        run: |
+          mkdir dist_pkg
+          cp app-dist/app.jar dist_pkg/app.jar
+          cp app-dist/st-cute.sh dist_pkg/st-cute.sh
+          cp app-dist/st-cute.command dist_pkg/st-cute.command
+          chmod +x dist_pkg/st-cute.sh
+          chmod +x dist_pkg/st-cute.command
+
+          "$JAVA_HOME/bin/jlink" \
+            --module-path "$JAVA_HOME/jmods" \
+            --add-modules java.base,java.logging,java.xml,java.naming,java.management,java.instrument,java.sql,java.transaction.xa,java.desktop,java.security.jgss,java.security.sasl,jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.charsets,jdk.localedata,java.net.http \
+            --include-locales=zh,en \
+            --compress zip-6 \
+            --no-header-files \
+            --no-man-pages \
+            --strip-debug \
+            --output dist_pkg/jre
+
+          chmod +x dist_pkg/jre/bin/*
+
+          tar -czvf st-cute-${{ matrix.target }}-${{ steps.get_version.outputs.version }}.tar.gz -C dist_pkg .
+
+      - name: Upload Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.target }}
+          path: st-cute-${{ matrix.target }}-*.*
+
+  # 3. 构建 Base 包 (无 JRE，仅纯 app.jar)
+  build-base-package:
+    name: Build Base Package
+    needs: build-app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download App Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-dist
+          path: app-dist
+
+      - name: Read Target Version
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(cat app-dist/version.txt | tr -d '\r\n')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build Base ZIP
+        shell: bash
+        run: |
+          mkdir dist_base
+          cp app-dist/app.jar dist_base/app.jar
+          
+          cd dist_base
+          zip -r ../st-cute-base-${{ steps.get_version.outputs.version }}.zip .
+
+      - name: Upload Base Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-base
+          path: st-cute-base-*.*
+
+  # 4. 汇总上传至 GitHub Release 附件列表
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-jre-packages, build-base-package]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Package Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+
+      - name: Release Packages
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            st-cute-*.zip
+            st-cute-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
