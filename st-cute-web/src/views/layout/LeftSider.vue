@@ -238,7 +238,12 @@
             <template #label>
               <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.baseUrl') }}
             </template>
-            <n-input v-model:value="providerStore.form.baseUrl" placeholder="例如: https://openrouter.ai/api/v1" maxlength="255" />
+            <div style="display: flex; flex-direction: column; width: 100%; gap: 6px;">
+              <n-input v-model:value="providerStore.form.baseUrl" placeholder="例如: https://openrouter.ai/api/v1" maxlength="255" />
+              <n-checkbox v-model:checked="providerStore.form.useFullUrl">
+                {{ t('sider.useFullUrl') }}
+              </n-checkbox>
+            </div>
           </n-form-item>
           <n-form-item>
             <template #label>

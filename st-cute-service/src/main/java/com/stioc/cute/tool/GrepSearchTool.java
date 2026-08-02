@@ -2,6 +2,7 @@ package com.stioc.cute.tool;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.tool.access.CuteTool;
+import com.stioc.cute.tool.access.FileSearchConstants;
 import com.stioc.cute.tool.access.ToolExecutionContext;
 import com.stioc.cute.tool.access.ToolNames;
 import com.stioc.cute.security.access.WorkspacePathResolver;
@@ -21,7 +22,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -36,29 +36,14 @@ public class GrepSearchTool implements CuteTool {
     private WorkspacePathResolver workspacePathResolver;
 
     /**
-     * 排除搜索的无关物理目录集合，包含常见开发语言、构建工具、IDE 缓存与依赖包目录
-     */
-    private static final Set<String> EXCLUDE_DIRS = Set.of(
-            // 版本控制与 AI 隔离
-            ".git", ".github", ".agents", ".gemini",
-            // 常见 IDE 配置文件与缓存
-            ".idea", ".vscode", ".vs", ".settings", ".metadata",
-            // 后端编译与构建输出 (Java/Gradle/Rust/Go)
-            "target", "build", "out", "bin", ".gradle",
-            // 前端打包与依赖 (Node/Web)
-            "node_modules", "dist", ".next", ".nuxt", ".output",
-            // Python 虚拟环境与工具缓存
-            "venv", ".venv", "env", ".env", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-            // C/C++ 构建与编译中间文件
-            "cmake-build-debug", "cmake-build-release", "CMakeFiles", "Debug", "Release", "x64",
-            // 其他常见依赖与通用缓存 (PHP/Ruby 等)
-            "vendor", ".bundle", ".cache"
-    );
-
-    /**
      * 限制检索的最大单文件大小：2MB
      */
     private static final long MAX_FILE_SIZE = 2 * 1024 * 1024L;
+
+    /**
+     * 匹配行内容的最大输出长度（字符数），超过此长度的行将被截断，防止压缩JSON等超长行撑爆上下文
+     */
+    private static final int MAX_MATCH_LINE_LENGTH = 1000;
 
     @Override
     public boolean isReadOnly() {
@@ -72,7 +57,7 @@ public class GrepSearchTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "在指定目录或文件的代码内容中全文检索关键字，返回匹配的行号与行内容信息。rootDir 可传目录路径（递归搜索）或单个文件路径（仅搜索该文件）。默认为普通子串匹配，若 useRegex 为 true 则将 query 视为正则表达式进行匹配。";
+        return "在指定目录或文件的代码内容中全文检索关键字，返回匹配的行号与行内容信息。rootDir 可传目录路径（递归搜索）或单个文件路径（仅搜索该文件）。默认为普通子串匹配，若 useRegex 为 true 则将 query 视为正则表达式进行匹配。默认跳过以点(.)开头的隐藏目录，如需搜索隐藏目录可设置 includeHidden 为 true。";
     }
 
     @Override
@@ -93,6 +78,11 @@ public class GrepSearchTool implements CuteTool {
               "type": "boolean",
               "description": "是否将 query 作为正则表达式进行匹配，可选，默认 false（普通子串匹配）",
               "default": false
+            },
+            "includeHidden": {
+              "type": "boolean",
+              "description": "是否搜索以点(.)开头的隐藏目录（如 .git, .idea, AI临时目录等），可选，默认 false（默认跳过隐藏目录）",
+              "default": false
             }
           },
           "required": ["query"]
@@ -110,6 +100,9 @@ public class GrepSearchTool implements CuteTool {
 
         // 解析是否启用正则模式
         boolean useRegex = Boolean.TRUE.equals(arguments.get("useRegex"));
+
+        // 解析是否搜索以点开头的隐藏目录
+        boolean includeHidden = Boolean.TRUE.equals(arguments.get("includeHidden"));
 
         // 预编译正则 Pattern（仅在正则模式下生效，普通子串模式为 null）
         Pattern compiled = null;
@@ -150,7 +143,16 @@ public class GrepSearchTool implements CuteTool {
                 Files.walkFileTree(targetPath, new SimpleFileVisitor<>() {
                     @Override
                     public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                        if (EXCLUDE_DIRS.contains(dir.getFileName().toString())) {
+                        String dirName = dir.getFileName().toString();
+                        // 遍历根目录本身不跳过（用户显式指定的搜索入口）
+                        if (dir.equals(finalRootPath)) {
+                            return FileVisitResult.CONTINUE;
+                        }
+                        // 根据 includeHidden 参数决定是否跳过以点开头的隐藏目录
+                        if (!includeHidden && dirName.startsWith(".")) {
+                            return FileVisitResult.SKIP_SUBTREE;
+                        }
+                        if (FileSearchConstants.EXCLUDE_DIRS.contains(dirName)) {
                             return FileVisitResult.SKIP_SUBTREE;
                         }
                         return FileVisitResult.CONTINUE;
@@ -203,7 +205,13 @@ public class GrepSearchTool implements CuteTool {
                         ? regexPattern.matcher(line).find()
                         : line.contains(query);
                 if (matched) {
-                    results.add(String.format("[%s:%d] %s", relativePath, lineNumber, line.trim()));
+                    // 超长行截断，防止压缩JSON等撑爆上下文
+                    String trimmed = line.trim();
+                    if (trimmed.length() > MAX_MATCH_LINE_LENGTH) {
+                        trimmed = trimmed.substring(0, MAX_MATCH_LINE_LENGTH)
+                                + "... [已截断, 原始长度: " + trimmed.length() + " 字符]";
+                    }
+                    results.add(String.format("[%s:%d] %s", relativePath, lineNumber, trimmed));
                     if (results.size() >= 50) {
                         break;
                     }

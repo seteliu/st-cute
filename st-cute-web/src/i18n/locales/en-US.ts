@@ -76,6 +76,7 @@ export default {
     groupName: 'Group Name',
     protocol: 'Protocol',
     baseUrl: 'Base URL',
+    useFullUrl: 'Custom Full URL (Do not auto-append API path)',
     apiKey: 'API Key',
     apiKeyPlaceholder: 'Enter API Key',
     modelName: 'Model Name',

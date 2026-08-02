@@ -76,6 +76,7 @@ export default {
     groupName: '分组名称',
     protocol: '协议类型',
     baseUrl: 'Base URL',
+    useFullUrl: '使用自定义完整路径（不自动拼接 API 路径）',
     apiKey: 'API Key',
     apiKeyPlaceholder: '请输入密钥 (API Key)',
     modelName: '模型名称',

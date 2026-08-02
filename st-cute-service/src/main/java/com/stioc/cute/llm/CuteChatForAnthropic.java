@@ -34,13 +34,24 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
     private static final String ANTHROPIC_VERSION = "2023-06-01";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
 
+    private final Boolean useFullUrl;
+
     /**
      * 构造 Anthropic 协议客户端实例
      */
     public CuteChatForAnthropic(String baseUrl, String apiKey, String modelName, Double temperature,
                                 okhttp3.Interceptor loggingInterceptor) {
+        this(baseUrl, apiKey, modelName, temperature, false, loggingInterceptor);
+    }
+
+    /**
+     * 构造 Anthropic 协议客户端实例（包含 useFullUrl 控制）
+     */
+    public CuteChatForAnthropic(String baseUrl, String apiKey, String modelName, Double temperature,
+                                Boolean useFullUrl, okhttp3.Interceptor loggingInterceptor) {
         super(baseUrl != null && !baseUrl.isBlank() ? baseUrl : DEFAULT_BASE_URL,
                 apiKey, modelName, temperature, loggingInterceptor);
+        this.useFullUrl = useFullUrl;
     }
 
     // ──────────────────────────────────────────────
@@ -541,8 +552,9 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
 
     @Override
     protected Request buildHttpRequest(String bodyJson) {
+        String url = Boolean.TRUE.equals(useFullUrl) ? baseUrl : (baseUrl + "/messages");
         return new Request.Builder()
-                .url(baseUrl + "/messages")
+                .url(url)
                 .header("x-api-key", apiKey)
                 .header("anthropic-version", ANTHROPIC_VERSION)
                 .header("Content-Type", "application/json")

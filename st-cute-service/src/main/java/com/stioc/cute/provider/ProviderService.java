@@ -77,6 +77,7 @@ public class ProviderService {
                     .group(p.getGroup())
                     .protocol(p.getProtocol())
                     .baseUrl(p.getBaseUrl())
+                    .useFullUrl(p.getUseFullUrl())
                     .apiKey(p.getApiKey())
                     .modelName(p.getModelName())
                     .temperature(p.getTemperature())
@@ -248,6 +249,7 @@ public class ProviderService {
                         .group(config.getGroup())
                         .protocol(config.getProtocol())
                         .baseUrl(config.getBaseUrl())
+                        .useFullUrl(config.getUseFullUrl())
                         .apiKey(config.getApiKey())
                         .modelName(contextModel != null ? contextModel : config.getModelName())
                         .temperature(config.getTemperature())
@@ -350,12 +352,12 @@ public class ProviderService {
         switch (config.getProtocol().toUpperCase()) {
             case "OPENAI":
                 String openAiBaseUrl = StringUtils.hasText(config.getBaseUrl()) ? config.getBaseUrl() : "https://api.openai.com/v1";
-                client = new CuteChatForOpenAi(openAiBaseUrl, apiKey, targetModelName, temp, interceptor);
+                client = new CuteChatForOpenAi(openAiBaseUrl, apiKey, targetModelName, temp, config.getUseFullUrl(), interceptor);
                 break;
 
             case "ANTHROPIC":
                 String anthropicBaseUrl = StringUtils.hasText(config.getBaseUrl()) ? config.getBaseUrl() : "https://api.anthropic.com/v1";
-                client = new CuteChatForAnthropic(anthropicBaseUrl, apiKey, targetModelName, temp, interceptor);
+                client = new CuteChatForAnthropic(anthropicBaseUrl, apiKey, targetModelName, temp, config.getUseFullUrl(), interceptor);
                 break;
 
             default:

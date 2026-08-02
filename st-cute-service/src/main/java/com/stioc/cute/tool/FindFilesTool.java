@@ -3,6 +3,7 @@ package com.stioc.cute.tool;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.tool.access.CuteTool;
+import com.stioc.cute.tool.access.FileSearchConstants;
 import com.stioc.cute.tool.access.ToolExecutionContext;
 import com.stioc.cute.tool.access.ToolNames;
 import com.stioc.cute.security.access.WorkspacePathResolver;
@@ -17,7 +18,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 遍历文件与匹配过滤本地核心工具
@@ -28,26 +28,6 @@ public class FindFilesTool implements CuteTool {
 
     @Resource
     private WorkspacePathResolver workspacePathResolver;
-
-    /**
-     * 常见的大型无关依赖与构建产物目录，直接跳过以提升搜索性能
-     */
-    private static final Set<String> EXCLUDE_DIRS = Set.of(
-            // 版本控制与 AI 隔离
-            ".git", ".github", ".agents", ".gemini",
-            // 常见 IDE 配置文件与缓存
-            ".idea", ".vscode", ".vs", ".settings", ".metadata",
-            // 后端编译与构建输出 (Java/Gradle/Rust/Go)
-            "target", "build", "out", "bin", ".gradle",
-            // 前端打包与依赖 (Node/Web)
-            "node_modules", "dist", ".next", ".nuxt", ".output",
-            // Python 虚拟环境与工具缓存
-            "venv", ".venv", "env", ".env", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-            // C/C++ 构建与编译中间文件
-            "cmake-build-debug", "cmake-build-release", "CMakeFiles", "Debug", "Release", "x64",
-            // 其他常见依赖与通用缓存 (PHP/Ruby 等)
-            "vendor", ".bundle", ".cache"
-    );
 
     @Override
     public boolean isReadOnly() {
@@ -61,7 +41,7 @@ public class FindFilesTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "在指定目录下按 Glob 表达式查找匹配的文件相对路径列表。已自动忽略 .git, node_modules, target 等无关目录。";
+        return "在指定目录下按 Glob 表达式查找匹配的文件相对路径列表。已自动忽略 .git, node_modules, target 等无关目录。默认跳过以点(.)开头的隐藏目录，如需搜索隐藏目录可设置 includeHidden 为 true。";
     }
 
     @Override
@@ -77,6 +57,11 @@ public class FindFilesTool implements CuteTool {
             "rootDir": {
               "type": "string",
               "description": "查找的根目录相对或绝对路径，可选，默认当前工作目录"
+            },
+            "includeHidden": {
+              "type": "boolean",
+              "description": "是否搜索以点(.)开头的隐藏目录（如 .git, .idea, AI临时目录等），可选，默认 false（默认跳过隐藏目录）",
+              "default": false
             }
           },
           "required": ["pattern"]
@@ -93,6 +78,8 @@ public class FindFilesTool implements CuteTool {
         }
 
         String rootDirVal = (String) arguments.get("rootDir");
+        // 解析是否搜索以点开头的隐藏目录
+        boolean includeHidden = Boolean.TRUE.equals(arguments.get("includeHidden"));
         Path rootPath;
         if (rootDirVal != null && !rootDirVal.isBlank()) {
             rootPath = workspacePathResolver.resolvePath(rootDirVal, agentContext);
@@ -115,7 +102,16 @@ public class FindFilesTool implements CuteTool {
             Files.walkFileTree(rootPath, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    if (EXCLUDE_DIRS.contains(dir.getFileName().toString())) {
+                    String dirName = dir.getFileName().toString();
+                    // 遍历根目录本身不跳过（用户显式指定的搜索入口）
+                    if (dir.equals(finalRootPath)) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    // 根据 includeHidden 参数决定是否跳过以点开头的隐藏目录
+                    if (!includeHidden && dirName.startsWith(".")) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    if (FileSearchConstants.EXCLUDE_DIRS.contains(dirName)) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     return FileVisitResult.CONTINUE;

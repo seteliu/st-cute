@@ -41,6 +41,12 @@ public class Provider {
     private String baseUrl;
 
     /**
+     * 是否直接使用完整请求地址（不自动拼接 /chat/completions 或 /messages 等 API 路径）。
+     * {@code null} 或 {@code false} 表示默认自动拼接。
+     */
+    private Boolean useFullUrl;
+
+    /**
      * API 访问密钥。
      * 优先级：显式配置值 → 环境变量 {@code OPENAI_API_KEY} / {@code ANTHROPIC_API_KEY} → 占位符。
      */

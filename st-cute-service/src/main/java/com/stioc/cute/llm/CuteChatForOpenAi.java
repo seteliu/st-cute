@@ -21,13 +21,24 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
     private static final String DEFAULT_BASE_URL = "https://api.openai.com/v1";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
 
+    private final Boolean useFullUrl;
+
     /**
      * 构造 OpenAI 协议客户端实例
      */
     public CuteChatForOpenAi(String baseUrl, String apiKey, String modelName, Double temperature,
                              okhttp3.Interceptor loggingInterceptor) {
+        this(baseUrl, apiKey, modelName, temperature, false, loggingInterceptor);
+    }
+
+    /**
+     * 构造 OpenAI 协议客户端实例（包含 useFullUrl 控制）
+     */
+    public CuteChatForOpenAi(String baseUrl, String apiKey, String modelName, Double temperature,
+                             Boolean useFullUrl, okhttp3.Interceptor loggingInterceptor) {
         super(baseUrl != null && !baseUrl.isBlank() ? baseUrl : DEFAULT_BASE_URL,
                 apiKey, modelName, temperature, loggingInterceptor);
+        this.useFullUrl = useFullUrl;
     }
 
     // ──────────────────────────────────────────────
@@ -331,8 +342,9 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
 
     @Override
     protected Request buildHttpRequest(String bodyJson) {
+        String url = Boolean.TRUE.equals(useFullUrl) ? baseUrl : (baseUrl + "/chat/completions");
         return new Request.Builder()
-                .url(baseUrl + "/chat/completions")
+                .url(url)
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "st-cute-code-agent")

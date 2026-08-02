@@ -2,6 +2,7 @@ export interface Provider {
   group: string
   protocol: string
   baseUrl: string
+  useFullUrl?: boolean
   apiKey: string
   modelName: string
   temperature?: number | null
