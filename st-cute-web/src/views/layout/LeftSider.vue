@@ -25,7 +25,7 @@
       
       <n-collapse
         v-else
-        v-model:expanded-names="expandedNames"
+        :expanded-names="expandedNames"
         @update:expanded-names="handleExpandedChange"
         arrow-placement="left"
       >
@@ -33,9 +33,13 @@
           v-for="proj in projectStore.projectList"
           :key="proj.id"
           :name="proj.id"
+          :id="'project-item-' + proj.id"
         >
           <template #header>
-            <div class="project-title" :class="{ 'active-project': projectStore.activeProjectId === proj.id }">
+            <div
+              class="project-title"
+              :class="{ 'active-project': projectStore.activeProjectId === proj.id }"
+            >
               <n-ellipsis style="max-width: 100%">
                 {{ proj.name }}
               </n-ellipsis>
@@ -43,6 +47,7 @@
           </template>
           <template #header-extra>
             <div class="project-actions" @click.stop>
+              <!-- 新增会话按钮 (+ 位于第一位) -->
               <n-button
                 size="tiny"
                 quaternary
@@ -57,6 +62,25 @@
                   </svg>
                 </template>
               </n-button>
+
+              <!-- 批量多选管理按钮 (批量管理位于第二位，仅在存在会话时展示) -->
+              <n-button
+                v-if="pagedConversationsByProject[proj.id] && pagedConversationsByProject[proj.id].total > 0"
+                size="tiny"
+                quaternary
+                circle
+                :class="{ 'active-batch-btn': isBatchMode(proj.id) }"
+                @click.stop="toggleBatchMode(proj.id)"
+                :title="isBatchMode(proj.id) ? '退出批量管理' : '批量管理会话'"
+              >
+                <template #icon>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 11 12 14 22 4"></polyline>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                  </svg>
+                </template>
+              </n-button>
+
               <n-popconfirm
                 @positive-click="projectStore.handleDeleteProject(proj.id)"
                 positive-text="确认"
@@ -87,66 +111,154 @@
           <!-- 项目下的会话列表 -->
           <div class="conversation-list">
             <div
-              v-if="!conversationsByProject[proj.id] || conversationsByProject[proj.id].length === 0"
+              v-if="!pagedConversationsByProject[proj.id] || pagedConversationsByProject[proj.id].total === 0"
               class="empty-conversations"
             >
               暂无会话
             </div>
-            <div
-              v-else
-              v-for="sess in conversationsByProject[proj.id]"
-              :key="sess.id"
-              :class="['conversation-item', conversationStore.activeCid === sess.id ? 'active' : '']"
-              @click="conversationStore.selectConversation(sess.id)"
-              style="position: relative;"
-            >
-              <!-- 编辑状态的输入框 -->
-              <div v-if="editingCid === sess.id" class="conversation-edit-wrapper" @click.stop>
-                <n-input
-                  v-model:value="editingTitle"
-                  size="tiny"
-                  ref="editInputRef"
-                  @blur="saveTitle(sess)"
-                  @keyup.enter="saveTitle(sess)"
-                  @keyup.esc="cancelEdit"
-                  maxlength="50"
-                />
-              </div>
-              <template v-else>
-                <div class="conversation-title">{{ sess.title }}</div>
-                <div class="conversation-meta">{{ formatTime(sess.updatedAt) }}</div>
-                
-                <!-- 重命名按钮 -->
-                <span
-                  class="edit-conversation-btn"
-                  @click.stop="startEdit(sess)"
-                  title="重命名会话"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 11px; height: 11px;">
-                    <path d="M12 20h9"></path>
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                  </svg>
-                </span>
+            <template v-else>
+              <div
+                v-for="sess in (isBatchMode(proj.id) ? (rawConversationsByProject[proj.id] || []) : pagedConversationsByProject[proj.id].list)"
+                :key="sess.id"
+                :class="['conversation-item', conversationStore.activeCid === sess.id ? 'active' : '', isBatchMode(proj.id) ? 'batch-item' : '']"
+                @click="isBatchMode(proj.id) ? toggleSelectCid(proj.id, sess.id) : conversationStore.selectConversation(sess.id)"
+                style="position: relative;"
+              >
+                <!-- 多选模式勾选框 -->
+                <div v-if="isBatchMode(proj.id)" class="batch-checkbox" @click.stop>
+                  <n-checkbox
+                    :checked="isCidSelected(proj.id, sess.id)"
+                    @update:checked="() => toggleSelectCid(proj.id, sess.id)"
+                  />
+                </div>
 
-                <!-- 删除按钮 -->
-                <n-popconfirm
-                  @positive-click="conversationStore.deleteConversation(sess.id)"
-                  :positive-text="t('common.confirm')"
-                  :negative-text="t('common.cancel')"
-                  placement="bottom-end"
-                >
-                  <template #trigger>
+                <!-- 编辑状态的输入框 -->
+                <div v-if="editingCid === sess.id" class="conversation-edit-wrapper" @click.stop>
+                  <n-input
+                    v-model:value="editingTitle"
+                    size="tiny"
+                    ref="editInputRef"
+                    @blur="saveTitle(sess)"
+                    @keyup.enter="saveTitle(sess)"
+                    @keyup.esc="cancelEdit"
+                    maxlength="50"
+                  />
+                </div>
+                <template v-else>
+                  <div class="conversation-title" :title="sess.title">{{ sess.title }}</div>
+                  <div class="conversation-meta">{{ formatTime(sess.updatedAt) }}</div>
+                  
+                  <!-- 非多选模式下的单独操作按钮 -->
+                  <template v-if="!isBatchMode(proj.id)">
+                    <!-- 重命名按钮 -->
                     <span
-                      class="delete-conversation-btn"
-                      @click.stop
+                      class="edit-conversation-btn"
+                      @click.stop="startEdit(sess)"
+                      title="重命名会话"
                     >
-                      ✕
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 11px; height: 11px;">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                      </svg>
                     </span>
+
+                    <!-- 删除按钮 -->
+                    <n-popconfirm
+                      @positive-click="conversationStore.deleteConversation(sess.id)"
+                      :positive-text="t('common.confirm')"
+                      :negative-text="t('common.cancel')"
+                      placement="bottom-end"
+                    >
+                      <template #trigger>
+                        <span
+                          class="delete-conversation-btn"
+                          @click.stop
+                          title="删除会话"
+                        >
+                          ✕
+                        </span>
+                      </template>
+                      {{ t('sider.deleteConfirmContent') }}
+                    </n-popconfirm>
                   </template>
-                  {{ t('sider.deleteConfirmContent') }}
-                </n-popconfirm>
-              </template>
-            </div>
+                </template>
+              </div>
+
+              <!-- 批量操作工具条 -->
+              <div v-if="isBatchMode(proj.id)" class="batch-action-bar">
+                <div class="batch-action-left">
+                  <n-button size="tiny" secondary @click.stop="toggleSelectAllProjectCids(proj.id)">
+                    {{ (selectedCidsMap[proj.id] || []).length === (rawConversationsByProject[proj.id] || []).length ? '取消全选' : '全选' }}
+                  </n-button>
+                  <span class="selected-count-text">已选 {{ (selectedCidsMap[proj.id] || []).length }} 项</span>
+                </div>
+                <div class="batch-action-right">
+                  <n-popconfirm
+                    @positive-click="executeBatchDeleteConversations(proj.id)"
+                    positive-text="确认删除"
+                    negative-text="取消"
+                    placement="bottom-end"
+                  >
+                    <template #trigger>
+                      <n-button
+                        size="tiny"
+                        type="error"
+                        :disabled="(selectedCidsMap[proj.id] || []).length === 0"
+                      >
+                        批量删除
+                      </n-button>
+                    </template>
+                    确定物理级联删除已选中的 {{ (selectedCidsMap[proj.id] || []).length }} 条会话吗？
+                  </n-popconfirm>
+                </div>
+              </div>
+
+              <!-- 迷你极简假分页栏 (仅在未开启多选且总条数 > 5 时保留显示) -->
+              <div
+                v-if="!isBatchMode(proj.id) && pagedConversationsByProject[proj.id] && pagedConversationsByProject[proj.id].total > 5"
+                class="conversation-pagination"
+              >
+                <!-- 左侧：120 / 5 ▾ 下拉选择 -->
+                <div class="pagination-left">
+                  <n-popselect
+                    v-model:value="pageSize"
+                    :options="pageSizeOptions"
+                    trigger="click"
+                    size="small"
+                  >
+                    <span class="page-size-selector" title="点击切换每页展示条数">
+                      {{ pagedConversationsByProject[proj.id].total }} / {{ pageSize === 999999 ? '全部' : pageSize }} ▾
+                    </span>
+                  </n-popselect>
+                </div>
+
+                <!-- 右侧：‹ 1 / 2 › 极简无框翻页按钮 -->
+                <div
+                  v-if="pagedConversationsByProject[proj.id].pageCount > 1 && pageSize !== 999999"
+                  class="pagination-right"
+                >
+                  <button
+                    class="page-arrow-btn"
+                    :disabled="pagedConversationsByProject[proj.id].currentPage <= 1"
+                    @click="prevPage(proj.id)"
+                    title="上一页"
+                  >
+                    ‹
+                  </button>
+                  <span class="page-num-text">
+                    {{ pagedConversationsByProject[proj.id].currentPage }} / {{ pagedConversationsByProject[proj.id].pageCount }}
+                  </span>
+                  <button
+                    class="page-arrow-btn"
+                    :disabled="pagedConversationsByProject[proj.id].currentPage >= pagedConversationsByProject[proj.id].pageCount"
+                    @click="nextPage(proj.id)"
+                    title="下一页"
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
+            </template>
           </div>
         </n-collapse-item>
       </n-collapse>
@@ -713,22 +825,63 @@ const saveProviderAndReturn = async () => {
   isAddingOrEditingProvider.value = false
 }
 
-// 监听当前活跃项目变化，自动展开该项目
+// 监听项目列表变动，忠实根据数据库中各项目的 expanded 字段初始化展开/折叠状态
+watch(
+  () => projectStore.projectList,
+  (newList) => {
+    if (newList && newList.length > 0) {
+      const initialExpanded = newList
+        .filter((p) => p.expanded !== false)
+        .map((p) => p.id)
+      expandedNames.value = initialExpanded
+      scrollToActiveProject()
+    }
+  },
+  { immediate: true }
+)
+
+const scrollToActiveProject = () => {
+  nextTick(() => {
+    setTimeout(() => {
+      const activeId = projectStore.activeProjectId
+      if (activeId !== null) {
+        const el = document.getElementById(`project-item-${activeId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }
+    }, 150)
+  })
+}
+
+// 监听当前活跃项目变化，自动平滑滚动侧边栏容器使活跃项目居中展现在视野视口内
 watch(
   () => projectStore.activeProjectId,
   (newId) => {
-    if (newId && !expandedNames.value.includes(newId)) {
-      expandedNames.value = [newId]
+    if (newId !== null) {
+      scrollToActiveProject()
     }
   },
   { immediate: true }
 )
 
 const handleExpandedChange = (names: any[]) => {
-  if (names.length > 0) {
-    const lastExpanded = names[names.length - 1]
-    projectStore.activeProjectId = Number(lastExpanded)
-  }
+  const newExpandedIds = names.map((n) => Number(n))
+  const oldExpandedIds = expandedNames.value
+
+  // 找出新展开的项目，通知后端写入 expanded = true (1)
+  const added = newExpandedIds.filter((id) => !oldExpandedIds.includes(id))
+  added.forEach((id) => {
+    projectStore.handleUpdateExpanded(id, true)
+  })
+
+  // 找出被折叠的项目，通知后端写入 expanded = false (0)
+  const removed = oldExpandedIds.filter((id) => !newExpandedIds.includes(id))
+  removed.forEach((id) => {
+    projectStore.handleUpdateExpanded(id, false)
+  })
+
+  expandedNames.value = newExpandedIds
 }
 
 const openAddProject = () => {
@@ -769,18 +922,172 @@ const submitAddProject = async () => {
   }
 }
 
-// 按项目对会话进行分组
-const conversationsByProject = computed(() => {
-  const groups: Record<string, any[]> = {}
+// 会话假分页相关状态与逻辑 (纯前端内存响应式变量，支持在项目列表中一键下拉选择)
+const pageSize = ref(5)
+const pageSizeOptions = [
+  { label: '每页5条', value: 5 },
+  { label: '每页10条', value: 10 },
+  { label: '每页20条', value: 20 },
+  { label: '全部', value: 999999 }
+]
+
+const currentPageMap = ref<Record<number, number>>({})
+
+const getCurrentPage = (projId: number) => {
+  return currentPageMap.value[projId] || 1
+}
+
+const setCurrentPage = (projId: number, page: number) => {
+  currentPageMap.value = {
+    ...currentPageMap.value,
+    [projId]: page
+  }
+}
+
+const prevPage = (projId: number) => {
+  const current = getCurrentPage(projId)
+  if (current > 1) {
+    setCurrentPage(projId, current - 1)
+  }
+}
+
+const nextPage = (projId: number) => {
+  const current = getCurrentPage(projId)
+  const pageCount = pagedConversationsByProject.value[projId]?.pageCount || 1
+  if (current < pageCount) {
+    setCurrentPage(projId, current + 1)
+  }
+}
+
+// 批量多选模式相关状态
+const isBatchModeMap = ref<Record<number, boolean>>({})
+const selectedCidsMap = ref<Record<number, number[]>>({})
+
+const isBatchMode = (projId: number) => !!isBatchModeMap.value[projId]
+
+const toggleBatchMode = (projId: number) => {
+  const current = !!isBatchModeMap.value[projId]
+  isBatchModeMap.value = {
+    ...isBatchModeMap.value,
+    [projId]: !current
+  }
+  if (current) {
+    // 退出多选模式时清空选中列表
+    selectedCidsMap.value = {
+      ...selectedCidsMap.value,
+      [projId]: []
+    }
+  }
+}
+
+const isCidSelected = (projId: number, cid: number) => {
+  const list = selectedCidsMap.value[projId] || []
+  return list.includes(cid)
+}
+
+const toggleSelectCid = (projId: number, cid: number) => {
+  const list = selectedCidsMap.value[projId] || []
+  if (list.includes(cid)) {
+    selectedCidsMap.value = {
+      ...selectedCidsMap.value,
+      [projId]: list.filter(id => id !== cid)
+    }
+  } else {
+    selectedCidsMap.value = {
+      ...selectedCidsMap.value,
+      [projId]: [...list, cid]
+    }
+  }
+}
+
+const toggleSelectAllProjectCids = (projId: number) => {
+  const allList = rawConversationsByProject.value[projId] || []
+  const allIds = allList.map(s => s.id)
+  const currentSelected = selectedCidsMap.value[projId] || []
+
+  if (currentSelected.length === allIds.length && allIds.length > 0) {
+    // 全选 -> 清空
+    selectedCidsMap.value = {
+      ...selectedCidsMap.value,
+      [projId]: []
+    }
+  } else {
+    // 选中当前项目全部会话
+    selectedCidsMap.value = {
+      ...selectedCidsMap.value,
+      [projId]: [...allIds]
+    }
+  }
+}
+
+const executeBatchDeleteConversations = async (projId: number) => {
+  const selected = selectedCidsMap.value[projId] || []
+  if (selected.length === 0) {
+    message.warning('请先勾选需要删除的会话')
+    return
+  }
+  try {
+    await conversationStore.handleBatchDelete(selected)
+    message.success(`成功批量删除 ${selected.length} 条会话`)
+    selectedCidsMap.value = {
+      ...selectedCidsMap.value,
+      [projId]: []
+    }
+    isBatchModeMap.value = {
+      ...isBatchModeMap.value,
+      [projId]: false
+    }
+  } catch (e: any) {
+    message.error('批量删除失败: ' + (e.message || '未知错误'))
+  }
+}
+
+// 按项目对全量主会话进行分组
+const rawConversationsByProject = computed(() => {
+  const groups: Record<number, any[]> = {}
   conversationStore.conversationList.forEach((sess) => {
     if (sess.parentCid) return
-    const pId = sess.projectId || ''
+    const pId = sess.projectId
+    if (!pId) return
     if (!groups[pId]) {
       groups[pId] = []
     }
     groups[pId].push(sess)
   })
   return groups
+})
+
+// 根据当前页码及前端内存 pageSize 对各个项目的会话进行假分页切片
+const pagedConversationsByProject = computed(() => {
+  const result: Record<number, {
+    list: any[]
+    total: number
+    pageCount: number
+    currentPage: number
+  }> = {}
+
+  const ps = pageSize.value || 5
+
+  Object.keys(rawConversationsByProject.value).forEach((key) => {
+    const projId = Number(key)
+    const allList = rawConversationsByProject.value[projId] || []
+    const total = allList.length
+    const pageCount = Math.ceil(total / ps) || 1
+    const currentPage = Math.min(getCurrentPage(projId), pageCount)
+
+    const start = (currentPage - 1) * ps
+    const end = start + ps
+    const pagedList = allList.slice(start, end)
+
+    result[projId] = {
+      list: pagedList,
+      total,
+      pageCount,
+      currentPage
+    }
+  })
+
+  return result
 })
 
 const formatTime = (timeStr: string) => {
@@ -1161,5 +1468,128 @@ onUnmounted(() => {
 
 .conversation-edit-wrapper {
   padding: 2px 0;
+}
+
+.conversation-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  margin-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  font-size: 0.72rem;
+}
+
+/* 批量管理样式扩展 */
+.active-batch-btn {
+  color: var(--primary-color) !important;
+  background-color: rgba(129, 182, 229, 0.15) !important;
+}
+
+.conversation-item.batch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+.conversation-item.batch-item .conversation-title {
+  flex: 1;
+  min-width: 0;
+  padding-right: 0 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-item.batch-item .conversation-meta {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.batch-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.batch-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  margin-top: 8px;
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.batch-action-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selected-count-text {
+  font-size: 0.75rem;
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.pagination-left {
+  display: flex;
+  align-items: center;
+}
+
+.page-size-selector {
+  font-size: 0.72rem;
+  color: #a0a0a5;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.page-size-selector:hover {
+  color: var(--primary-color);
+  background-color: rgba(129, 182, 229, 0.15);
+}
+
+.pagination-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page-num-text {
+  font-size: 0.72rem;
+  color: #a0a0a5;
+  padding: 0 2px;
+}
+
+.page-arrow-btn {
+  background: transparent;
+  border: none;
+  color: #a0a0a5;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 0.85rem;
+  line-height: 1;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.page-arrow-btn:hover:not(:disabled) {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.page-arrow-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 </style>

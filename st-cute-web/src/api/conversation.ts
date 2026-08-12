@@ -13,6 +13,10 @@ export const deleteConversationById = async (cid: number): Promise<any> => {
   return request.delete(`/api/conversation/delete?id=${cid}`)
 }
 
+export const batchDeleteConversationsApi = async (ids: number[]): Promise<any> => {
+  return request.post('/api/conversation/batch-delete', ids)
+}
+
 export const createConversationApi = async (conversation: Partial<Conversation>): Promise<Conversation> => {
   return request.post('/api/conversation/create', conversation)
 }

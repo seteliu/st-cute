@@ -31,6 +31,7 @@ export const useAppStore = defineStore('app', () => {
   const messageAggregation = ref(true)
   const maxViewHistoryLimit = ref(2000)
   const pathSandboxEnabled = ref(true)
+  const siderPageSize = ref(5)
   
   // 权限安全配置
   const permissionMode = ref('READ_ONLY')
@@ -274,6 +275,7 @@ export const useAppStore = defineStore('app', () => {
       messageAggregation.value = data.messageAggregation !== undefined ? data.messageAggregation : true
       maxViewHistoryLimit.value = data.maxViewHistoryLimit || 2000
       pathSandboxEnabled.value = data.pathSandboxEnabled !== undefined ? data.pathSandboxEnabled : true
+      siderPageSize.value = data.siderPageSize || 5
     } catch (e) {
       console.error(t('settings.loadFailed'), e)
     }
@@ -290,7 +292,8 @@ export const useAppStore = defineStore('app', () => {
         httpLogDays: httpLogDays.value,
         password: password.value,
         messageAggregation: messageAggregation.value,
-        pathSandboxEnabled: pathSandboxEnabled.value
+        pathSandboxEnabled: pathSandboxEnabled.value,
+        siderPageSize: siderPageSize.value
       })
       if ((window as any).$message) {
         ;(window as any).$message.success(t('settings.saveSuccess'))
@@ -322,6 +325,7 @@ export const useAppStore = defineStore('app', () => {
     messageAggregation,
     maxViewHistoryLimit,
     pathSandboxEnabled,
+    siderPageSize,
     
     permissionMode,
     currentPermissionReq,

@@ -94,6 +94,24 @@ public class ProjectApi {
         return Result.success(true);
     }
 
+    /**
+     * 更新指定项目的展开/折叠状态
+     */
+    @PostMapping("/update-expanded")
+    public Result<Boolean> updateExpanded(@RequestParam Long id, @RequestParam Boolean expanded) {
+        projectService.updateExpanded(id, expanded);
+        return Result.success(true);
+    }
+
+    /**
+     * 设置指定项目为当前活跃会话项目
+     */
+    @PostMapping("/set-active")
+    public Result<Boolean> setActiveProject(@RequestParam Long id) {
+        projectService.setActiveProject(id);
+        return Result.success(true);
+    }
+
     private String extractLastFolder(String path) {
         if (path == null) return "新项目";
         String normalized = path.replace("\\", "/");

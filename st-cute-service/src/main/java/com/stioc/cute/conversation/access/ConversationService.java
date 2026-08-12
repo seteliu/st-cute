@@ -22,6 +22,11 @@ public interface ConversationService {
     void deleteConversation(Long id);
 
     /**
+     * 批量级联物理删除指定会话列表及关联消息
+     */
+    void deleteConversations(List<Long> ids);
+
+    /**
      * 创建并持久化新会话
      */
     ConversationEntity createConversation(ConversationEntity conversation);

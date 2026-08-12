@@ -143,11 +143,13 @@ onMounted(async () => {
   wsService.connect()
 
   // 3. 监听网络连接状态
+  let isFirstWsOpen = true
   wsService.on('OPEN', () => {
     appStore.isConnected = true
-    if (conversationStore.activeCid !== null) {
+    if (!isFirstWsOpen && conversationStore.activeCid !== null) {
       conversationStore.selectConversation(conversationStore.activeCid, true)
     }
+    isFirstWsOpen = false
   })
   wsService.on('CLOSE', () => {
     appStore.isConnected = false

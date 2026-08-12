@@ -51,6 +51,8 @@ export interface Project {
   name: string
   path: string
   createdAt?: string
+  expanded?: boolean
+  active?: boolean
 }
 
 export interface LimitMessageDto {

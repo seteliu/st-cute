@@ -32,4 +32,19 @@ public interface ProjectService {
      * 根据主键物理删除该项目注册行
      */
     void deleteById(Long id);
+
+    /**
+     * 更新指定项目的展开/折叠状态
+     */
+    void updateExpanded(Long id, Boolean expanded);
+
+    /**
+     * 将指定项目标记为唯一的当前活跃项目
+     */
+    void setActiveProject(Long id);
+
+    /**
+     * 获取当前活跃项目（如果存在多个 active 为 true 的记录，容错取 id 最大的一个）
+     */
+    Optional<ProjectEntity> findActiveProject();
 }

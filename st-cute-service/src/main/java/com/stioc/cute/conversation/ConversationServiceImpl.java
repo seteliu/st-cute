@@ -82,6 +82,16 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
+    @Override
+    @Transactional
+    public void deleteConversations(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return;
+        log.info("批量物理删除对话会话: {}", ids);
+        for (Long id : ids) {
+            deleteConversation(id);
+        }
+    }
+
     public ConversationEntity createConversation(ConversationEntity conversation) {
         if (conversation.getCreatedAt() == null) {
             conversation.setCreatedAt(LocalDateTime.now());

@@ -137,6 +137,21 @@ public class ConversationApi {
     }
 
     /**
+     * 批量级联物理删除指定的多个会话及底层消息
+     */
+    @PostMapping(value = "/batch-delete")
+    public Result<Boolean> batchDeleteConversations(@RequestBody List<Long> ids) {
+        log.info("请求批量物理删除对话会话: {}", ids);
+        if (ids != null && !ids.isEmpty()) {
+            conversationService.deleteConversations(ids);
+            for (Long id : ids) {
+                agentContextManager.removeContext(id);
+            }
+        }
+        return Result.success(true);
+    }
+
+    /**
      * 停止执行接口。由 AgentLoopCoordinator 进行多线程强行中断抢占与 DB 快照更新
      */
     @PostMapping("/cancel")

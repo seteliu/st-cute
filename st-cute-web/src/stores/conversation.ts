@@ -5,6 +5,7 @@ import {
   getConversations,
   getConversationMessages,
   deleteConversationById,
+  batchDeleteConversationsApi,
   createConversationApi,
   updateConversationProviderApi,
   clearConversationMessagesApi,
@@ -73,12 +74,15 @@ export const useConversationStore = defineStore('conversation', () => {
       }
 
       if (activeCid.value === null) {
-        // 默认选中时，只能选中 parentCid 为空的主会话，避免刷新后展示子会话的问题
+        // 默认选中时，优先选择当前活跃项目下的主会话
         const mainConversations = validConversations.filter(s => !s.parentCid)
-        if (mainConversations.length > 0) {
+        const activeProjectConv = mainConversations.find(s => s.projectId === projectStore.activeProjectId)
+        if (activeProjectConv) {
+          await selectConversation(activeProjectConv.id)
+        } else if (mainConversations.length > 0) {
           await selectConversation(mainConversations[0].id)
         } else if (projectStore.projectList.length > 0) {
-          await createConversation()
+          await createConversation(projectStore.activeProjectId || undefined)
         }
       }
     } catch (e) {
@@ -98,7 +102,7 @@ export const useConversationStore = defineStore('conversation', () => {
     const sess = conversationList.value.find(s => s.id === id)
     if (sess) {
       if (sess.projectId) {
-        projectStore.activeProjectId = sess.projectId
+        projectStore.changeActiveProject(sess.projectId)
       }
       inputTokens.value = sess.inputTokens || 0
       outputTokens.value = sess.outputTokens || 0
@@ -198,6 +202,28 @@ export const useConversationStore = defineStore('conversation', () => {
       }
     } catch (e) {
       console.error('删除会话失败:', e)
+    }
+  }
+
+  // 批量删除会话
+  const handleBatchDelete = async (ids: number[]) => {
+    if (!ids || ids.length === 0) return
+    try {
+      await batchDeleteConversationsApi(ids)
+      conversationList.value = conversationList.value.filter(s => !ids.includes(s.id))
+
+      if (activeCid.value !== null && ids.includes(activeCid.value)) {
+        activeCid.value = null
+        if (conversationList.value.length > 0) {
+          await selectConversation(conversationList.value[0].id)
+        } else {
+          clearContext()
+          createConversation()
+        }
+      }
+    } catch (e) {
+      console.error('批量删除会话失败:', e)
+      throw e
     }
   }
 
@@ -383,7 +409,8 @@ export const useConversationStore = defineStore('conversation', () => {
     retryMessage,
     resetToMessage,
     reloadProjectAssets,
-    renameConversation
+    renameConversation,
+    handleBatchDelete
   }
 })
 

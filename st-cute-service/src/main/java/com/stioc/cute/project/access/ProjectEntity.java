@@ -40,4 +40,14 @@ public class ProjectEntity {
      */
     private String path;
 
+    /**
+     * 是否在界面上处于展开状态 (true: 展开, false: 折叠)
+     */
+    private Boolean expanded;
+
+    /**
+     * 是否为当前活跃会话项目 (true: 活跃, false: 非活跃)
+     */
+    private Boolean active;
+
 }
