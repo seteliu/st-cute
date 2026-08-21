@@ -46,4 +46,8 @@ pnpm-debug.log*
 .gemini/
 .st-cute/
 .agents/skills/
+
+# ==========================================
+# GitHub Sync Local Metadata (开源仓本地同步元数据)
+# ==========================================
 sync-github-info.json
