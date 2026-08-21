@@ -67,4 +67,9 @@ public final class ToolNames {
      * 获取平台规约文档工具协议名
      */
     public static final String GET_DOC         = "get_doc";
+
+    /**
+     * 获取当前系统时间工具协议名
+     */
+    public static final String GET_TIME        = "get_time";
 }
