@@ -53,7 +53,7 @@ When performing code refactoring, strictly follow these steps:
 | **`name`** | String | Unique identifier for the skill (Required) |
 | **`description`** | String | Short description helping the Agent decide when to trigger |
 | **`command`** | String | Slash command trigger word (e.g. `/refactor`) |
-| **`mode`** | String | Execution mode: `inline` (inject into context) or `slash` |
+| **`mode`** | String | Execution mode: `inline` (inject into current session context) or `fork` (spawn a dedicated subagent) |
 | **`tools`** | List | Whitelisted tools allowed for this skill (Optional) |
 
 ---

@@ -53,7 +53,7 @@ tools:
 | **`name`** | String | 技能唯一标识符（必须） |
 | **`description`** | String | 技能简短描述，帮助 Agent 判断触发时机 |
 | **`command`** | String | 对应的 Slash 命令触发词（如 `/refactor`） |
-| **`mode`** | String | 执行模式：`inline`（注入上下文）或 `slash` |
+| **`mode`** | String | 执行模式：`inline`（注入当前会话上下文执行）或 `fork`（派生独立子智能体执行） |
 | **`tools`** | List | 技能可调用的限定工具白名单（可选） |
 
 ---
