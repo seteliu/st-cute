@@ -53,24 +53,24 @@ public class ModifyFileTool implements CuteTool {
               "type": "string",
               "description": "目标文件路径，支持绝对路径或项目相对路径"
             },
-            "targetContent": {
+            "oldContent": {
               "type": "string",
-              "description": "文件中待替换的精确原文片段（包含行首缩进与空格，必须在文件中唯一存在）"
+              "description": "文件中待被替换的现有原文片段（包含行首缩进与空格，必须在文件中唯一存在）。注意：是文件里当前已有的内容，不是新内容"
             },
-            "replacementContent": {
+            "newContent": {
               "type": "string",
-              "description": "替换后的新代码或文本片段"
+              "description": "替换后最终写入文件的新文本。注意：替换完成后文件中呈现的就是这段内容"
             },
             "startLine": {
               "type": "integer",
-              "description": "待替换代码段的起始行号 (1-indexed)，可选，配合 targetContent 进行精准范围锁定"
+              "description": "待替换代码段的起始行号 (1-indexed)，可选，配合 oldContent 进行精准范围锁定"
             },
             "endLine": {
               "type": "integer",
-              "description": "待替换代码段的结束行号 (1-indexed)，可选，配合 targetContent 进行精准范围锁定"
+              "description": "待替换代码段的结束行号 (1-indexed)，可选，配合 oldContent 进行精准范围锁定"
             }
           },
-          "required": ["path", "targetContent", "replacementContent"]
+          "required": ["path", "oldContent", "newContent"]
         }
         """;
     }
@@ -79,17 +79,17 @@ public class ModifyFileTool implements CuteTool {
     public String execute(Map<String, Object> arguments, ToolExecutionContext context) {
         AgentContext agentContext = context.agentContext();
         String pathVal = (String) arguments.get("path");
-        String targetContent = (String) arguments.get("targetContent");
-        String replacementContent = (String) arguments.get("replacementContent");
+        String oldContent = (String) arguments.get("oldContent");
+        String newContent = (String) arguments.get("newContent");
 
         if (pathVal == null || pathVal.isBlank()) {
             return new JSONObject().fluentPut("error", "参数 'path' 不能为空。").toJSONString();
         }
-        if (targetContent == null || targetContent.isEmpty()) {
-            return new JSONObject().fluentPut("error", "参数 'targetContent' 不能为空。").toJSONString();
+        if (oldContent == null || oldContent.isEmpty()) {
+            return new JSONObject().fluentPut("error", "参数 'oldContent' 不能为空。").toJSONString();
         }
-        if (replacementContent == null) {
-            replacementContent = "";
+        if (newContent == null) {
+            newContent = "";
         }
 
         try {
@@ -153,20 +153,20 @@ public class ModifyFileTool implements CuteTool {
                 int subEnd = -1;
 
                 // 1. 精确匹配子串
-                int firstIdx = rangeContent.indexOf(targetContent);
+                int firstIdx = rangeContent.indexOf(oldContent);
                 if (firstIdx != -1) {
-                    int secondIdx = rangeContent.indexOf(targetContent, firstIdx + targetContent.length());
+                    int secondIdx = rangeContent.indexOf(oldContent, firstIdx + oldContent.length());
                     if (secondIdx == -1) {
                         subStart = firstIdx;
-                        subEnd = firstIdx + targetContent.length();
+                        subEnd = firstIdx + oldContent.length();
                     } else {
                         return new JSONObject().fluentPut("error",
-                                "在指定的行号范围 [" + startLine + ", " + endLine + "] 内找到了多处 (" + 2 + " 处或以上) 'targetContent' 的精确匹配。请缩窄行号范围或提供更多上下文以确保唯一性。"
+                                "在指定的行号范围 [" + startLine + ", " + endLine + "] 内找到了多处 (2 处或以上) 'oldContent' 的精确匹配。请缩窄行号范围或提供更多上下文以确保唯一性。"
                         ).toJSONString();
                     }
                 } else {
                     // 2. 模糊匹配子串 Fallback
-                    Pattern pattern = buildWhitespaceInsensitivePattern(targetContent);
+                    Pattern pattern = buildWhitespaceInsensitivePattern(oldContent);
                     Matcher matcher = pattern.matcher(rangeContent);
                     int matchCount = 0;
                     while (matcher.find()) {
@@ -179,43 +179,49 @@ public class ModifyFileTool implements CuteTool {
 
                     if (matchCount > 1) {
                         return new JSONObject().fluentPut("error",
-                                "在指定的行号范围 [" + startLine + ", " + endLine + "] 内找到了多处 (" + matchCount + " 处) 'targetContent' 的空白不敏感匹配。请缩窄行号范围或提供更多上下文以确保唯一性。"
+                                "在指定的行号范围 [" + startLine + ", " + endLine + "] 内找到了多处 (" + matchCount + " 处) 'oldContent' 的空白不敏感匹配。请缩窄行号范围或提供更多上下文以确保唯一性。"
                         ).toJSONString();
                     }
                 }
 
                 if (subStart == -1) {
+                    // 防参数写反：oldContent 找不到，但 newContent 恰好能在文件中找到，大概率是两参数顺序颠倒了
+                    if (!newContent.isEmpty() && fileContent.contains(newContent)) {
+                        return new JSONObject().fluentPut("error",
+                                "疑似参数顺序写反：oldContent（待替换原文）在指定范围内未找到，而 newContent 反而存在于文件中。请检查：oldContent 应为文件中现有内容，newContent 为替换后的新内容。"
+                        ).toJSONString();
+                    }
                     return new JSONObject().fluentPut("error",
-                            "在指定的行号范围 [" + startLine + ", " + endLine + "] 内未找到 'targetContent' 的匹配。\n" +
+                            "在指定的行号范围 [" + startLine + ", " + endLine + "] 内未找到 'oldContent' 的匹配。\n" +
                             "该范围内的实际内容为:\n" + rangeContent + "\n\n" +
-                            "你期望的 'targetContent' 为:\n" + targetContent
+                            "你期望的 'oldContent' 为:\n" + oldContent
                     ).toJSONString();
                 }
 
                 // 映射回全文偏移量
                 matchStartOffset = startOffset + subStart;
                 matchEndOffset = startOffset + subEnd;
-                updatedContent = fileContent.substring(0, matchStartOffset) + replacementContent + fileContent.substring(matchEndOffset);
+                updatedContent = fileContent.substring(0, matchStartOffset) + newContent + fileContent.substring(matchEndOffset);
             } else {
                 // 全局搜索匹配
                 int count = 0;
                 int idx = 0;
-                while ((idx = fileContent.indexOf(targetContent, idx)) != -1) {
+                while ((idx = fileContent.indexOf(oldContent, idx)) != -1) {
                     count++;
-                    idx += targetContent.length();
+                    idx += oldContent.length();
                 }
 
                 if (count == 1) {
-                    matchStartOffset = fileContent.indexOf(targetContent);
-                    matchEndOffset = matchStartOffset + targetContent.length();
-                    updatedContent = fileContent.substring(0, matchStartOffset) + replacementContent + fileContent.substring(matchEndOffset);
+                    matchStartOffset = fileContent.indexOf(oldContent);
+                    matchEndOffset = matchStartOffset + oldContent.length();
+                    updatedContent = fileContent.substring(0, matchStartOffset) + newContent + fileContent.substring(matchEndOffset);
                 } else if (count > 1) {
                     return new JSONObject().fluentPut("error",
-                            "在文件 [" + file.getName() + "] 中找到了多处 (" + count + " 处) 'targetContent' 的精确匹配。为了安全起见，我们只能在唯一匹配时才能执行替换。请提供更多的上下文（如前后几行代码）或指定行号范围(startLine, endLine)来确保匹配的唯一性。"
+                            "在文件 [" + file.getName() + "] 中找到了多处 (" + count + " 处) 'oldContent' 的精确匹配。为了安全起见，我们只能在唯一匹配时才能执行替换。请提供更多的上下文（如前后几行代码）或指定行号范围(startLine, endLine)来确保匹配的唯一性。"
                     ).toJSONString();
                 } else {
                     // 全局模糊匹配 Fallback
-                    Pattern pattern = buildWhitespaceInsensitivePattern(targetContent);
+                    Pattern pattern = buildWhitespaceInsensitivePattern(oldContent);
                     Matcher matcher = pattern.matcher(fileContent);
                     int matchCount = 0;
                     while (matcher.find()) {
@@ -227,15 +233,21 @@ public class ModifyFileTool implements CuteTool {
                     }
 
                     if (matchCount == 0) {
+                        // 防参数写反：oldContent 找不到，但 newContent 恰好能在文件中找到，大概率是两参数顺序颠倒了
+                        if (!newContent.isEmpty() && fileContent.contains(newContent)) {
+                            return new JSONObject().fluentPut("error",
+                                    "疑似参数顺序写反：oldContent（待替换原文）在文件中未找到，而 newContent 反而存在于文件中。请检查：oldContent 应为文件中现有内容，newContent 为替换后的新内容。"
+                            ).toJSONString();
+                        }
                         return new JSONObject().fluentPut("error",
-                                "在文件 [" + file.getName() + "] 中未找到要替换的 'targetContent' 匹配片段（精确匹配与空白不敏感匹配均失败）。请检查空格、缩进或换行是否与文件实际内容一致。"
+                                "在文件 [" + file.getName() + "] 中未找到要替换的 'oldContent' 匹配片段（精确匹配与空白不敏感匹配均失败）。请检查空格、缩进或换行是否与文件实际内容一致。"
                         ).toJSONString();
                     } else if (matchCount > 1) {
                         return new JSONObject().fluentPut("error",
-                                "在文件 [" + file.getName() + "] 中未找到 'targetContent' 的精确匹配，且找到了多处 (" + matchCount + " 处) 空白不敏感匹配。为了安全起见，只能在唯一匹配时执行替换。请提供更多的上下文（如前后几行代码）或指定行号范围(startLine, endLine)来确保匹配的唯一性。"
+                                "在文件 [" + file.getName() + "] 中未找到 'oldContent' 的精确匹配，且找到了多处 (" + matchCount + " 处) 空白不敏感匹配。为了安全起见，只能在唯一匹配时执行替换。请提供更多的上下文（如前后几行代码）或指定行号范围(startLine, endLine)来确保匹配的唯一性。"
                         ).toJSONString();
                     } else {
-                        updatedContent = fileContent.substring(0, matchStartOffset) + replacementContent + fileContent.substring(matchEndOffset);
+                        updatedContent = fileContent.substring(0, matchStartOffset) + newContent + fileContent.substring(matchEndOffset);
                     }
                 }
             }
@@ -243,7 +255,7 @@ public class ModifyFileTool implements CuteTool {
             Files.writeString(file.toPath(), updatedContent, StandardCharsets.UTF_8);
 
             // 提取修改位置前后 3 行的上下文切片提供闭环反馈
-            int endPos = matchStartOffset + replacementContent.length();
+            int endPos = matchStartOffset + newContent.length();
             String contextSnippet = getContextSnippet(updatedContent, matchStartOffset, endPos, 3);
 
             // 计算替换落点在最终文件中的行号范围 (1-indexed)，供调用方精确定位与校验
@@ -406,17 +418,17 @@ public class ModifyFileTool implements CuteTool {
     /**
      * 将包含空白字符的待替换原文转换为具有空白折叠兼容性的正则表达式
      */
-    private Pattern buildWhitespaceInsensitivePattern(String targetContent) {
+    private Pattern buildWhitespaceInsensitivePattern(String oldContent) {
         StringBuilder regex = new StringBuilder();
         int i = 0;
-        int len = targetContent.length();
+        int len = oldContent.length();
         while (i < len) {
-            char c = targetContent.charAt(i);
+            char c = oldContent.charAt(i);
             if (Character.isWhitespace(c)) {
                 int start = i;
                 boolean hasNewline = false;
-                while (i < len && Character.isWhitespace(targetContent.charAt(i))) {
-                    char ws = targetContent.charAt(i);
+                while (i < len && Character.isWhitespace(oldContent.charAt(i))) {
+                    char ws = oldContent.charAt(i);
                     if (ws == '\r' || ws == '\n') {
                         hasNewline = true;
                     }
@@ -446,8 +458,8 @@ public class ModifyFileTool implements CuteTool {
                 }
             } else {
                 StringBuilder token = new StringBuilder();
-                while (i < len && !Character.isWhitespace(targetContent.charAt(i))) {
-                    token.append(targetContent.charAt(i));
+                while (i < len && !Character.isWhitespace(oldContent.charAt(i))) {
+                    token.append(oldContent.charAt(i));
                     i++;
                 }
                 regex.append(Pattern.quote(token.toString()));

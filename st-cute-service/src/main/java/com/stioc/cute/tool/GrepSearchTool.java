@@ -57,7 +57,7 @@ public class GrepSearchTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "在指定目录或文件的代码内容中全文检索关键字，返回匹配的行号与行内容信息。rootDir 可传目录路径（递归搜索）或单个文件路径（仅搜索该文件）。默认为普通子串匹配，若 useRegex 为 true 则将 query 视为正则表达式进行匹配。默认跳过以点(.)开头的隐藏目录，如需搜索隐藏目录可设置 includeHidden 为 true。";
+        return "在指定目录或文件的代码内容中全文检索关键字，返回匹配的行号与行内容信息。rootDir 可传目录路径（递归搜索）或单个文件路径（仅搜索该文件）。默认为普通子串匹配，若 useRegex 为 true 则将 query 视为正则表达式进行匹配。默认跳过以点(.)开头的隐藏目录（含 .agents 等用户配置目录），如需搜索隐藏目录可设置 includeHidden 为 true。";
     }
 
     @Override
@@ -148,11 +148,13 @@ public class GrepSearchTool implements CuteTool {
                         if (dir.equals(finalRootPath)) {
                             return FileVisitResult.CONTINUE;
                         }
-                        // 根据 includeHidden 参数决定是否跳过以点开头的隐藏目录
-                        if (!includeHidden && dirName.startsWith(".")) {
+                        // 硬排除目录：纯产物/依赖/版本库/IDE 缓存，任何情况都跳过，防止海量文件拖垮搜索
+                        if (FileSearchConstants.HARD_EXCLUDE_DIRS.contains(dirName)) {
                             return FileVisitResult.SKIP_SUBTREE;
                         }
-                        if (FileSearchConstants.EXCLUDE_DIRS.contains(dirName)) {
+                        // 点开头隐藏目录（含 .agents/.github/.gemini 等用户配置资产目录）：
+                        // 默认跳过防噪音，includeHidden = true 时放行
+                        if (!includeHidden && dirName.startsWith(".")) {
                             return FileVisitResult.SKIP_SUBTREE;
                         }
                         return FileVisitResult.CONTINUE;

@@ -43,6 +43,6 @@ pnpm-debug.log*
 # AI Agents & Local Caches
 # ==========================================
 .claude/
-.agent/
 .gemini/
 .st-cute/
+.agents/skills/

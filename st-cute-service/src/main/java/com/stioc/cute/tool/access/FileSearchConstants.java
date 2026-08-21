@@ -11,13 +11,15 @@ public final class FileSearchConstants {
     }
 
     /**
-     * 排除搜索的无关物理目录集合，包含常见开发语言、构建工具、IDE 缓存与依赖包目录。
-     * 这些目录即使 includeHidden = true 也会被排除。
+     * 硬排除目录集合：纯产物、依赖包、版本库与 IDE 缓存等无搜索价值的目录。
+     * 任何情况下（即使 includeHidden = true）都会被跳过，防止海量文件拖垮搜索与污染结果。
+     * 注意：以点开头的用户配置资产目录（如 .agents、.github）不在此列，
+     * 它们走「点开头目录默认跳过、includeHidden = true 放行」的通用规则。
      */
-    public static final Set<String> EXCLUDE_DIRS = Set.of(
-            // 版本控制与 AI 隔离
-            ".git", ".github", ".agents", ".gemini",
-            // 常见 IDE 配置文件与缓存
+    public static final Set<String> HARD_EXCLUDE_DIRS = Set.of(
+            // 版本控制
+            ".git",
+            // IDE 配置文件与缓存
             ".idea", ".vscode", ".vs", ".settings", ".metadata",
             // 后端编译与构建输出 (Java/Gradle/Rust/Go)
             "target", "build", "out", "bin", ".gradle",
