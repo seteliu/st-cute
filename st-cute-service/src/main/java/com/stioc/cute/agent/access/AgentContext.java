@@ -7,6 +7,7 @@ import com.stioc.cute.security.access.PermissionMode;
 import com.stioc.cute.skill.access.Skill;
 import com.stioc.cute.hook.access.HookRule;
 import com.stioc.cute.mcp.access.McpClientInstance;
+import com.stioc.cute.platform.common.CommonThread;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.Getter;
@@ -280,8 +281,10 @@ public class AgentContext {
                     throw e; // 硬阻断
                 }
             } else {
-                // 第三层：异步（虚拟线程）执行推送前端，静默处理
-                Thread.startVirtualThread(() -> {
+                // 第三层：异步串行执行推送前端，静默处理。
+                // 关键：入队 CommonThread 全局单线程串行执行器，入队顺序即推送顺序，
+                // 保证流式 chunk 等时序敏感事件的 WS 推送顺序严格与发布顺序一致，消除偶发乱序。
+                CommonThread.submitNotify(() -> {
                     try {
                         listener.onEvent(event);
                     } catch (Exception e) {

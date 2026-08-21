@@ -46,3 +46,4 @@ pnpm-debug.log*
 .gemini/
 .st-cute/
 .agents/skills/
+sync-github-info.json
