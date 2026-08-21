@@ -13,7 +13,7 @@
 
     <groupId>com.stioc</groupId>
     <artifactId>st-cute-service</artifactId>
-    <version>0.1.2</version>
+    <version>0.1.3</version>
     <name>st-cute-service</name>
     <description>ST-Cute backend programming agent service</description>
 
