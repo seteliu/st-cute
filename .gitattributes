@@ -1,5 +1,9 @@
 * text=auto eol=lf
 
+# Windows 批处理脚本必须使用 CRLF 行尾，否则 cmd 解析错乱
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
 *.java text eol=lf working-tree-encoding=UTF-8
 *.ts text eol=lf working-tree-encoding=UTF-8
 *.vue text eol=lf working-tree-encoding=UTF-8
