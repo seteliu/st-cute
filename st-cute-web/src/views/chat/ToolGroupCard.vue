@@ -97,6 +97,7 @@ import { useConversationStore } from '@/stores/conversation'
 import { approveConversationPermissionApi } from '@/api/conversation'
 import { Message } from '@/types'
 import { t } from '@/i18n'
+import { formatToolName as sharedFormatToolName } from '@/utils/toolName'
 
 const props = defineProps<{
   parentMessageId: number | string
@@ -108,11 +109,7 @@ const appStore = useAppStore()
 const conversationStore = useConversationStore()
 
 const formatToolName = (name: string | undefined) => {
-  if (!name) return ''
-  if (name.endsWith('Tool')) {
-    return name.slice(0, -4)
-  }
-  return name
+  return sharedFormatToolName(name)
 }
 
 const getStatusClass = (status: string | undefined) => {

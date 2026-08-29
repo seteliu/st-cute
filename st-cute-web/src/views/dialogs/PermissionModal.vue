@@ -26,7 +26,7 @@
         >
           <span class="label" style="color: #a0a0a5;">{{ t('permissionModal.toolName') }}</span>
           <span class="val" style="color: var(--status-warning); font-weight: bold; font-family: monospace;">{{
-            appStore.currentPermissionReq?.toolName
+            formatToolName(appStore.currentPermissionReq?.toolName)
           }}</span>
         </div>
         <div style="margin-top: 8px;">
@@ -116,6 +116,7 @@
 <script setup lang="ts">
 import { useAppStore } from '@/stores/app'
 import { t } from '@/i18n'
+import { formatToolName } from '@/utils/toolName'
 
 const appStore = useAppStore()
 </script>
