@@ -11,6 +11,25 @@
         <span class="folded-text">
           {{ t('chat.foldedSummary', { assistant: assistantCount, tool: toolCount }) }}
         </span>
+
+        <!-- 折叠内容异常黄色感叹号警告图标与悬浮 Tooltip -->
+        <n-tooltip v-if="hasError" trigger="hover">
+          <template #trigger>
+            <span class="folded-warning-badge">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="folded-warning-icon">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </span>
+          </template>
+          <div class="folded-warning-tooltip">
+            <div class="warning-title">{{ t('chat.foldedWarningTitle') }}</div>
+            <div v-for="(err, idx) in errorDetails" :key="idx" class="warning-item">
+              • {{ err }}
+            </div>
+          </div>
+        </n-tooltip>
       </div>
       <n-button class="detail-btn" size="tiny" quaternary type="primary" @click="openDrawer">
         {{ t('chat.detail') }}
@@ -56,6 +75,7 @@ import { ref, computed, defineAsyncComponent, type CSSProperties } from 'vue'
 import { useResponsive } from '@/utils/useResponsive'
 import { RenderItem } from './MessageListFlow.vue'
 import { t } from '@/i18n'
+import { formatToolName } from '@/utils/toolName'
 
 const props = defineProps<{
   foldedItems: RenderItem[]
@@ -91,6 +111,36 @@ const toolCount = computed(() => {
   }
   return count
 })
+
+// 扫描折叠项中的异常与失败操作
+const errorDetails = computed<string[]>(() => {
+  const errors: string[] = []
+  for (const item of props.foldedItems) {
+    if (item.type === 'message') {
+      if (item.data.status === 'FAILED') {
+        errors.push(t('chat.foldedFailedMsg'))
+      }
+      if (item.tools && item.tools.length > 0) {
+        for (const tool of item.tools) {
+          if (tool.status === 'FAILED') {
+            const name = tool.toolName || (tool as any).name || 'tool'
+            errors.push(t('chat.foldedFailedTool', { name: formatToolName(name) }))
+          }
+        }
+      }
+    } else if (item.type === 'tool_group' && item.tools) {
+      for (const tool of item.tools) {
+        if (tool.status === 'FAILED') {
+          const name = tool.toolName || (tool as any).name || 'tool'
+          errors.push(t('chat.foldedFailedTool', { name: formatToolName(name) }))
+        }
+      }
+    }
+  }
+  return errors
+})
+
+const hasError = computed(() => errorDetails.value.length > 0)
 
 // 弹窗与样式自适应控制 (自适应适配 PC 和移动端)
 const modalStyle = computed<CSSProperties>(() => {
@@ -210,6 +260,49 @@ const contentStyle = computed<CSSProperties>(() => {
 
 .folded-text {
   user-select: none;
+}
+
+.folded-warning-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--status-warning, #f0a020);
+  margin-left: 2px;
+  animation: pulse-warning 2.5s infinite ease-in-out;
+}
+
+.folded-warning-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.folded-warning-tooltip {
+  max-width: 280px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.folded-warning-tooltip .warning-title {
+  font-weight: bold;
+  color: var(--status-warning, #f0a020);
+  margin-bottom: 4px;
+}
+
+.folded-warning-tooltip .warning-item {
+  color: var(--text-color, #e0e0e0);
+  margin-top: 2px;
+}
+
+@keyframes pulse-warning {
+  0%, 100% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
 }
 
 .detail-btn {

@@ -311,7 +311,8 @@ const filteredMessages = computed<RenderItem[]>(() => {
     const msgTools = toolMap.get(msg.id) || [];
     const hasTools = msgTools.length > 0;
 
-    if (msg.role === 'assistant' && !msg.content && !msg.thought && !msg.isStreaming && msg.status !== 'RUNNING' && msg.status !== 'PENDING' && !hasTools) {
+    // 过滤无内容、无工具调用、且已成功（SUCCESS）的助手空消息（放行 CANCELED、FAILED、RUNNING、PENDING 等需展示状态的卡片）
+    if (msg.role === 'assistant' && !msg.content && !msg.thought && !msg.isStreaming && msg.status === 'SUCCESS' && !hasTools) {
       continue;
     }
 
