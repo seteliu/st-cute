@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @MapperScan("com.stioc.cute.repository")
 public class StCuteApplication {
+
     public static void main(String[] args) {
         SpringApplication.run(StCuteApplication.class, args);
     }
