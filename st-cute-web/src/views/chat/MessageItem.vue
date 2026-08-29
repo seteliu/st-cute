@@ -19,13 +19,26 @@
         <div class="avatar">{{ avatarLabel }}</div>
         <div class="msg-content-wrapper">
           <div 
-            v-if="message.content || message.thought || message.status === 'FAILED' || message.status === 'CANCELED' || ((message.isStreaming || message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !message.thought)" 
+            v-if="message.content || message.thought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || ((message.isStreaming || message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !message.thought)" 
             class="msg-content"
           >
-            <!-- 思考链折叠展示 -->
-            <div v-if="message.thought" class="thought-box">
-              <div class="thought-header">思考过程 (Thinking)...</div>
-              <div class="thought-content">{{ message.thought }}</div>
+            <!-- 附件区域展示 -->
+            <message-attachments v-if="message.attachments" :attachments="message.attachments" />
+
+            <!-- 思考过程单行精简展示 -->
+            <div v-if="message.thought" class="thought-row">
+              <span class="thought-prefix">思考过程:</span>
+              <span class="thought-text-fixed">{{ cleanThoughtText }}</span>
+              <span class="thought-count-tag">(共 {{ thoughtCharCount }} 字)</span>
+              <n-button
+                size="tiny"
+                quaternary
+                type="primary"
+                class="thought-detail-btn"
+                @click="appStore.openThoughtDetail(message.thought, message.id)"
+              >
+                {{ t('chat.viewThoughtDetail') }}
+              </n-button>
             </div>
 
             <!-- 正文内容 (简单渲染 HTML 换行以支持纯文本换行) -->
@@ -174,7 +187,9 @@ import { marked } from 'marked'
 import { useAppStore } from '@/stores/app'
 import { useConversationStore } from '@/stores/conversation'
 import { Message } from '@/types'
+import { t } from '@/i18n'
 import ToolGroupCard from './ToolGroupCard.vue'
+import MessageAttachments from './MessageAttachments.vue'
 
 const props = defineProps<{
   message: Message
@@ -185,6 +200,15 @@ const props = defineProps<{
 
 const appStore = useAppStore()
 const conversationStore = useConversationStore()
+
+// 思考过程纯文本清洗与实时字数统计
+const cleanThoughtText = computed(() => {
+  return (props.message.thought || '').replace(/\s+/g, ' ').trim()
+})
+
+const thoughtCharCount = computed(() => {
+  return (props.message.thought || '').length
+})
 
 const avatarLabel = computed(() => {
   if (props.message.role === 'user') return 'U'

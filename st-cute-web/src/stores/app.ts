@@ -57,6 +57,11 @@ export const useAppStore = defineStore('app', () => {
   const currentViewToolCall = ref<any>(null)
   const currentViewMessage = ref<Message | null>(null)
 
+  // 思考过程详情抽屉
+  const showThoughtDrawer = ref(false)
+  const thoughtDetailContent = ref('')
+  const currentViewThoughtMessageId = ref<number | string | null>(null)
+
   // 快捷选项列表
   const permissionModeOptions = computed(() => [
     { label: t('sider.modeReadOnly'), value: 'READ_ONLY' },
@@ -249,6 +254,13 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  // 打开思考详情抽屉 (支持传递静态内容与消息 ID 进行流式响应绑定)
+  const openThoughtDetail = (content: string, messageId?: number | string | null) => {
+    thoughtDetailContent.value = content || ''
+    currentViewThoughtMessageId.value = messageId || null
+    showThoughtDrawer.value = true
+  }
+
   const cancelLoop = () => {
     const conversationStore = useConversationStore()
     if (conversationStore.activeCid !== null) {
@@ -343,6 +355,10 @@ export const useAppStore = defineStore('app', () => {
     handlePermissionModeChange,
     handlePermissionDecision,
     showRawLog,
+    showThoughtDrawer,
+    thoughtDetailContent,
+    currentViewThoughtMessageId,
+    openThoughtDetail,
     cancelLoop,
     loadBasicConfig,
     saveBasicConfig,

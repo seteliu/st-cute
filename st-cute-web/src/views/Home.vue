@@ -23,6 +23,7 @@
     <permission-modal />
     <raw-log-drawer />
     <sub-agent-drawer />
+    <thought-detail-drawer />
   </div>
 </template>
 
@@ -50,6 +51,7 @@ import RightSider from '@/views/layout/RightSider.vue'
 import PermissionModal from '@/views/dialogs/PermissionModal.vue'
 import RawLogDrawer from '@/views/dialogs/RawLogDrawer.vue'
 import SubAgentDrawer from '@/views/dialogs/SubAgentDrawer.vue'
+import ThoughtDetailDrawer from '@/views/dialogs/ThoughtDetailDrawer.vue'
 import { t } from '@/i18n'
 
 const appStore = useAppStore()
