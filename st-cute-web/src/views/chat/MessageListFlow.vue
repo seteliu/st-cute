@@ -5,6 +5,7 @@
     :estimated-item-size="100"
     :buffer="6"
     class="message-flow-list"
+    :style="{ '--avatar-indent': appStore.showMessageAvatar ? '52px' : '0px' }"
   >
     <template #default="{ item }">
       <message-item
@@ -53,6 +54,10 @@ import ToolGroupCard from './ToolGroupCard.vue'
 import FoldedMessageCard from './FoldedMessageCard.vue'
 import VirtualChatList from '@/components/VirtualChatList.vue'
 import { Message } from '@/types'
+import { useAppStore } from '@/stores/app'
+
+// 应用全局状态：读取头像展示开关，动态控制工具卡片/折叠卡片的缩进变量
+const appStore = useAppStore()
 
 export type RenderItem =
   | { type: 'message'; data: Message; tools?: Message[] }
@@ -94,11 +99,13 @@ defineExpose({
 }
 
 .tool-group-wrapper {
-  padding-left: 52px; /* 36px avatar + 16px gap */
+  /* 缩进跟随头像开关收缩：展示头像时为 36px avatar + 16px gap，隐藏时收缩为 0（变量由根节点动态注入） */
+  padding-left: var(--avatar-indent, 52px);
 }
 
 .folded-wrapper {
-  padding-left: 52px; /* 36px avatar + 16px gap */
+  /* 缩进跟随头像开关收缩：展示头像时为 36px avatar + 16px gap，隐藏时收缩为 0（变量由根节点动态注入） */
+  padding-left: var(--avatar-indent, 52px);
 }
 
 .truncated-tip-wrapper {

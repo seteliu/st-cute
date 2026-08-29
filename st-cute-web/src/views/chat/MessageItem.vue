@@ -16,7 +16,8 @@
       ]"
     >
       <template v-if="message.role !== 'system'">
-        <div class="avatar">{{ avatarLabel }}</div>
+        <!-- 角色头像：受全局开关 showMessageAvatar 控制（默认关闭），关闭后不渲染，flex gap 间隙随之自动收缩 -->
+        <div v-if="appStore.showMessageAvatar" class="avatar">{{ avatarLabel }}</div>
         <div class="msg-content-wrapper">
           <div 
             v-if="message.content || message.thought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || ((message.isStreaming || message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !message.thought)" 

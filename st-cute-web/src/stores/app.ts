@@ -22,6 +22,11 @@ export const useAppStore = defineStore('app', () => {
   const leftSiderWidth = ref(280)
   const rightSiderWidth = ref(380)
 
+  // 【预留】聊天消息头像展示开关：控制对话消息是否展示角色头像。
+  // 当前无任何设置入口修改此值，仅作后续扩展预留，默认关闭（false）。
+  // 关闭后消息布局中头像占位与间隙会自动收缩（见 MessageItem.vue / MessageListFlow.vue）。
+  const showMessageAvatar = ref(false)
+
   // 系统基础配置项
   const language = ref<Language>('zh-CN')
   const newlineKey = ref<'enter' | 'alt+enter'>('enter')
@@ -325,6 +330,7 @@ export const useAppStore = defineStore('app', () => {
     rightSiderCollapsed,
     leftSiderWidth,
     rightSiderWidth,
+    showMessageAvatar,
     
     language,
     newlineKey,
