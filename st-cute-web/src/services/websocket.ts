@@ -49,6 +49,13 @@ class WebSocketService {
     this.isConnected = true;
     this.reconnectAttempts = 0;
     this.stopReconnect();
+
+    // 物理连接建立瞬间，若已持有会话 ID，立即向后端发送 PING 握手包完成 0 延迟会话绑定注册
+    if (this.cid !== null) {
+      console.log(`[WS] 物理连接建立成功，立即向后端注册当前会话 ID: ${this.cid}`);
+      this.send('PING', {});
+    }
+
     this.startHeartbeat();
     this.triggerCallbacks('OPEN', {
       eventId: '',
