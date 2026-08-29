@@ -96,7 +96,7 @@ public class MessageApi {
         AgentContext context = agentContextManager.getOrCreateContext(cid);
         // 用户主动发送新消息，清除 canceled 标记，开启新一轮推理
         context.setCanceled(false);
-        messageService.sendMessage(context, text);
+        messageService.sendMessage(context, text, body.getAttachments());
         agentLoopCoordinator.executeLoopAsync(cid, () -> chatNamingHelper.autoRenameChatIfNew(cid));
         return Result.success();
     }
