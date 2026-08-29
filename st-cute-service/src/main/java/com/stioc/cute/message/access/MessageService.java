@@ -31,6 +31,11 @@ public interface MessageService {
     void sendMessage(AgentContext loopContext, String text);
 
     /**
+     * 用户发送带附件的新消息并拉起新一轮推理循环
+     */
+    void sendMessage(AgentContext loopContext, String text, String attachments);
+
+    /**
      * 针对指定历史消息节点进行重新尝试推理生成
      */
     void retryMessage(AgentContext loopContext, Long messageId);
@@ -41,9 +46,20 @@ public interface MessageService {
     MessageEntity findToolMessage(Long cid, String toolCallId);
 
     /**
+     * 根据主键查询消息当前状态，供写路径做「CANCELED 终态守卫」等轻量校验
+     */
+    MessageStatus findMessageStatus(Long messageId);
+
+    /**
      * 获取指定会话中仍在后台运行中的工具消息行列表
      */
     List<MessageEntity> findInflightToolMessages(Long cid);
+
+    /**
+     * 获取指定会话中指定角色下仍处于过渡态（PENDING/RUNNING）的消息行列表。
+     * 供用户中断等链路做终态兜底回写，避免消息因线程未响应中断而永久悬空。
+     */
+    List<MessageEntity> findInflightMessagesByRoles(Long cid, List<MessageRole> roles);
 
     /**
      * 获取指定会话按 ID 升序排列的全部物理消息行

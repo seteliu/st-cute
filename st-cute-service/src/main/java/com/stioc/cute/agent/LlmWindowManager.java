@@ -2,6 +2,7 @@ package com.stioc.cute.agent;
 
 import com.stioc.cute.agent.access.AgentContext;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
@@ -17,13 +18,24 @@ import com.stioc.cute.prompt.SystemPromptGenerator;
 import com.stioc.cute.message.access.MessageEntity;
 import com.stioc.cute.conversation.access.ConversationService;
 import com.stioc.cute.skill.access.Skill;
-import com.stioc.cute.llm.*;
+import com.stioc.cute.llm.CuteAttachment;
+import com.stioc.cute.llm.CuteChat;
+import com.stioc.cute.llm.CuteChatOptions;
+import com.stioc.cute.llm.CuteChatResponse;
+import com.stioc.cute.llm.CuteMessage;
+import com.stioc.cute.llm.CuteMessageRole;
+import com.stioc.cute.llm.CutePrompt;
+import com.stioc.cute.llm.CuteToolCall;
+import com.stioc.cute.llm.CuteToolDefinition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import com.stioc.cute.agent.event.AgentEventFactory;
 import com.stioc.cute.agent.event.AgentEventType;
 import com.stioc.cute.conversation.access.ConversationEntity;
+import com.stioc.cute.file.FileStorageService;
+import com.stioc.cute.file.ImageProcessUtils;
+import com.stioc.cute.file.decode.FileDecodeService;
 import com.mybatisflex.core.util.UpdateEntity;
 
 import jakarta.annotation.Resource;
@@ -31,7 +43,11 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 
@@ -52,6 +68,10 @@ public class LlmWindowManager {
     private SystemPromptGenerator systemPromptGenerator;
     @Resource
     private ChatOptionsFactory chatOptionsFactory;
+    @Resource
+    private FileStorageService fileStorageService;
+    @Resource
+    private FileDecodeService fileDecodeService;
 
     /**
      * 统一封装的系统提示词构建方法，生成最终完整的 System Prompt 包含 Custom Instructions。
@@ -106,6 +126,22 @@ public class LlmWindowManager {
             }
         });
 
+        Provider activeConfig = providerService.getProviderConfigForContext(context);
+        boolean isMultimodal = activeConfig != null && Boolean.TRUE.equals(activeConfig.getMultimodal());
+
+        // 寻找最后一条有效的用户消息 ID，仅对该消息挂载多模态附件
+        Long lastUserMsgId = null;
+        for (int i = dbMsgs.size() - 1; i >= 0; i--) {
+            MessageEntity m = dbMsgs.get(i);
+            if (excludeAssistantMsgId != null && m.getId().equals(excludeAssistantMsgId)) {
+                continue;
+            }
+            if (MessageRole.USER == m.getRole() && MessageStatus.CANCELED != m.getStatus()) {
+                lastUserMsgId = m.getId();
+                break;
+            }
+        }
+
         for (MessageEntity dbMsg : dbMsgs) {
             // 排除当前轮占位符
             if (excludeAssistantMsgId != null && dbMsg.getId().equals(excludeAssistantMsgId)) {
@@ -121,7 +157,27 @@ public class LlmWindowManager {
                 if (MessageStatus.CANCELED == mStatus) {
                     continue;
                 }
-                history.add(CuteMessage.builder().role(CuteMessageRole.USER).content(dbMsg.getContent()).build());
+                List<CuteAttachment> cuteAttachments = null;
+                String userContent = dbMsg.getContent() != null ? dbMsg.getContent() : "";
+
+                if (isMultimodal && StringUtils.hasText(dbMsg.getAttachments())) {
+                    if (dbMsg.getId().equals(lastUserMsgId)) {
+                        // 最后一轮有效用户消息：完整加载多模态 Payload
+                        cuteAttachments = loadAttachments(dbMsg.getAttachments());
+                    } else {
+                        // 历史用户消息：生成轻量 Markdown 占位符追加在文本末尾
+                        String placeholder = buildAttachmentPlaceholder(dbMsg.getAttachments());
+                        if (StringUtils.hasText(placeholder)) {
+                            userContent = userContent + "\n\n" + placeholder;
+                        }
+                    }
+                }
+
+                history.add(CuteMessage.builder()
+                        .role(CuteMessageRole.USER)
+                        .content(userContent)
+                        .attachments(cuteAttachments)
+                        .build());
             } else if (MessageRole.ASSISTANT == dbMsg.getRole()) {
                 if (MessageStatus.FAILED == mStatus || MessageStatus.CANCELED == mStatus) {
                     continue;
@@ -148,6 +204,10 @@ public class LlmWindowManager {
                     rawResult = "{\"error\": \"Permission denied by user.\"}";
                 } else if (MessageStatus.CANCELED == toolStatus) {
                     rawResult = "{\"error\": \"Execution canceled by user.\"}";
+                } else if (MessageStatus.WAITING_APPROVAL == toolStatus) {
+                    // 该工具正挂在人在回路审批中尚未执行，内容为空是正常状态。
+                    // 显式渲染状态说明，避免被下方兜底逻辑误报为 msg miss 误导模型。
+                    rawResult = "{\"status\": \"WAITING_APPROVAL\", \"message\": \"该工具调用正在等待用户审批，尚未执行。\"}";
                 }
 
                 if (!StringUtils.hasText(rawResult)) {
@@ -166,11 +226,17 @@ public class LlmWindowManager {
                     }
                 }
 
+                List<CuteAttachment> cuteAttachments = null;
+                if (isMultimodal && StringUtils.hasText(dbMsg.getAttachments())) {
+                    cuteAttachments = loadAttachments(dbMsg.getAttachments());
+                }
+
                 history.add(CuteMessage.builder()
                         .role(CuteMessageRole.TOOL)
                         .toolCallId(toolCallId)
                         .toolName(toolName)
                         .content(rawResult)
+                        .attachments(cuteAttachments)
                         .build());
             } else if (MessageRole.BRANCH == dbMsg.getRole()) {
                 // 子 Agent 汇报消息：以 USER 角色发给大模型，内容前拼接来源前缀
@@ -534,5 +600,117 @@ public class LlmWindowManager {
             return context.getWorktreePath();
         }
         return conversationService.getProjectPath(context.getCid());
+    }
+
+    /**
+     * 解析并加载消息关联的多模态附件物理数据
+     */
+    private List<CuteAttachment> loadAttachments(String attachmentsJson) {
+        List<CuteAttachment> list = new ArrayList<>();
+        if (!StringUtils.hasText(attachmentsJson)) {
+            return list;
+        }
+        try {
+            JSONArray arr = JSON.parseArray(attachmentsJson.trim());
+            if (arr == null || arr.isEmpty()) {
+                return list;
+            }
+            for (int i = 0; i < arr.size(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                if (obj == null) {
+                    continue;
+                }
+                String path = obj.getString("path");
+                String name = obj.getString("name");
+                String mimeType = obj.getString("mimeType");
+                Long size = obj.getLong("size");
+                if (!StringUtils.hasText(path)) {
+                    continue;
+                }
+                try {
+                    File file = fileStorageService.getSafeFile(path);
+                    String ext = FileStorageService.getFileExtension(file.getName());
+                    if (!StringUtils.hasText(mimeType)) {
+                        mimeType = FileStorageService.detectMimeType(ext);
+                    }
+                    boolean isImg = ImageProcessUtils.isImage(ext, mimeType);
+                    String base64Data = null;
+                    String textContent = null;
+
+                    if (isImg) {
+                        byte[] bytes = Files.readAllBytes(file.toPath());
+                        base64Data = Base64.getEncoder().encodeToString(bytes);
+                    } else {
+                        textContent = fileDecodeService.decode(file, ext, mimeType, FileDecodeService.DEFAULT_MAX_EXTRACT_CHARS);
+                    }
+
+                    list.add(CuteAttachment.builder()
+                            .name(name != null ? name : file.getName())
+                            .path(path)
+                            .mimeType(mimeType)
+                            .size(size != null ? size : file.length())
+                            .isImage(isImg)
+                            .base64Data(base64Data)
+                            .textContent(textContent)
+                            .build());
+                } catch (Exception e) {
+                    log.warn("加载消息附件数据异常: path={}, error={}", path, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析消息附件 JSON 异常: json={}", attachmentsJson, e);
+        }
+        return list;
+    }
+
+    /**
+     * 为历史用户消息中的附件构建轻量 Markdown 占位符
+     */
+    private String buildAttachmentPlaceholder(String attachmentsJson) {
+        if (!StringUtils.hasText(attachmentsJson)) {
+            return null;
+        }
+        try {
+            JSONArray arr = JSON.parseArray(attachmentsJson);
+            if (arr == null || arr.isEmpty()) {
+                return null;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append("[📎 历史附件（已省略具体内容以节省上下文，需要时可使用 load_attachment 工具按路径加载）]:\n");
+            for (int i = 0; i < arr.size(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                if (obj == null) continue;
+                String name = obj.getString("name");
+                String path = obj.getString("path");
+                Long size = obj.getLong("size");
+                String mimeType = obj.getString("mimeType");
+
+                String sizeStr = size != null ? formatFileSize(size) : "未知大小";
+                String typeStr = "文件";
+                if (mimeType != null && mimeType.startsWith("image/")) {
+                    typeStr = "图片";
+                } else if ("application/pdf".equalsIgnoreCase(mimeType)) {
+                    typeStr = "PDF文档";
+                }
+
+                sb.append(String.format("- 附件 %d: `%s` (%s, %s, 路径: `%s`)\n",
+                        i + 1,
+                        name != null ? name : "未命名文件",
+                        typeStr,
+                        sizeStr,
+                        path != null ? path : ""));
+            }
+            return sb.toString().trim();
+        } catch (Exception e) {
+            log.warn("构建历史附件占位元数据异常: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private String formatFileSize(long bytes) {
+        if (bytes <= 0) return "0 B";
+        final String[] units = new String[]{"B", "KB", "MB", "GB"};
+        int digitGroups = (int) (Math.log10(bytes) / Math.log10(1024));
+        return String.format("%.1f %s", bytes / Math.pow(1024, digitGroups), units[digitGroups]);
     }
 }

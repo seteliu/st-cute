@@ -18,7 +18,8 @@ export const useProviderStore = defineStore('provider', () => {
     temperature: null,
     contextSize: undefined,
     maxTokens: null,
-    reasoningEffort: ''
+    reasoningEffort: '',
+    multimodal: false
   })
 
   const protocolOptions = [
@@ -72,7 +73,10 @@ export const useProviderStore = defineStore('provider', () => {
 
   // 编辑 Provider
   const handleEditProvider = (prov: Provider) => {
-    form.value = { ...prov }
+    form.value = {
+      ...prov,
+      multimodal: Boolean(prov.multimodal)
+    }
     originalModelName.value = prov.modelName
     isEditing.value = true
   }
@@ -88,7 +92,8 @@ export const useProviderStore = defineStore('provider', () => {
       temperature: null,
       contextSize: undefined,
       maxTokens: null,
-      reasoningEffort: ''
+      reasoningEffort: '',
+      multimodal: false
     }
     originalModelName.value = ''
     isEditing.value = false

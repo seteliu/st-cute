@@ -373,6 +373,28 @@
             </template>
             <n-input-number v-model:value="providerStore.form.contextSize" :min="50000" :max="10000000" :step="1000" :placeholder="t('sider.contextSizePlaceholder')" style="width: 100%;" :input-props="{ spellcheck: 'false' }" />
           </n-form-item>
+          <n-form-item>
+            <template #label>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <span>{{ t('sider.multimodal') }}</span>
+                <n-tooltip trigger="hover" placement="top-start">
+                  <template #trigger>
+                    <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                      </svg>
+                    </span>
+                  </template>
+                  <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
+                    {{ t('sider.multimodalTooltip') }}
+                  </div>
+                </n-tooltip>
+              </div>
+            </template>
+            <n-switch v-model:value="providerStore.form.multimodal" />
+          </n-form-item>
           <n-form-item :label="t('sider.maxTokens')">
             <n-input-number
               v-model:value="providerStore.form.maxTokens"
@@ -619,6 +641,9 @@
                       <strong style="color: #e3e3e7;">{{ prov.group }}</strong>
                       <span style="font-size: 0.75rem; background-color: rgba(129, 182, 229, 0.08); color: var(--primary-color); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(129, 182, 229, 0.25);">
                         {{ prov.protocol }}
+                      </span>
+                      <span v-if="prov.multimodal" style="font-size: 0.75rem; background-color: rgba(99, 226, 183, 0.08); color: #63e2b7; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(99, 226, 183, 0.25);">
+                        {{ t('sider.multimodalBadge') }}
                       </span>
                     </div>
                     <div style="font-size: 0.8rem; color: #a0a0a5; margin-top: 4px; display: flex; gap: 12px;">

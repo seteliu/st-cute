@@ -84,6 +84,7 @@ public class ProviderService {
                     .contextSize(p.getContextSize())
                     .maxTokens(p.getMaxTokens())
                     .reasoningEffort(p.getReasoningEffort())
+                    .multimodal(p.getMultimodal())
                     .build();
             result.add(clone);
         }
@@ -256,6 +257,7 @@ public class ProviderService {
                         .contextSize(config.getContextSize())
                         .maxTokens(config.getMaxTokens())
                         .reasoningEffort(config.getReasoningEffort())
+                        .multimodal(config.getMultimodal())
                         .build();
             }
         }

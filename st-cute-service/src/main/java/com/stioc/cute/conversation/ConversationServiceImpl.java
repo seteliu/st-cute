@@ -14,6 +14,7 @@ import com.stioc.cute.message.access.MessageStatus;
 import com.stioc.cute.platform.contract.ContractLock;
 import com.stioc.cute.project.access.ProjectService;
 import com.stioc.cute.provider.ProviderService;
+import com.stioc.cute.file.FileStorageService;
 import com.stioc.cute.repository.ConversationMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,8 @@ public class ConversationServiceImpl implements ConversationService {
     private ProjectService projectService;
     @Resource
     private ProviderService providerService;
+    @Resource
+    private FileStorageService fileStorageService;
     @Resource
     @Lazy
     private AgentContextManager agentContextManager;
@@ -80,6 +83,9 @@ public class ConversationServiceImpl implements ConversationService {
             conversationMapper.deleteById(id);
             messageService.deleteByCid(id);
         }
+
+        // 级联清理该会话存储的物理附件文件及 cid 文件夹
+        fileStorageService.deleteConversationFiles(id);
     }
 
     @Override

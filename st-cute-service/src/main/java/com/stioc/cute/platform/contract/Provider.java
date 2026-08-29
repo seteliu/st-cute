@@ -89,5 +89,12 @@ public class Provider {
      */
     private String reasoningEffort;
 
+    /**
+     * 是否支持多模态（图片/文件附件等）。
+     * 默认 false。
+     */
+    @Builder.Default
+    private Boolean multimodal = false;
+
 }
 

@@ -33,7 +33,7 @@ export const resetConversationMessagesApi = async (cid: number, messageId: numbe
   return request.post(`/api/message/reset?cid=${cid}&messageId=${messageId}`)
 }
 
-export const sendMessageApi = async (cid: number, data: { text: string; agentId?: string }): Promise<void> => {
+export const sendMessageApi = async (cid: number, data: { text: string; attachments?: string; agentId?: string }): Promise<void> => {
   return request.post(`/api/message/send?cid=${cid}`, data)
 }
 

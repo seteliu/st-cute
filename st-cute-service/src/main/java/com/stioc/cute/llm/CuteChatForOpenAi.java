@@ -5,11 +5,25 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.*;
+import okhttp3.Interceptor;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import org.springframework.util.StringUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * 基于原生 OkHttp 实现的 OpenAI 协议兼容大模型客户端。
@@ -27,7 +41,7 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
      * 构造 OpenAI 协议客户端实例
      */
     public CuteChatForOpenAi(String baseUrl, String apiKey, String modelName, Double temperature,
-                             okhttp3.Interceptor loggingInterceptor) {
+                             Interceptor loggingInterceptor) {
         this(baseUrl, apiKey, modelName, temperature, false, loggingInterceptor);
     }
 
@@ -35,7 +49,7 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
      * 构造 OpenAI 协议客户端实例（包含 useFullUrl 控制）
      */
     public CuteChatForOpenAi(String baseUrl, String apiKey, String modelName, Double temperature,
-                             Boolean useFullUrl, okhttp3.Interceptor loggingInterceptor) {
+                             Boolean useFullUrl, Interceptor loggingInterceptor) {
         super(baseUrl != null && !baseUrl.isBlank() ? baseUrl : DEFAULT_BASE_URL,
                 apiKey, modelName, temperature, loggingInterceptor);
         this.useFullUrl = useFullUrl;
@@ -305,7 +319,34 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
             }
             case USER -> {
                 obj.put("role", "user");
-                obj.put("content", msg.getContent() != null ? msg.getContent() : "");
+                if (msg.getAttachments() != null && !msg.getAttachments().isEmpty()) {
+                    JSONArray parts = new JSONArray();
+                    if (StringUtils.hasText(msg.getContent())) {
+                        JSONObject textPart = new JSONObject();
+                        textPart.put("type", "text");
+                        textPart.put("text", msg.getContent());
+                        parts.add(textPart);
+                    }
+                    for (CuteAttachment att : msg.getAttachments()) {
+                        if (att.isImage() && StringUtils.hasText(att.getBase64Data())) {
+                            JSONObject imgPart = new JSONObject();
+                            imgPart.put("type", "image_url");
+                            JSONObject urlObj = new JSONObject();
+                            String mime = StringUtils.hasText(att.getMimeType()) ? att.getMimeType() : "image/jpeg";
+                            urlObj.put("url", "data:" + mime + ";base64," + att.getBase64Data());
+                            imgPart.put("image_url", urlObj);
+                            parts.add(imgPart);
+                        } else if (StringUtils.hasText(att.getTextContent())) {
+                            JSONObject textPart = new JSONObject();
+                            textPart.put("type", "text");
+                            textPart.put("text", "\n\n[附件文件: " + att.getName() + "]\n" + att.getTextContent());
+                            parts.add(textPart);
+                        }
+                    }
+                    obj.put("content", parts);
+                } else {
+                    obj.put("content", msg.getContent() != null ? msg.getContent() : "");
+                }
             }
             case ASSISTANT -> {
                 obj.put("role", "assistant");
@@ -330,7 +371,34 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
             case TOOL -> {
                 obj.put("role", "tool");
                 obj.put("tool_call_id", msg.getToolCallId());
-                obj.put("content", msg.getContent() != null ? msg.getContent() : "");
+                if (msg.getAttachments() != null && !msg.getAttachments().isEmpty()) {
+                    JSONArray parts = new JSONArray();
+                    if (msg.getContent() != null && !msg.getContent().isEmpty()) {
+                        JSONObject textPart = new JSONObject();
+                        textPart.put("type", "text");
+                        textPart.put("text", msg.getContent());
+                        parts.add(textPart);
+                    }
+                    for (CuteAttachment att : msg.getAttachments()) {
+                        if (att.isImage() && att.getBase64Data() != null) {
+                            JSONObject imgPart = new JSONObject();
+                            imgPart.put("type", "image_url");
+                            JSONObject urlObj = new JSONObject();
+                            String mime = att.getMimeType() != null ? att.getMimeType() : "image/jpeg";
+                            urlObj.put("url", "data:" + mime + ";base64," + att.getBase64Data());
+                            imgPart.put("image_url", urlObj);
+                            parts.add(imgPart);
+                        } else if (att.getTextContent() != null && !att.getTextContent().isEmpty()) {
+                            JSONObject textPart = new JSONObject();
+                            textPart.put("type", "text");
+                            textPart.put("text", "\n\n[附件文件: " + att.getName() + "]\n" + att.getTextContent());
+                            parts.add(textPart);
+                        }
+                    }
+                    obj.put("content", parts);
+                } else {
+                    obj.put("content", msg.getContent() != null ? msg.getContent() : "");
+                }
             }
             default -> {
                 log.warn("未知消息角色，已跳过: role={}", msg.getRole());

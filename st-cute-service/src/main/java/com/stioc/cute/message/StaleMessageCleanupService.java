@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,6 +78,7 @@ public class StaleMessageCleanupService {
      * 上次进程已死，所有残留的 PENDING/RUNNING/WAITING_APPROVAL 消息均不可能被推进，直接标记为 FAILED。
      */
     @EventListener(ApplicationReadyEvent.class)
+    @Order(0)
     @Transactional
     public void cleanOnStartup() {
         conversationService.resetAllConversationsLoopRunning();

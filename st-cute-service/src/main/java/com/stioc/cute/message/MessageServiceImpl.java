@@ -4,7 +4,9 @@ import com.stioc.cute.message.access.MessageVo;
 import com.stioc.cute.message.access.MessageRole;
 import com.stioc.cute.message.access.MessageStatus;
 import com.stioc.cute.message.access.MessageEntity;
-import com.stioc.cute.message.access.*;
+import com.stioc.cute.message.access.MessageService;
+import com.stioc.cute.message.access.SendMessageDto;
+import com.stioc.cute.message.access.LimitMessageDto;
 
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.util.UpdateEntity;
@@ -18,13 +20,23 @@ import com.stioc.cute.platform.common.BusinessException;
 import java.util.concurrent.locks.Lock;
 import com.stioc.cute.platform.contract.ContractLock;
 import com.stioc.cute.platform.contract.ContractProperty;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import com.stioc.cute.file.FileStorageService;
 import com.stioc.cute.repository.MessageMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
 import jakarta.annotation.Resource;
 
@@ -39,6 +51,8 @@ public class MessageServiceImpl implements MessageService {
     private MessageMapper messageMapper;
     @Resource
     private ContractProperty contractProperty;
+    @Resource
+    private FileStorageService fileStorageService;
 
     /**
      * 根据会话 ID 删除所有消息
@@ -48,6 +62,8 @@ public class MessageServiceImpl implements MessageService {
         log.info("物理删除会话消息: cid={}", cid);
         QueryWrapper query = QueryWrapper.create()
                 .where(MessageEntity::getCid).eq(cid);
+        List<MessageEntity> msgs = messageMapper.selectListByQuery(query);
+        cleanMessageAttachments(msgs);
         messageMapper.deleteByQuery(query);
     }
 
@@ -160,11 +176,19 @@ public class MessageServiceImpl implements MessageService {
      * 发送新用户消息并唤醒 ReAct 执行循环
      */
     public void sendMessage(AgentContext loopContext, String text) {
+        sendMessage(loopContext, text, null);
+    }
+
+    /**
+     * 发送带附件的新用户消息并唤醒 ReAct 执行循环
+     */
+    public void sendMessage(AgentContext loopContext, String text, String attachments) {
         Long cid = loopContext.getCid();
         MessageEntity userEntity = MessageEntity.builder()
                 .cid(cid)
                 .role(MessageRole.USER)
                 .content(text)
+                .attachments(attachments)
                 .status(MessageStatus.PENDING)
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -211,6 +235,19 @@ public class MessageServiceImpl implements MessageService {
     }
 
     /**
+     * 根据主键查询消息当前状态，供写路径做「CANCELED 终态守卫」等轻量校验
+     */
+    public MessageStatus findMessageStatus(Long messageId) {
+        try {
+            MessageEntity msg = messageMapper.selectOneById(messageId);
+            return msg != null ? msg.getStatus() : null;
+        } catch (Exception e) {
+            log.warn("findMessageStatus 失败: messageId={}", messageId, e);
+        }
+        return null;
+    }
+
+    /**
      * 查找会话内所有处于非终态（PENDING/RUNNING/WAITING_APPROVAL）的 TOOL 消息，
      * 供 ToolStatusHandler 清理悬挂工具用。
      */
@@ -223,6 +260,22 @@ public class MessageServiceImpl implements MessageService {
                 .stream()
                 .filter(m -> MessageRole.TOOL == m.getRole())
                 .toList();
+    }
+
+    /**
+     * 查找会话内指定角色下所有处于过渡态（PENDING/RUNNING）的消息行，
+     * 供用户中断等链路做终态兜底回写，避免消息因线程未响应中断而永久悬空。
+     */
+    public List<MessageEntity> findInflightMessagesByRoles(Long cid, List<MessageRole> roles) {
+        if (roles == null || roles.isEmpty()) {
+            return List.of();
+        }
+        QueryWrapper query = QueryWrapper.create()
+                .where(MessageEntity::getCid).eq(cid)
+                .and(MessageEntity::getRole).in(roles)
+                .and(MessageEntity::getStatus).in(Set.of(
+                        MessageStatus.PENDING, MessageStatus.RUNNING));
+        return messageMapper.selectListByQuery(query);
     }
 
     public List<MessageEntity> findByCidOrderByIdAsc(Long cid) {
@@ -279,7 +332,36 @@ public class MessageServiceImpl implements MessageService {
         QueryWrapper query = QueryWrapper.create()
                 .where(MessageEntity::getCid).eq(cid)
                 .and(MessageEntity::getId).gt(messageId);
+        List<MessageEntity> msgs = messageMapper.selectListByQuery(query);
+        cleanMessageAttachments(msgs);
         messageMapper.deleteByQuery(query);
+    }
+
+    /**
+     * 提取消息列表中包含的物理附件并执行磁盘删除
+     */
+    private void cleanMessageAttachments(List<MessageEntity> msgs) {
+        if (msgs == null || msgs.isEmpty()) {
+            return;
+        }
+        for (MessageEntity m : msgs) {
+            if (StringUtils.hasText(m.getAttachments())) {
+                try {
+                    JSONArray arr = JSON.parseArray(m.getAttachments().trim());
+                    if (arr != null) {
+                        for (int i = 0; i < arr.size(); i++) {
+                            JSONObject obj = arr.getJSONObject(i);
+                            if (obj != null) {
+                                String path = obj.getString("path");
+                                fileStorageService.deleteFile(path);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("解析并清理消息附件文件异常: msgId={}, error={}", m.getId(), e.getMessage());
+                }
+            }
+        }
     }
 
     @Override

@@ -9,5 +9,7 @@ export interface Provider {
   contextSize?: number
   maxTokens?: number | null
   reasoningEffort?: string | null
+  multimodal?: boolean
   active?: boolean
 }
+

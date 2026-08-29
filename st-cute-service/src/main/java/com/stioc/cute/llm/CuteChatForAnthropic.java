@@ -5,11 +5,26 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.*;
+import okhttp3.Interceptor;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * 基于原生 OkHttp 实现的 Anthropic Claude 协议大模型客户端。
@@ -40,7 +55,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
      * 构造 Anthropic 协议客户端实例
      */
     public CuteChatForAnthropic(String baseUrl, String apiKey, String modelName, Double temperature,
-                                okhttp3.Interceptor loggingInterceptor) {
+                                Interceptor loggingInterceptor) {
         this(baseUrl, apiKey, modelName, temperature, false, loggingInterceptor);
     }
 
@@ -48,7 +63,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
      * 构造 Anthropic 协议客户端实例（包含 useFullUrl 控制）
      */
     public CuteChatForAnthropic(String baseUrl, String apiKey, String modelName, Double temperature,
-                                Boolean useFullUrl, okhttp3.Interceptor loggingInterceptor) {
+                                Boolean useFullUrl, Interceptor loggingInterceptor) {
         super(baseUrl != null && !baseUrl.isBlank() ? baseUrl : DEFAULT_BASE_URL,
                 apiKey, modelName, temperature, loggingInterceptor);
         this.useFullUrl = useFullUrl;
@@ -370,7 +385,42 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                     JSONObject toolResult = new JSONObject();
                     toolResult.put("type", "tool_result");
                     toolResult.put("tool_use_id", toolMsg.getToolCallId());
-                    toolResult.put("content", toolMsg.getContent() != null ? toolMsg.getContent() : "");
+
+                    if (toolMsg.getAttachments() != null && !toolMsg.getAttachments().isEmpty()) {
+                        JSONArray innerBlocks = new JSONArray();
+                        if (toolMsg.getContent() != null && !toolMsg.getContent().isEmpty()) {
+                            JSONObject textBlock = new JSONObject();
+                            textBlock.put("type", "text");
+                            textBlock.put("text", toolMsg.getContent());
+                            innerBlocks.add(textBlock);
+                        }
+                        for (CuteAttachment att : toolMsg.getAttachments()) {
+                            if (att.isImage() && att.getBase64Data() != null) {
+                                JSONObject imgBlock = new JSONObject();
+                                imgBlock.put("type", "image");
+                                JSONObject srcObj = new JSONObject();
+                                srcObj.put("type", "base64");
+                                String mime = att.getMimeType() != null ? att.getMimeType() : "image/jpeg";
+                                srcObj.put("media_type", mime);
+                                srcObj.put("data", att.getBase64Data());
+                                imgBlock.put("source", srcObj);
+                                innerBlocks.add(imgBlock);
+                            } else if ("application/pdf".equalsIgnoreCase(att.getMimeType()) && att.getBase64Data() != null) {
+                                JSONObject docBlock = new JSONObject();
+                                docBlock.put("type", "document");
+                                JSONObject srcObj = new JSONObject();
+                                srcObj.put("type", "base64");
+                                srcObj.put("media_type", "application/pdf");
+                                srcObj.put("data", att.getBase64Data());
+                                docBlock.put("source", srcObj);
+                                innerBlocks.add(docBlock);
+                            }
+                        }
+                        toolResult.put("content", innerBlocks);
+                    } else {
+                        toolResult.put("content", toolMsg.getContent() != null ? toolMsg.getContent() : "");
+                    }
+
                     contentArr.add(toolResult);
                     i++;
                 }
@@ -380,21 +430,50 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                 result.add(userMsg);
             } 
             else if (msg.getRole() == CuteMessageRole.USER) {
-                // 合并连续的 USER 消息
-                StringBuilder sb = new StringBuilder();
+                // 合并连续的 USER 消息，并支持多模态附件内容块
+                JSONArray userContentArr = new JSONArray();
                 while (i < filtered.size() && filtered.get(i).getRole() == CuteMessageRole.USER) {
                     CuteMessage userMsg = filtered.get(i);
                     if (userMsg.getContent() != null && !userMsg.getContent().isEmpty()) {
-                        if (!sb.isEmpty()) {
-                            sb.append("\n");
+                        JSONObject textBlock = new JSONObject();
+                        textBlock.put("type", "text");
+                        textBlock.put("text", userMsg.getContent());
+                        userContentArr.add(textBlock);
+                    }
+                    if (userMsg.getAttachments() != null && !userMsg.getAttachments().isEmpty()) {
+                        for (CuteAttachment att : userMsg.getAttachments()) {
+                            if (att.isImage() && att.getBase64Data() != null) {
+                                JSONObject imgBlock = new JSONObject();
+                                imgBlock.put("type", "image");
+                                JSONObject srcObj = new JSONObject();
+                                srcObj.put("type", "base64");
+                                String mime = att.getMimeType() != null ? att.getMimeType() : "image/jpeg";
+                                srcObj.put("media_type", mime);
+                                srcObj.put("data", att.getBase64Data());
+                                imgBlock.put("source", srcObj);
+                                userContentArr.add(imgBlock);
+                            } else if ("application/pdf".equalsIgnoreCase(att.getMimeType()) && att.getBase64Data() != null) {
+                                JSONObject docBlock = new JSONObject();
+                                docBlock.put("type", "document");
+                                JSONObject srcObj = new JSONObject();
+                                srcObj.put("type", "base64");
+                                srcObj.put("media_type", "application/pdf");
+                                srcObj.put("data", att.getBase64Data());
+                                docBlock.put("source", srcObj);
+                                userContentArr.add(docBlock);
+                            } else if (att.getTextContent() != null && !att.getTextContent().isEmpty()) {
+                                JSONObject textBlock = new JSONObject();
+                                textBlock.put("type", "text");
+                                textBlock.put("text", "\n\n[附件文件: " + att.getName() + "]\n" + att.getTextContent());
+                                userContentArr.add(textBlock);
+                            }
                         }
-                        sb.append(userMsg.getContent());
                     }
                     i++;
                 }
                 JSONObject userMsgObj = new JSONObject();
                 userMsgObj.put("role", "user");
-                userMsgObj.put("content", sb.toString());
+                userMsgObj.put("content", userContentArr);
                 result.add(userMsgObj);
             } 
             else if (msg.getRole() == CuteMessageRole.ASSISTANT) {

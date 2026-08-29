@@ -79,6 +79,11 @@ public class MessageVo {
     private String toolArguments;
 
     /**
+     * 消息关联的附件列表 JSON 数组（相对路径、文件名、大小、MIME类型等）
+     */
+    private String attachments;
+
+    /**
      * 统一的格式化映射方法 (系统内唯一出口)
      */
     public static MessageVo fromEntity(MessageEntity entity) {
@@ -104,6 +109,7 @@ public class MessageVo {
         vo.setThought(entity.getReasoningContent());
         vo.setCreatedAt(entity.getCreatedAt());
         vo.setStreaming(false);
+        vo.setAttachments(entity.getAttachments());
 
         if (includeRawContent) {
             vo.setBeforeCompactContent(entity.getBeforeCompactContent());

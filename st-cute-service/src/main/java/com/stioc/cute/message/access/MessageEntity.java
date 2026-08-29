@@ -109,5 +109,10 @@ public class MessageEntity {
      */
     private Long executionDurationMs;
 
+    /**
+     * 消息关联的附件列表 JSON 数组（相对路径、文件名、大小、MIME类型等）
+     */
+    private String attachments;
+
 }
 

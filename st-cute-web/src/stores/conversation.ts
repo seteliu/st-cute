@@ -228,7 +228,7 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   // 发送消息
-  const sendUserMsg = () => {
+  const sendUserMsg = (attachments?: string) => {
     const text = appStore.userInput.trim()
     if (!text || appStore.loopRunning) return
     
@@ -257,7 +257,7 @@ export const useConversationStore = defineStore('conversation', () => {
     appStore.userInput = ''
     appStore.loopRunning = true
     
-    sendMessageApi(id, { text }).then(() => {
+    sendMessageApi(id, { text, attachments }).then(() => {
       // 成功发送后无需手动在此处更新，等待 WebSocket 推送 S2C_MESSAGE_CREATED 事件后自动追加
     }).catch(err => {
       console.error('发送消息失败:', err)

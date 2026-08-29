@@ -25,6 +25,7 @@ export interface Message {
   outputTokens?: number         // 输出 Token 消耗
   cachedTokens?: number         // 缓存命中 Token 消耗
   executionDurationMs?: number  // 物理生成耗时(毫秒)
+  attachments?: string          // 消息附件元数据 JSON 字符串
   createdAt?: string            // 创建时间戳
 }
 

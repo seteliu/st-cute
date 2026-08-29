@@ -40,4 +40,9 @@ public class CuteMessage {
      * ASSISTANT 专用：本次助手轮次发起的工具调用集合
      */
     private final List<CuteToolCall> toolCalls;
+
+    /**
+     * USER 专用：本次消息携带的多模态附件集合（仅在支持多模态且为最新用户消息时传递）
+     */
+    private final List<CuteAttachment> attachments;
 }

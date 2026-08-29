@@ -35,5 +35,7 @@ logging:
     org.springframework.web: INFO
 
 st-cute:
+  # 应用版本号（构建时由 Maven 资源过滤注入 pom 的 project.version）
+  version: @project.version@
   llm-log:
     http-log: true
