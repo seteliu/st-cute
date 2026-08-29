@@ -97,6 +97,16 @@ public class ReadFileTool implements CuteTool {
         }
 
         StringBuilder content = new StringBuilder();
+        // 先流式统计文件总行数，供截断提示中告知模型完整文件规模，避免盲翻；统计失败时降级为 -1（不提示）
+        int totalLines = -1;
+        try (BufferedReader counter = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+            while (counter.readLine() != null) {
+                totalLines++;
+            }
+        } catch (IOException e) {
+            log.warn("统计文件总行数失败，降级为不提示: {}, 异常: {}", pathVal, e.getMessage());
+            totalLines = -1;
+        }
         try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
             String line;
             int currentLine = 0;
@@ -107,12 +117,15 @@ public class ReadFileTool implements CuteTool {
                     content.append(currentLine).append(": ").append(line).append("\n");
                     linesRead++;
                     if (linesRead >= lineCount) {
-                        content.append("... [此处已截断，已达到读取行数限制 ").append(lineCount).append(" 行] ...");
+                        content.append("... [此处已截断，文件共 ").append(totalLines)
+                                .append(" 行，本次返回第 ").append(startLine).append("-").append(currentLine)
+                                .append(" 行，已达到单次读取行数限制 ").append(lineCount)
+                                .append(" 行，如需继续可指定更大的 startLine] ...");
                         break;
                     }
                 }
             }
-            log.info("ReadFileTool 执行成功: {}, 读取了 {} 行", pathVal, linesRead);
+            log.info("ReadFileTool 执行成功: {}, 读取了 {} 行, 文件总行数 {}", pathVal, linesRead, totalLines);
 
             if (agentContext != null) {
                 agentContext.getReadFiles().add(file.getAbsolutePath());

@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import okhttp3.Call;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.Set;
 import java.util.List;
 import java.util.Map;
@@ -170,6 +172,12 @@ public class AgentContext {
     private final Set<String> readFiles = ConcurrentHashMap.newKeySet();
 
     /**
+     * 当前会话近期的命令重复执行追踪表 (命令指纹 -> 追踪器)。
+     * 用于检测同一命令短时间内输出完全相同的无效重复调用，防止模型陷入死循环空耗轮次。
+     */
+    private final Map<String, RepeatCommandTracker> recentCommands = new ConcurrentHashMap<>();
+
+    /**
      * 当前会话连续幻觉工具调用次数（以轮次为单位）。使用 AtomicInteger 保证自增原子性。
      * 重启后归 0 可接受：幻觉工具通常是模型问题，重新计数不影响正确性。
      */
@@ -249,7 +257,7 @@ public class AgentContext {
      *
      * @param newTools 新的解锁工具集合
      */
-    public void replaceUnlockedTools(java.util.Collection<String> newTools) {
+    public void replaceUnlockedTools(Collection<String> newTools) {
         Set<String> replacement = ConcurrentHashMap.newKeySet();
         if (newTools != null) {
             replacement.addAll(newTools);
@@ -267,7 +275,7 @@ public class AgentContext {
 
         // 根据 ListenerTier 对监听器进行排序后链式同步/异步调用
         List<AgentEventListener> sorted = this.listeners.stream()
-                .sorted(java.util.Comparator.comparingInt(l -> l.getTier().getOrder()))
+                .sorted(Comparator.comparingInt(l -> l.getTier().getOrder()))
                 .toList();
 
         for (AgentEventListener listener : sorted) {

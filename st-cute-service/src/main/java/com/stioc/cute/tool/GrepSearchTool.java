@@ -15,8 +15,9 @@ import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import java.io.StringReader;
+import java.nio.charset.Charset;
+import com.stioc.cute.platform.common.NativeCharsetKit;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
@@ -196,7 +197,12 @@ public class GrepSearchTool implements CuteTool {
     }
 
     private void searchInFile(Path file, Path root, String query, Pattern regexPattern, List<String> results) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file.toFile()), StandardCharsets.UTF_8))) {
+        try (InputStream raw = new FileInputStream(file.toFile())) {
+            // 编码自适应读取：缓冲全部字节后按 UTF-8 严格探测，失败回退系统原生编码（中文 Windows 为 GBK）。
+            // 修复：原先强制 UTF-8 读取，GBK 编码文件的中文字节被解码为乱码，导致中文关键字静默失配
+            byte[] rawBytes = raw.readAllBytes();
+            Charset charset = NativeCharsetKit.detectCharset(rawBytes, rawBytes.length);
+            BufferedReader reader = new BufferedReader(new StringReader(new String(rawBytes, charset)));
             String line;
             int lineNumber = 0;
             String relativePath = root.relativize(file).toString().replace("\\", "/");

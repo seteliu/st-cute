@@ -8,7 +8,9 @@ import com.stioc.cute.tool.access.ToolNames;
 import com.stioc.cute.security.access.WorkspacePathResolver;
 import com.stioc.cute.agent.access.AgentContext;
 import com.stioc.cute.agent.access.ActiveProcess;
+import com.stioc.cute.agent.access.RepeatCommandTracker;
 import com.stioc.cute.agent.event.AgentEventFactory;
+import com.stioc.cute.platform.common.NativeCharsetKit;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -20,20 +22,13 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.SequenceInputStream;
-import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -45,6 +40,16 @@ public class RunCommandTool implements CuteTool {
 
     @Resource
     private WorkspacePathResolver workspacePathResolver;
+
+    /**
+     * 同一命令输出完全相同的容忍次数：连续第 N 次相同即判定为无效死循环重复
+     */
+    private static final int REPEAT_BREAK_THRESHOLD = 5;
+
+    /**
+     * 重复判定的时间窗口：超过该时长未重复执行，历史计数视为失效（毫秒）
+     */
+    private static final long REPEAT_WINDOW_MS = 3 * 60 * 1000L;
 
     @Override
     public String getName() {
@@ -69,6 +74,10 @@ public class RunCommandTool implements CuteTool {
             "cwd": {
               "type": "string",
               "description": "命令运行的指定工作目录路径（可选，默认为当前项目根目录或 worktree 隔离路径）"
+            },
+            "encoding": {
+              "type": "string",
+              "description": "指定子进程输出的解码字符集，可选。支持 'auto'（默认，自动探测 UTF-8 优先回退系统原生编码）、'utf-8'、'gbk'，也可传 Java 合法字符集名。出现中文乱码或编码混排时可显式指定。"
             },
             "idleTimeoutMs": {
               "type": "integer",
@@ -95,6 +104,13 @@ public class RunCommandTool implements CuteTool {
         if (command == null || command.isBlank()) {
             return new JSONObject().fluentPut("error", "参数 'command' 不能为空。").toJSONString();
         }
+
+        // 熔断保险丝：同一命令短时间内输出完全相同的无效重复调用检测，防止模型陷入死循环空耗轮次
+        String rejectReason = checkRepeatBreak(agentContext, command);
+        if (rejectReason != null) {
+            return new JSONObject().fluentPut("error", rejectReason).toJSONString();
+        }
+
         String customCwd = arguments.get("cwd") != null ? String.valueOf(arguments.get("cwd")) : null;
         long idleTimeoutMs = arguments.get("idleTimeoutMs") != null
                 ? ((Number) arguments.get("idleTimeoutMs")).longValue() : 15_000L;
@@ -103,8 +119,22 @@ public class RunCommandTool implements CuteTool {
         boolean runInBackground = arguments.get("runInBackground") != null
                 && Boolean.parseBoolean(String.valueOf(arguments.get("runInBackground")));
 
-        log.info("execute_command 尝试运行命令: {}, Cwd: {}, IdleTimeout: {}ms, MaxTimeout: {}ms, RunInBackground: {}",
-                command, customCwd, idleTimeoutMs, maxTimeoutMs, runInBackground);
+        // 解析编码参数：auto = 自动探测（默认），其他值按 Java 字符集名强制指定
+        String encodingVal = arguments.get("encoding") != null ? String.valueOf(arguments.get("encoding")).trim() : "auto";
+        Charset forcedCharset = null;
+        if (!"auto".equalsIgnoreCase(encodingVal)) {
+            try {
+                forcedCharset = Charset.forName(encodingVal);
+            } catch (Exception e) {
+                return new JSONObject().fluentPut("error",
+                        "参数 'encoding' 的值 '" + encodingVal + "' 不是合法字符集名 (Exception: " + e.getMessage() + ")。"
+                                + "常用取值：auto（自动探测）、utf-8、gbk。").toJSONString();
+            }
+        }
+        final Charset finalForcedCharset = forcedCharset;
+
+        log.info("execute_command 尝试运行命令: {}, Cwd: {}, Encoding: {}, IdleTimeout: {}ms, MaxTimeout: {}ms, RunInBackground: {}",
+                command, customCwd, forcedCharset != null ? forcedCharset.name() : "auto", idleTimeoutMs, maxTimeoutMs, runInBackground);
 
         String os = System.getProperty("os.name").toLowerCase();
         ProcessBuilder pb;
@@ -147,7 +177,7 @@ public class RunCommandTool implements CuteTool {
                 List<Long> childPids = new CopyOnWriteArrayList<>();
                 // 1. 首期瞬间捕获快照
                 try {
-                    Thread.sleep(100); 
+                    Thread.sleep(100);
                     process.toHandle().descendants().forEach(h -> childPids.add(h.pid()));
                 } catch (Exception ignored) {}
 
@@ -165,7 +195,7 @@ public class RunCommandTool implements CuteTool {
                 );
                 agentContext.getActiveProcesses().put(toolCallId, activeProcess);
 
-                // 2. 🌟 异步增量安全追踪：在服务启动前 3 秒内，每隔 500ms 动态补录新诞生的后代进程（例如 node.exe）
+                // 2. 异步增量安全追踪：在服务启动前 3 秒内，每隔 500ms 动态补录新诞生的后代进程（例如 node.exe）
                 Process finalProcess = process;
                 Thread.startVirtualThread(() -> {
                     for (int i = 0; i < 6; i++) {
@@ -187,9 +217,9 @@ public class RunCommandTool implements CuteTool {
                 });
             }
 
-            // Windows 下子进程输出编码自动探测（UTF-8 优先，失败回退 JVM 系统默认编码）；
-            // 非 Windows 环境直接使用 UTF-8
-            boolean needDetect = os.contains("win");
+            // Windows 下子进程输出编码自动探测（UTF-8 优先，失败回退系统原生编码）；
+            // 非 Windows 环境直接使用 UTF-8；显式 encoding 参数指定时强制使用指定编码跳过探测
+            boolean needDetect = os.contains("win") && finalForcedCharset == null;
 
             if (runInBackground) {
                 // 如果是后台挂起任务，把阻塞读取流的工作扔给异步的虚拟线程，避免卡死主线程执行流
@@ -200,12 +230,13 @@ public class RunCommandTool implements CuteTool {
                     log.info("[异步后台日志线程启动] toolCallId={}, Command={}", toolCallId, command);
                     try (BufferedReader reader = needDetect
                             ? createEncodingAwareReader(finalProcess.getInputStream())
-                            : new BufferedReader(new InputStreamReader(finalProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                            : new BufferedReader(new InputStreamReader(finalProcess.getInputStream(),
+                                    finalForcedCharset != null ? finalForcedCharset : StandardCharsets.UTF_8))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             sendIncrementalLog(toolCallId, line + "\n", agentContext);
                             log.info("[后台控制台输出 - {}] {}", toolCallId, line);
-                            
+
                             // 保留前期一部分报错日志提供给主线程失败返回
                             if (backgroundOutput.length() < 20000) {
                                 backgroundOutput.append(line).append("\n");
@@ -261,10 +292,10 @@ public class RunCommandTool implements CuteTool {
                 // 核心判定：主进程必须处于运行状态，或者主进程虽退役但退出码为0且后代业务进程依然健在（即toolCallId依然保留在活动映射中）
                 boolean successfullyStarted = isAlive || (exitVal == 0 && toolCallId != null && agentContext.getActiveProcesses().containsKey(toolCallId));
 
-                // 🌟 若检测到未正常启动运行，代表配置或路径出错，返回真实的退出码与报错输出
+                // 若检测到未正常启动运行，代表配置或路径出错，返回真实的退出码与报错输出
                 if (!successfullyStarted) {
                     log.warn("[后台进程启动失败] 进程在拉起后 3s 内异常退出, toolCallId={}, exitValue={}", toolCallId, exitVal);
-                    
+
                     if (toolCallId != null) {
                         agentContext.getActiveProcesses().remove(toolCallId);
                     }
@@ -291,15 +322,16 @@ public class RunCommandTool implements CuteTool {
             // 记录最近一次收到新输出的时间戳，用于空闲超时检测
             AtomicLong lastOutputTime = new AtomicLong(System.currentTimeMillis());
             // 用原子标志位记录是哪种超时触发的强杀，watchdog 直接写，主线程读，无竞态
-            java.util.concurrent.atomic.AtomicBoolean idleTimeoutFlag = new java.util.concurrent.atomic.AtomicBoolean(false);
-            java.util.concurrent.atomic.AtomicBoolean maxTimeoutFlag = new java.util.concurrent.atomic.AtomicBoolean(false);
+            AtomicBoolean idleTimeoutFlag = new AtomicBoolean(false);
+            AtomicBoolean maxTimeoutFlag = new AtomicBoolean(false);
 
             // 异步读取 stdout，通过 CompletableFuture 将结果安全传回主线程，彻底消除共享状态竞态
             CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
                 StringBuilder sb = new StringBuilder();
                 try (BufferedReader reader = needDetect
                         ? createEncodingAwareReader(finalProcess.getInputStream())
-                        : new BufferedReader(new InputStreamReader(finalProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                        : new BufferedReader(new InputStreamReader(finalProcess.getInputStream(),
+                                finalForcedCharset != null ? finalForcedCharset : StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         lastOutputTime.set(System.currentTimeMillis());
@@ -375,6 +407,9 @@ public class RunCommandTool implements CuteTool {
             }
         }
 
+        // 命令完成后登记输出摘要，供下一次执行时做无效重复判定
+        recordCommandOutput(agentContext, command, outputResult);
+
         if (idleTimeout) {
             log.warn("execute_command 空闲超时中止: {}", command);
             return new JSONObject()
@@ -404,11 +439,63 @@ public class RunCommandTool implements CuteTool {
     }
 
     /**
+     * 同一命令无效重复执行检测（熔断保险丝）。
+     * <p>
+     * 判定条件（全部满足才拒绝）：同一命令 + 3 分钟时间窗口内 + 已连续 5 次产生完全相同的输出。
+     * 输出一旦变化立即重置计数。检测到重复时返回拒绝理由文案，判定放行时返回 null。
+     * </p>
+     */
+    private String checkRepeatBreak(AgentContext agentContext, String command) {
+        if (agentContext == null) {
+            return null;
+        }
+        RepeatCommandTracker tracker = agentContext.getRecentCommands().computeIfAbsent(command, k -> new RepeatCommandTracker());
+        long now = System.currentTimeMillis();
+
+        // 超出时间窗口视为全新序列，重置追踪器后放行
+        if (now - tracker.getLastExecuteAt() > REPEAT_WINDOW_MS) {
+            tracker.setLastOutputDigest(null);
+            tracker.getSameOutputCount().set(0);
+            tracker.setLastExecuteAt(now);
+            return null;
+        }
+
+        // 上一次已登记的输出摘要存在且连续相同次数达到阈值时熔断拒绝
+        if (tracker.getLastOutputDigest() != null && tracker.getSameOutputCount().get() >= REPEAT_BREAK_THRESHOLD) {
+            log.warn("[重复熔断] 检测到命令 '{}' 在 {} 分钟内输出连续 {} 次完全相同，判定为无效重复调用，拒绝执行",
+                    command, REPEAT_WINDOW_MS / 60000, tracker.getSameOutputCount().get());
+            return "拒绝执行。检测到该命令在最近 " + (REPEAT_WINDOW_MS / 60000) + " 分钟内已连续 "
+                    + tracker.getSameOutputCount().get()
+                    + " 次产生完全相同的输出，判定为无效重复调用（疑似死循环）。请更换命令、调整参数或基于已有输出继续分析，"
+                    + "不要重复执行完全相同的命令。若你确实需要重跑，请显式修改命令内容（如添加参数）后再试。";
+        }
+        return null;
+    }
+
+    /**
+     * 命令执行完成后登记输出摘要与次数，供下次预检判定
+     */
+    private void recordCommandOutput(AgentContext agentContext, String command, String output) {
+        if (agentContext == null) {
+            return;
+        }
+        RepeatCommandTracker tracker = agentContext.getRecentCommands().computeIfAbsent(command, k -> new RepeatCommandTracker());
+        String digest = RepeatCommandTracker.digestOf(output);
+        if (digest.equals(tracker.getLastOutputDigest())) {
+            tracker.getSameOutputCount().incrementAndGet();
+        } else {
+            tracker.setLastOutputDigest(digest);
+            tracker.getSameOutputCount().set(1);
+        }
+        tracker.setLastExecuteAt(System.currentTimeMillis());
+    }
+
+    /**
      * Windows 环境下的编码自动探测读取器。
      * <p>
      * 缓冲前 8KB 原始字节，先用 UTF-8 严格解码尝试：
      * - 成功 → 全程锁定 UTF-8
-     * - 失败 → 全程回退 JVM 系统默认编码
+     * - 失败 → 全程回退系统原生编码
      * </p>
      * <p>
      * 探测完成后，将缓冲的首批字节与剩余流拼接为完整的 Reader，
@@ -454,53 +541,13 @@ public class RunCommandTool implements CuteTool {
             probeLen = 0;
         }
 
-        Charset detected = detectCharset(probeBuffer, probeLen);
+        Charset detected = NativeCharsetKit.detectCharset(probeBuffer, probeLen);
         log.info("[编码探测] 探测结果: {}, 探测样本大小: {} bytes", detected.name(), probeLen);
 
         // 将探测缓冲区与剩余流拼接
         ByteArrayInputStream probeStream = new ByteArrayInputStream(probeBuffer, 0, probeLen);
         SequenceInputStream combinedStream = new SequenceInputStream(probeStream, inputStream);
         return new BufferedReader(new InputStreamReader(combinedStream, detected));
-    }
-
-    /**
-     * 用 UTF-8 严格模式解码探测字节，成功返回 UTF-8，失败回退 Windows 系统级编码。
-     * <p>
-     * 使用 {@code sun.jnu.encoding} 系统属性获取操作系统的原生 ANSI Codepage，
-     * 它反映的是 Windows 系统区域设置的真实编码（中文 → GBK、英文 → windows-1252 等），
-     * 不受 JVM 启动参数 {@code -Dfile.encoding} 的覆盖影响。</p>
-     */
-    private Charset detectCharset(byte[] data, int len) {
-        Charset fallback = getSystemNativeCharset();
-        if (len == 0) {
-            return fallback;
-        }
-        try {
-            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT);
-            decoder.decode(ByteBuffer.wrap(data, 0, len));
-            return StandardCharsets.UTF_8;
-        } catch (CharacterCodingException e) {
-            return fallback;
-        }
-    }
-
-    /**
-     * 获取操作系统原生的 ANSI Codepage 编码。
-     * 优先读取 {@code sun.jnu.encoding}（Windows 上对应系统区域设置），
-     * 读取失败时降级为 {@link Charset#defaultCharset()}。
-     */
-    private Charset getSystemNativeCharset() {
-        String jnuEncoding = System.getProperty("sun.jnu.encoding");
-        if (jnuEncoding != null && !jnuEncoding.isBlank()) {
-            try {
-                return Charset.forName(jnuEncoding);
-            } catch (Exception e) {
-                log.warn("[编码探测] sun.jnu.encoding 值 '{}' 无法识别，降级为 JVM 默认编码", jnuEncoding);
-            }
-        }
-        return Charset.defaultCharset();
     }
 
     private void sendIncrementalLog(String toolCallId, String text, AgentContext agentContext) {

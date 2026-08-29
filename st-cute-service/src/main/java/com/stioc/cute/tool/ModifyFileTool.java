@@ -105,8 +105,14 @@ public class ModifyFileTool implements CuteTool {
             // 强制安全门禁：修改前必先读取最新内容以防止幻觉
             if (agentContext != null && !agentContext.getReadFiles().contains(file.getAbsolutePath())) {
                 log.warn("ModifyFileTool 安全防御触发：未读先改拦截 - {}", file.getAbsolutePath());
+                // 报错附带具体判定状态，帮助模型一次定位原因：
+                // 1) 本会话从未读取过该文件；2) 读取记录被新一轮用户输入/清空/回退操作重置（每轮新输入会清空已读集合，防止基于过时上下文修改）
+                String readFilesCount = agentContext.getReadFiles().isEmpty()
+                        ? "当前会话本轮的已读文件集合为空（可能已被新一轮用户输入或清空/回退操作重置）"
+                        : "当前会话本轮已读取过 " + agentContext.getReadFiles().size() + " 个其他文件，但不包含目标文件";
                 return new JSONObject().fluentPut("error",
-                        "拒绝执行代码修改。为防止你基于幻觉或过时上下文盲目修改，请你先使用 read_file 读取该文件最新内容，然后再尝试修改。"
+                        "拒绝执行代码修改。门禁判定规则：read_file 成功读取过的文件才允许修改，且每轮新用户消息会清空读取记录（防止基于过时上下文修改）。当前状态："
+                                + readFilesCount + "。请先使用 read_file 读取目标文件 [" + file.getName() + "] 的最新内容，然后重试修改。"
                 ).toJSONString();
             }
 

@@ -72,4 +72,9 @@ public final class ToolNames {
      * 获取当前系统时间工具协议名
      */
     public static final String GET_TIME        = "get_time";
+
+    /**
+     * 加载历史附件文件内容工具协议名
+     */
+    public static final String LOAD_ATTACHMENT = "load_attachment";
 }
