@@ -11,7 +11,9 @@ import com.stioc.cute.message.access.MessageService;
 import com.stioc.cute.message.access.MessageStatus;
 import com.stioc.cute.llm.CuteToolCall;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,6 +23,7 @@ import java.util.List;
  * 写操作仍走事件（CREATE/UPDATE_REQUEST）；读查询经 MessageService 按 callId 定位行，
  * 彻底替代原先的内存映射缓存，规避重启丢映射与悬挂 TOOL 行问题。
  */
+@Slf4j
 @Component
 public class ToolStatusHandler {
 
@@ -66,17 +69,30 @@ public class ToolStatusHandler {
      * 工具执行状态更新时的回调
      */
     public void onStatusUpdated(AgentContext context, String toolCallId, MessageStatus status, String resultPayload) {
-        onStatusUpdated(context, toolCallId, status, resultPayload, null);
+        onStatusUpdated(context, toolCallId, status, resultPayload, null, null);
     }
 
     /**
      * 工具执行状态更新时的回调，支持保留折叠前的完整日志
      */
     public void onStatusUpdated(AgentContext context, String toolCallId, MessageStatus status, String resultPayload, String beforeCompactContent) {
+        onStatusUpdated(context, toolCallId, status, resultPayload, beforeCompactContent, null);
+    }
+
+    /**
+     * 工具执行状态更新时的回调，支持保留折叠前的完整日志及关联附件元数据
+     */
+    public void onStatusUpdated(AgentContext context, String toolCallId, MessageStatus status, String resultPayload, String beforeCompactContent, String attachments) {
         MessageEntity toolMsg = messageService.findToolMessage(context.getCid(), toolCallId);
         if (toolMsg == null) {
             context.publishEvent(AgentEventFactory.createMessageCreate(context,
                     buildMissingToolMessage(context, toolCallId, resultPayload)));
+            return;
+        }
+
+        // CANCELED 终态守卫：工具消息已被中断链路置为 CANCELED 后，丢弃迟到回写，避免覆盖取消结果
+        if (MessageStatus.CANCELED == toolMsg.getStatus() && MessageStatus.CANCELED != status) {
+            log.debug("TOOL 消息 {} 已是 CANCELED 终态，丢弃迟到的 {} 回写: toolCallId={}", toolMsg.getId(), status, toolCallId);
             return;
         }
 
@@ -86,6 +102,9 @@ public class ToolStatusHandler {
         update.setStatus(status);
         update.setContent(resultPayload);
         update.setBeforeCompactContent(beforeCompactContent);
+        if (StringUtils.hasText(attachments)) {
+            update.setAttachments(attachments);
+        }
         context.publishEvent(AgentEventFactory.createMessageUpdate(context, update));
     }
 

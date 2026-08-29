@@ -81,6 +81,16 @@ public class PermissionEngineImpl implements PermissionEngine {
             return "DENY:禁止子智能体继续派发子智能体，防止无限递归和嵌套。";
         }
 
+        // 豁免：主会话调用 invoke_subagent 直接放行，不进入人在回路审批。
+        // 理由：该工具仅是「拉起子 Agent」的调度动作，子会话创建时完整继承父会话的
+        // 权限模式/供应商/Worktree 隔离/已解锁工具，真正需要审批的是子 Agent 内部产生的
+        // 写文件/执行命令等副作用（由子会话自身的权限模式把守）。若对 invoke_subagent 本身
+        // 挂起 ASK，会导致子会话未创建、waitingSubCids 未写入，屏障在审批期间出现空窗口。
+        if (!isSubAgent && ToolNames.INVOKE_SUBAGENT.equalsIgnoreCase(toolName)) {
+            log.debug("权限裁决: ALLOW [invoke_subagent 调度豁免] - toolName={}", toolName);
+            return "ALLOW";
+        }
+
         String pathVal = (String) arguments.get("path");
         if (pathVal == null) {
             pathVal = (String) arguments.get("filepath");
@@ -250,7 +260,9 @@ public class PermissionEngineImpl implements PermissionEngine {
         // 层级 4.5: 已读文件白名单强化 (ReadFile 读过的文件，其 Write/Modify 直接 ALLOW 放行)
         if (isWriteOrModify && StringUtils.hasText(pathVal)) {
             try {
-                String absPath = Paths.get(pathVal).toAbsolutePath().normalize().toString();
+                // 与 ReadFileTool/ModifyFileTool 统一走 WorkspacePathResolver 解析，
+                // 保证相对路径以项目根/worktree 为基准，而非 JVM 工作目录，避免白名单路径基准不一致
+                String absPath = workspacePathResolver.resolvePath(pathVal, context).toAbsolutePath().normalize().toString();
                 if (context.getReadFiles().contains(absPath)) {
                     log.debug("权限裁决: ALLOW [已读文件白名单强化放行] - path={}", pathVal);
                     return "ALLOW";

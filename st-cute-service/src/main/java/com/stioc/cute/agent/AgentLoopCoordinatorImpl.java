@@ -9,6 +9,7 @@ import com.mybatisflex.core.util.UpdateEntity;
 import com.stioc.cute.conversation.access.ConversationService;
 import com.stioc.cute.message.access.MessageService;
 import com.stioc.cute.message.access.MessageEntity;
+import com.stioc.cute.message.access.MessageRole;
 import com.stioc.cute.message.access.MessageStatus;
 import com.stioc.cute.platform.common.CommonThread;
 import com.stioc.cute.platform.contract.ContractLock;
@@ -150,6 +151,26 @@ public class AgentLoopCoordinatorImpl implements AgentLoopCoordinator {
             log.warn("[AgentLoopCoordinator] 抢占式清理未完成的工具消息失败: cid={}", cid, e);
         }
 
+        // 2.5 终态兜底：将所有仍处于 RUNNING/PENDING 的 ASSISTANT 消息先行置为 CANCELED（content 置空以保留已流出的正文），
+        //     不再被动依赖执行线程响应中断后才落终态。即使线程仍卡在阻塞 IO，消息也不会悬空转圈。
+        try {
+            List<MessageEntity> inflightAssistants = messageService.findInflightMessagesByRoles(cid, List.of(MessageRole.ASSISTANT));
+            for (MessageEntity assistant : inflightAssistants) {
+                MessageEntity updateMsg = MessageEntity.builder()
+                        .id(assistant.getId())
+                        .cid(cid)
+                        .role(MessageRole.ASSISTANT)
+                        .status(MessageStatus.CANCELED)
+                        .build();
+                context.publishEvent(AgentEventFactory.createMessageUpdate(context, updateMsg));
+
+                // 同步结束前端的流式思考动效，防止界面上的 isStreaming 状态残留
+                context.publishEvent(AgentEventFactory.createThinkingStream(context, "\n\n[已取消] 当前 Agent 运行已停止。", false, true, assistant.getId()));
+            }
+        } catch (Exception e) {
+            log.warn("[AgentLoopCoordinator] 兜底清理未完成的 ASSISTANT 消息失败: cid={}", cid, e);
+        }
+
         // 3. 同步中断内存中的活跃执行线程并更新 loopRunning 为 false 通知前端
         if (context != null) {
             ConversationEntity loopEndPayload = UpdateEntity.of(ConversationEntity.class);
@@ -157,6 +178,11 @@ public class AgentLoopCoordinatorImpl implements AgentLoopCoordinator {
             loopEndPayload.setLoopRunning(0);
             context.publishEvent(AgentEventFactory.createConversationUpdate(context, loopEndPayload));
             context.setCanceled(true);
+
+            // 3.5 强制取消活跃的物理副作用（强杀外部子进程 + cancel 大模型 HTTP 连接）：
+            //     OkHttp 阻塞读（readLine/execute）不响应 Thread.interrupt()，必须 cancel Call 才能立即解除阻塞，
+            //     否则线程会一直阻塞至 readTimeout(300s) 或下一个 chunk 到来才醒来。
+            agentContextManager.cancelActiveSideEffects(context);
             
             Thread activeThread = context.getActiveThread();
             if (activeThread != null && activeThread.isAlive()) {

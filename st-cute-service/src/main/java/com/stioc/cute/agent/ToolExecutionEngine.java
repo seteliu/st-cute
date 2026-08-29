@@ -3,6 +3,7 @@ package com.stioc.cute.agent;
 import com.stioc.cute.agent.access.AgentLoopCoordinator;
 import com.stioc.cute.agent.access.AgentContext;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import java.util.concurrent.locks.Lock;
 import com.stioc.cute.platform.contract.ContractLock;
@@ -15,6 +16,7 @@ import com.stioc.cute.hook.access.HookEngineService;
 import com.stioc.cute.hook.access.HookEventType;
 import com.stioc.cute.message.access.MessageStatus;
 import com.stioc.cute.security.access.PermissionEngine;
+import com.stioc.cute.security.access.WorkspacePathResolver;
 import com.stioc.cute.tool.access.CuteTool;
 import com.stioc.cute.tool.access.ToolNames;
 import com.stioc.cute.tool.access.ToolRegistry;
@@ -25,8 +27,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.Resource;
-import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -46,6 +50,8 @@ public class ToolExecutionEngine {
     private HookEngineService hookEngineService;
     @Resource
     private LlmWindowManager llmWindowManager;
+    @Resource
+    private WorkspacePathResolver workspacePathResolver;
     @Resource
     private ObjectProvider<AgentLoopCoordinator> agentLoopCoordinatorProvider;
     @Resource
@@ -330,7 +336,9 @@ public class ToolExecutionEngine {
                     String pathVal = (String) args.get("path");
                     if (StringUtils.hasText(pathVal)) {
                         try {
-                            String absPath = Paths.get(pathVal).toAbsolutePath().normalize().toString();
+                            // 与 ReadFileTool/ModifyFileTool 统一走 WorkspacePathResolver 解析，
+                            // 保证相对路径以项目根/worktree 为基准，而非 JVM 工作目录，避免门禁路径基准不一致
+                            String absPath = workspacePathResolver.resolvePath(pathVal, context).toAbsolutePath().normalize().toString();
                             context.getReadFiles().add(absPath);
                         } catch (Exception ex) {
                             // ignore
@@ -365,9 +373,35 @@ public class ToolExecutionEngine {
             }
         }
 
-        // 8. 推送并持久化工具结果状态
+        // 8. 提取特定工具（如 load_attachment）产生的附件元数据
+        String attachmentsJson = null;
+        if (success && ToolNames.LOAD_ATTACHMENT.equalsIgnoreCase(name) && StringUtils.hasText(result)) {
+            try {
+                JSONObject resObj = JSON.parseObject(result.trim());
+                if (resObj != null && "success".equalsIgnoreCase(resObj.getString("status"))) {
+                    String attPath = resObj.getString("path");
+                    String attName = resObj.getString("name");
+                    Long attSize = resObj.getLong("size");
+                    String attMime = resObj.getString("mimeType");
+                    if (StringUtils.hasText(attPath)) {
+                        JSONArray attArr = new JSONArray();
+                        JSONObject attObj = new JSONObject();
+                        attObj.put("path", attPath);
+                        attObj.put("name", attName != null ? attName : attPath);
+                        attObj.put("size", attSize != null ? attSize : 0L);
+                        attObj.put("mimeType", attMime);
+                        attArr.add(attObj);
+                        attachmentsJson = attArr.toJSONString();
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("解析 LOAD_ATTACHMENT 工具附件元数据失败", e);
+            }
+        }
+
+        // 9. 推送并持久化工具结果状态
         MessageStatus finalStatus = success ? MessageStatus.SUCCESS : MessageStatus.FAILED;
-        toolStatusHandler.onStatusUpdated(context, toolCallId, finalStatus, compactedResult, beforeCompact);
+        toolStatusHandler.onStatusUpdated(context, toolCallId, finalStatus, compactedResult, beforeCompact, attachmentsJson);
 
         // 9. 从 waitingToolIds 中移除本工具。
         //    invoke_subagent 工具本身也在此处算作完成（子 Agent 异步运行，其 subCid 已单独进入 waitingSubCids）。

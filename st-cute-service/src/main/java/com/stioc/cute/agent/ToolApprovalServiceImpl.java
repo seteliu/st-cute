@@ -72,6 +72,15 @@ public class ToolApprovalServiceImpl implements ToolApprovalService {
             return false;
         }
 
+        // 状态校验：仅允许对仍处于待审批状态的工具消息执行审批决策。
+        // 防止已被超时清理（CANCELED）或已进入其他状态的工具被事后审批（僵尸审批），
+        // 该场景下恢复执行会绕过屏障判定产生不可预期的调度错乱。
+        if (MessageStatus.WAITING_APPROVAL != toolMsg.getStatus()) {
+            log.warn("审批拒绝：会话 {} 中 toolCallId={} 的当前状态为 {}，已不是待审批状态，忽略本次审批决策",
+                    cid, toolCallId, toolMsg.getStatus());
+            return false;
+        }
+
         if (!"ALLOW".equalsIgnoreCase(decision)) {
             if (context != null) {
                 rejectToolAndContinue(context, toolMsg, toolCallId);

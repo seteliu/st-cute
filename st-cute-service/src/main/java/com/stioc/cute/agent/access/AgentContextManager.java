@@ -28,6 +28,13 @@ public interface AgentContextManager {
     void cancelContext(Long cid);
 
     /**
+     * 强制取消指定会话当前活跃的物理副作用（外部子进程与大模型 HTTP 连接）。
+     * 与 {@link #cancelContext} 不同：不级联子会话、不标记 canceled、不发线程中断，
+     * 仅用于解除阻塞 IO 与停止外部进程占用，可被用户中断等多种链路复用。
+     */
+    void cancelActiveSideEffects(AgentContext context);
+
+    /**
      * 从内存中彻底销毁并清除指定会话 ID 的上下文及资源
      */
     void removeContext(Long cid);

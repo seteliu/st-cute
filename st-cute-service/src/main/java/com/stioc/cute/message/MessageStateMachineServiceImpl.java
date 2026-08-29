@@ -194,6 +194,10 @@ public class MessageStateMachineServiceImpl implements MessageStateMachineServic
             log.warn("跳过 ASSISTANT 消息更新，activeAssistantMsgId 为空: cid={}, status={}", context.getCid(), status);
             return;
         }
+        // CANCELED 终态守卫：消息已被用户中断置为 CANCELED 后，丢弃后续迟到的终态回写，避免覆盖取消结果
+        if (isAlreadyCanceled(activeAssistantMsgId, status)) {
+            return;
+        }
         MessageEntity update = UpdateEntity.of(MessageEntity.class);
         update.setId(activeAssistantMsgId);
         update.setRole(MessageRole.ASSISTANT);
@@ -208,6 +212,10 @@ public class MessageStateMachineServiceImpl implements MessageStateMachineServic
         Long activeAssistantMsgId = context.getActiveAssistantMsgId();
         if (activeAssistantMsgId == null) {
             log.warn("跳过 ASSISTANT 消息更新，activeAssistantMsgId 为空: cid={}, status={}", context.getCid(), status);
+            return;
+        }
+        // CANCELED 终态守卫：消息已被用户中断置为 CANCELED 后，丢弃后续迟到的终态回写，避免覆盖取消结果
+        if (isAlreadyCanceled(activeAssistantMsgId, status)) {
             return;
         }
         MessageEntity update = UpdateEntity.of(MessageEntity.class);
@@ -228,5 +236,22 @@ public class MessageStateMachineServiceImpl implements MessageStateMachineServic
             update.setExecutionDurationMs(response.getExecutionDurationMs());
         }
         context.publishEvent(AgentEventFactory.createMessageUpdate(context, update));
+    }
+
+    /**
+     * CANCELED 终态守卫：目标消息在 DB 中已是 CANCELED 时返回 true（且本次并非取消写入自身），
+     * 用于拦截用户中断后被解阻塞线程迟到的状态回写，防止覆盖已落定的取消终态。
+     */
+    private boolean isAlreadyCanceled(Long messageId, MessageStatus incomingStatus) {
+        if (incomingStatus == MessageStatus.CANCELED) {
+            // 取消写入自身放行（幂等）
+            return false;
+        }
+        MessageStatus current = messageService.findMessageStatus(messageId);
+        if (current == MessageStatus.CANCELED) {
+            log.debug("ASSISTANT 消息 {} 已是 CANCELED 终态，丢弃迟到的 {} 回写", messageId, incomingStatus);
+            return true;
+        }
+        return false;
     }
 }

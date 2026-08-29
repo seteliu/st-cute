@@ -257,44 +257,10 @@ public class AgentContextManagerImpl implements AgentContextManager {
         if (context != null) {
             context.setCanceled(true);
 
-            // 1. 强杀此会话的所有外部物理子进程
-            context.getActiveProcesses().forEach((toolCallId, activeProcess) -> {
-                try {
-                    log.debug("强制杀掉会话 {} 的子进程树: ToolCallId={}, Command={}", cid, toolCallId, activeProcess.getCommand());
-                    activeProcess.destroyForcibly();
-                } catch (Exception e) {
-                    log.error("强杀进程异常", e);
-                }
-            });
-            context.getActiveProcesses().clear();
+            // 1. 强杀此会话的所有外部物理子进程、强退大模型 HTTP 连接（内含进程表与连接表的清理）
+            cancelActiveSideEffects(context);
 
-            // 2. 强退大模型 HTTP 连接
-            try {
-                Call activeCall = context.getActiveLlmCall();
-                if (activeCall != null && !activeCall.isCanceled()) {
-                    log.debug("正在强制取消会话 {} 的主大模型调用", cid);
-                    activeCall.cancel();
-                }
-            } catch (Exception e) {
-                log.error("强退网络连接异常", e);
-            }
-            context.setActiveLlmCall(null);
-
-            // 强退此会话下注册的所有活动网络调用 (如重命名或上下文摘要等同步连接)
-            context.getActiveLlmCalls().forEach((llmCallId, activeCall) -> {
-                try {
-                    Call call = activeCall.getCall();
-                    if (call != null && !call.isCanceled()) {
-                        log.debug("正在强制取消会话 {} 的活动大模型请求, llmCallId={}, Model={}", cid, llmCallId, activeCall.getModel());
-                        call.cancel();
-                    }
-                } catch (Exception e) {
-                    log.error("强退活动网络连接异常", e);
-                }
-            });
-            context.getActiveLlmCalls().clear();
-
-            // 3. 中断执行线程
+            // 2. 中断执行线程
             Thread activeThread = context.getActiveThread();
             if (activeThread != null && activeThread.isAlive()) {
                 log.debug("向活跃执行线程 {} 发送中断信号以取消会话 {}", activeThread.getName(), cid);
@@ -302,7 +268,7 @@ public class AgentContextManagerImpl implements AgentContextManager {
             }
             log.debug("运行上下文已被用户标记取消: {}", cid);
 
-            // 4. 级联递归取消名下的并发子代理会话的运行
+            // 3. 级联递归取消名下的并发子代理会话的运行
             contexts.values().forEach(child -> {
                 if (cid.equals(child.getParentCid())) {
                     log.debug("级联取消子会话: {}", child.getCid());
@@ -310,6 +276,54 @@ public class AgentContextManagerImpl implements AgentContextManager {
                 }
             });
         }
+    }
+
+    /**
+     * 强制取消指定会话当前活跃的物理副作用（外部子进程与大模型 HTTP 连接）。
+     * 可被「用户中断运行」与「删除会话级联清理」等多种链路复用。
+     */
+    public void cancelActiveSideEffects(AgentContext context) {
+        if (context == null) {
+            return;
+        }
+        Long cid = context.getCid();
+
+        // 1. 强杀此会话的所有外部物理子进程
+        context.getActiveProcesses().forEach((toolCallId, activeProcess) -> {
+            try {
+                log.debug("强制杀掉会话 {} 的子进程树: ToolCallId={}, Command={}", cid, toolCallId, activeProcess.getCommand());
+                activeProcess.destroyForcibly();
+            } catch (Exception e) {
+                log.error("强杀进程异常", e);
+            }
+        });
+        context.getActiveProcesses().clear();
+
+        // 2. 强退大模型 HTTP 连接
+        try {
+            Call activeCall = context.getActiveLlmCall();
+            if (activeCall != null && !activeCall.isCanceled()) {
+                log.debug("正在强制取消会话 {} 的主大模型调用", cid);
+                activeCall.cancel();
+            }
+        } catch (Exception e) {
+            log.error("强退网络连接异常", e);
+        }
+        context.setActiveLlmCall(null);
+
+        // 强退此会话下注册的所有活动网络调用 (如重命名或上下文摘要等同步连接)
+        context.getActiveLlmCalls().forEach((llmCallId, activeCall) -> {
+            try {
+                Call call = activeCall.getCall();
+                if (call != null && !call.isCanceled()) {
+                    log.debug("正在强制取消会话 {} 的活动大模型请求, llmCallId={}, Model={}", cid, llmCallId, activeCall.getModel());
+                    call.cancel();
+                }
+            } catch (Exception e) {
+                log.error("强退活动网络连接异常", e);
+            }
+        });
+        context.getActiveLlmCalls().clear();
     }
 
     /**
