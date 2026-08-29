@@ -333,8 +333,8 @@ defineExpose({
   scroll-behavior: auto; 
   /* 禁用浏览器原生滚动锚定，由虚拟列表的高度补偿机制接管，解决滚动抖动与白屏 */
   overflow-anchor: none;
-  /* 移入消息列表的整体边距 */
-  padding: 20px;
+  /* 左右边距由子项容器承担（保证与底部输入框区 24px 对齐），此处仅保留上下边距，避免滚动条宽度叠加导致左右视觉间隙不一致 */
+  padding: 20px 0;
 }
 
 .virtual-list-wrapper {
@@ -346,7 +346,7 @@ defineExpose({
 .virtual-item-container {
   width: 100%;
   box-sizing: border-box;
-  /* 用 padding-bottom 代替 gap，确保消息间距能够被 ResizeObserver 物理测量并纳入高度计算 */
-  padding-bottom: 20px;
+  /* 左右各 24px，与输入框区（.chat-footer padding 24px）严格对齐；用 padding-bottom 代替 gap，确保消息间距能够被 ResizeObserver 物理测量并纳入高度计算 */
+  padding: 0 24px 20px;
 }
 </style>
