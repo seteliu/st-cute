@@ -225,9 +225,11 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                     if (message != null) {
                         JSONObject usage = message.getJSONObject("usage");
                         if (usage != null) {
-                            inputTokens = usage.getLongValue("input_tokens", 0L);
+                            long uncachedInput = usage.getLongValue("input_tokens", 0L);
                             cachedTokens = usage.getLongValue("cache_read_input_tokens", 0L)
                                     + usage.getLongValue("cache_creation_input_tokens", 0L);
+                            // Anthropic 协议将未命中缓存与命中缓存的 Token 拆分返回，此处累加得到上下文总输入 Token
+                            inputTokens = uncachedInput + cachedTokens;
                         }
                     }
                     yield null;
@@ -701,11 +703,16 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
 
     private static CuteUsage parseUsage(JSONObject usageObj) {
         if (usageObj == null) return null;
+        long uncachedInput = usageObj.getLongValue("input_tokens", 0L);
+        long cachedTokens = usageObj.getLongValue("cache_read_input_tokens", 0L)
+                + usageObj.getLongValue("cache_creation_input_tokens", 0L);
+        // Anthropic 协议将未命中缓存与命中缓存的 Token 拆分返回，此处累加得到上下文总输入 Token
+        long totalInputTokens = uncachedInput + cachedTokens;
+
         return CuteUsage.builder()
-                .inputTokens(usageObj.getLongValue("input_tokens", 0L))
+                .inputTokens(totalInputTokens)
                 .outputTokens(usageObj.getLongValue("output_tokens", 0L))
-                .cachedTokens(usageObj.getLongValue("cache_read_input_tokens", 0L)
-                        + usageObj.getLongValue("cache_creation_input_tokens", 0L))
+                .cachedTokens(cachedTokens)
                 .build();
     }
 }

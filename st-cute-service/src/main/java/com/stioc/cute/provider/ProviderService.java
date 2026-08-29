@@ -7,6 +7,7 @@ import com.stioc.cute.platform.contract.Provider;
 import com.stioc.cute.platform.contract.ContractWsBroadcast;
 import com.stioc.cute.llm.CuteChatForAnthropic;
 import com.stioc.cute.llm.CuteChatForOpenAi;
+import com.stioc.cute.llm.CuteChatForOpenAiResponse;
 import com.stioc.cute.llm.OkHttpLoggingInterceptor;
 import com.stioc.cute.platform.util.ConfigMergeUtils;
 import com.stioc.cute.agent.access.LlmLoggerService;
@@ -357,6 +358,11 @@ public class ProviderService {
                 client = new CuteChatForOpenAi(openAiBaseUrl, apiKey, targetModelName, temp, config.getUseFullUrl(), interceptor);
                 break;
 
+            case "OPENAI_RESPONSE":
+                String openAiRespBaseUrl = StringUtils.hasText(config.getBaseUrl()) ? config.getBaseUrl() : "https://api.openai.com/v1";
+                client = new CuteChatForOpenAiResponse(openAiRespBaseUrl, apiKey, targetModelName, temp, config.getUseFullUrl(), interceptor);
+                break;
+
             case "ANTHROPIC":
                 String anthropicBaseUrl = StringUtils.hasText(config.getBaseUrl()) ? config.getBaseUrl() : "https://api.anthropic.com/v1";
                 client = new CuteChatForAnthropic(anthropicBaseUrl, apiKey, targetModelName, temp, config.getUseFullUrl(), interceptor);
@@ -370,7 +376,7 @@ public class ProviderService {
 
     private String getFallbackEnvKey(String protocol) {
         String key = "";
-        if ("OPENAI".equalsIgnoreCase(protocol)) {
+        if ("OPENAI".equalsIgnoreCase(protocol) || "OPENAI_RESPONSE".equalsIgnoreCase(protocol)) {
             key = System.getenv("OPENAI_API_KEY");
             if (!StringUtils.hasText(key)) {
                 key = System.getenv("DEEPSEEK_API_KEY");

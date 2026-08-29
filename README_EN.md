@@ -70,7 +70,7 @@ Between overly simple tools and bloated frameworks, ST-Cute strikes the perfect 
         - Smart Approval
         - Path Sandbox
     - Custom Model Providers
-        - Supports OpenAI Chat and Anthropic Claude protocols
+        - Supports OpenAI Chat, OpenAI Response, and Anthropic Claude protocols
         - Configurable context window size
         - Configurable max tokens per response (`max_tokens`)
         - Configurable reasoning effort
@@ -87,7 +87,6 @@ Between overly simple tools and bloated frameworks, ST-Cute strikes the perfect 
         - Full English and Simplified Chinese support for WebUI
 - **Planned / Roadmap**
     - Web Search tool
-    - OpenAI Response Protocol support
     - Multi-theme color presets
 
 ---

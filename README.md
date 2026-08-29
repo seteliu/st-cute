@@ -55,11 +55,6 @@
         - 文件搜索与读写
         - 命令执行
         - Git WorkTree
-    - 多模态
-        - 图片 / PDF 以原生多模态内容注入大模型（OpenAI、Anthropic 双协议）
-        - Word / Excel / PPT 文档自动提取文本内容
-        - 文本与代码文件内联解析
-        - Agent 可通过工具回读历史会话附件
     - SKILL
     - MCP
     - HOOK
@@ -70,11 +65,15 @@
         - 智能审批
         - 路径沙箱
     - 自定义供应商
-        - 支持 OpenAI Chat、Anthropic Claude 两种基础协议
+        - 支持 OpenAI Chat、OpenAI Response、Anthropic Claude 三种协议
+        - 可配置完整的 url（比如地址非 /chat/completions 的情况）
         - 可配置上下文窗口大小
         - 可配置单次最大 Token 数（max_tokens）
         - 可配置思考级别
         - 可配置温度
+    - 多模态
+        - 图片
+        - PDF / Word / Excel / PPT 自动提取文本内容
     - 体验优化
         - 自定义换行键
         - 消息聚合展示开关
@@ -87,7 +86,6 @@
         - 前端支持中英双语
 - **暂未发布，在计划中**
     - 在线搜索
-    - OpenAI Response 协议
     - 后端响应msg及大模型内置提示词增加多语言支持
     - 多主题配色
 

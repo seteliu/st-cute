@@ -29,14 +29,14 @@ public class Provider {
 
     /**
      * 大模型交互协议类型。
-     * 当前支持：{@code OPENAI}（兼容 OpenAI API 格式，含 DeepSeek 等）、{@code ANTHROPIC}。
+     * 当前支持：{@code OPENAI}（兼容 OpenAI Chat API 格式，含 DeepSeek 等）、{@code OPENAI_RESPONSE}（OpenAI Responses API 格式）、{@code ANTHROPIC}。
      */
     private String protocol;
 
     /**
      * 大模型 API 的基础请求地址。
      * 若为空，{@code ProviderService} 将根据 protocol 自动选用默认地址
-     * （OpenAI: {@code https://api.openai.com/v1}，Anthropic: {@code https://api.anthropic.com/v1}）。
+     * （OpenAI / OpenAI Response: {@code https://api.openai.com/v1}，Anthropic: {@code https://api.anthropic.com/v1}）。
      */
     private String baseUrl;
 

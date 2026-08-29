@@ -24,6 +24,7 @@ export const useProviderStore = defineStore('provider', () => {
 
   const protocolOptions = [
     { label: 'OpenAI Chat', value: 'OPENAI' },
+    { label: 'OpenAI Response', value: 'OPENAI_RESPONSE' },
     { label: 'Anthropic Claude', value: 'ANTHROPIC' }
   ]
 
