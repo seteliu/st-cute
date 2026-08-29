@@ -11,7 +11,8 @@ ST-Cute supports injecting project-specific development rules, coding standards,
 `AGENTS.md` is the core rules document of the agent prompt system. Before each reasoning cycle (ReAct Loop) begins, the backend reads and assembles rules according to file contracts:
 
 * **Global Rules**: `~/.st-cute/AGENTS.md` (General rules applicable to all projects)
-* **Project Rules**: Reads `{projectBasePath}/.agents/AGENTS.md` or `{projectBasePath}/.st-cute/AGENTS.md` (Project-specific rules)
+* **Project Rules**: `{projectBasePath}/.agents/AGENTS.md` or `{projectBasePath}/.st-cute/AGENTS.md` (Project-specific rules; when both directories co-exist they are merged, with `.agents` read first)
+* **Assembly Order**: Global rules are concatenated into the system prompt first, followed by project-level rules
 * **Precedence Order**: Explicit chat prompt > Project-level `AGENTS.md` > Global `AGENTS.md`
 
 ---

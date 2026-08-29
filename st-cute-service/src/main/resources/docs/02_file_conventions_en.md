@@ -1,6 +1,6 @@
 # File Conventions
 
-[简体中文](./02_文件规约.md) | [English](./02_file_conventions.md)
+[简体中文](./02_file_conventions.md) | [English](./02_file_conventions_en.md)
 
 This document describes the configuration file hierarchy and read/write contract specifications managed uniformly by `ContractFile` in the ST-Cute backend.
 

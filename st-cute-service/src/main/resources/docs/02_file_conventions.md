@@ -1,6 +1,6 @@
 # 文件规约
 
-[简体中文](./02_文件规约.md) | [English](./02_file_conventions.md)
+[简体中文](./02_file_conventions.md) | [English](./02_file_conventions_en.md)
 
 本文档说明 ST-Cute 后端通过 `ContractFile` 统一管理的各级配置文件与目录读取/写入契约规约。
 

@@ -62,4 +62,5 @@ When performing code refactoring, strictly follow these steps:
 
 1. **Hot Scanning**: Backend `SkillManagerServiceImpl` automatically scans global and project directories. If duplicate skill names exist, project-level skills override global skills.
 2. **Context Binding**: Each chat session loads its bound project workspace skill list.
-3. **Dynamic Hot Updating**: Content updates in `SKILL.md` are dynamically detected, updating disk files and refreshing memory caches automatically.
+3. **Prompt Online Editing & Hot Updating**: Supports editing skill prompts online at runtime: the YAML Frontmatter metadata is preserved automatically, only the body is overwritten and written to disk, and the memory cache is refreshed synchronously.
+4. **Reload Timing**: Global skills are scanned and cached on first access; project-level skills are loaded at session startup. Direct edits to `SKILL.md` on disk take effect after re-loading (e.g. at the next session startup).

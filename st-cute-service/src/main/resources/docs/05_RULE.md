@@ -11,7 +11,8 @@ ST-Cute 支持通过 `AGENTS.md` 向智能体注入项目专有的开发规则�
 `AGENTS.md` 是智能体 Prompt 系统的核心规则文件。在每一次思考循环（ReAct Loop）开始前，系统会根据文件契约自动读取并拼装规则：
 
 * **全局级规则**：`~/.st-cute/AGENTS.md`（适用于开发者所有项目的通用规范）
-* **项目级规则**：优先读取 `{projectBasePath}/.agents/AGENTS.md` 或 `{projectBasePath}/.st-cute/AGENTS.md`（项目专属规范）
+* **项目级规则**：`{projectBasePath}/.agents/AGENTS.md` 或 `{projectBasePath}/.st-cute/AGENTS.md`（项目专属规范；两个目录共存时会合并读取，`.agents` 在前）
+* **拼装顺序**：系统提示词中先拼接全局规则，再拼接项目级规则
 * **优先级顺序**：当前对话显式指令 > 项目级 `AGENTS.md` > 全局级 `AGENTS.md`
 
 ---

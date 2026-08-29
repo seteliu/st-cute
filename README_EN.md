@@ -55,6 +55,11 @@ Between overly simple tools and bloated frameworks, ST-Cute strikes the perfect 
         - File search, read & write
         - Command execution
         - Git WorkTree
+    - Multimodal
+        - Native image / PDF content injection into LLM context (OpenAI & Anthropic protocols)
+        - Automatic text extraction for Word / Excel / PPT documents
+        - Inline parsing for text and code files
+        - Agents can re-read historical attachments via built-in tools
     - SKILL
     - MCP (Model Context Protocol)
     - HOOK
@@ -82,7 +87,6 @@ Between overly simple tools and bloated frameworks, ST-Cute strikes the perfect 
         - Full English and Simplified Chinese support for WebUI
 - **Planned / Roadmap**
     - Web Search tool
-    - Multimedia / Vision support
     - OpenAI Response Protocol support
     - Multi-theme color presets
 
