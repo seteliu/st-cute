@@ -211,7 +211,9 @@ public class LlmWindowManager {
                 }
 
                 if (!StringUtils.hasText(rawResult)) {
-                    rawResult = "msg miss";
+                    // 工具执行成功但无任何输出属正常场景（如静默成功命令、空目录遍历），
+                    // 占位文案需明确「执行成功且无输出」，避免误导模型判定为平台投递故障（msg miss）而触发无意义重试
+                    rawResult = "{\"status\": \"SUCCESS\", \"message\": \"工具已执行成功，但本次调用无任何输出内容。\"}";
                 }
 
                 String toolCallId = null;

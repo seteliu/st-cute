@@ -42,9 +42,11 @@ public class RunCommandTool implements CuteTool {
     private WorkspacePathResolver workspacePathResolver;
 
     /**
-     * 同一命令输出完全相同的容忍次数：连续第 N 次相同即判定为无效死循环重复
+     * 同一命令输出完全相同的容忍次数：连续第 N 次相同即判定为无效死循环重复。
+     * 阈值放宽至 10 次：正常研发场景存在「命令执行成功但结果回传偶发丢失」时的合理重试验证，
+     * 误杀有效重试的代价高于多放行几次的代价。
      */
-    private static final int REPEAT_BREAK_THRESHOLD = 5;
+    private static final int REPEAT_BREAK_THRESHOLD = 10;
 
     /**
      * 重复判定的时间窗口：超过该时长未重复执行，历史计数视为失效（毫秒）
@@ -105,20 +107,6 @@ public class RunCommandTool implements CuteTool {
             return new JSONObject().fluentPut("error", "参数 'command' 不能为空。").toJSONString();
         }
 
-        // 熔断保险丝：同一命令短时间内输出完全相同的无效重复调用检测，防止模型陷入死循环空耗轮次
-        String rejectReason = checkRepeatBreak(agentContext, command);
-        if (rejectReason != null) {
-            return new JSONObject().fluentPut("error", rejectReason).toJSONString();
-        }
-
-        String customCwd = arguments.get("cwd") != null ? String.valueOf(arguments.get("cwd")) : null;
-        long idleTimeoutMs = arguments.get("idleTimeoutMs") != null
-                ? ((Number) arguments.get("idleTimeoutMs")).longValue() : 15_000L;
-        long maxTimeoutMs = arguments.get("maxTimeoutMs") != null
-                ? ((Number) arguments.get("maxTimeoutMs")).longValue() : 600_000L;
-        boolean runInBackground = arguments.get("runInBackground") != null
-                && Boolean.parseBoolean(String.valueOf(arguments.get("runInBackground")));
-
         // 解析编码参数：auto = 自动探测（默认），其他值按 Java 字符集名强制指定
         String encodingVal = arguments.get("encoding") != null ? String.valueOf(arguments.get("encoding")).trim() : "auto";
         Charset forcedCharset = null;
@@ -133,9 +121,20 @@ public class RunCommandTool implements CuteTool {
         }
         final Charset finalForcedCharset = forcedCharset;
 
+        String customCwd = arguments.get("cwd") != null ? String.valueOf(arguments.get("cwd")) : null;
+        long idleTimeoutMs = arguments.get("idleTimeoutMs") != null
+                ? ((Number) arguments.get("idleTimeoutMs")).longValue() : 15_000L;
+        long maxTimeoutMs = arguments.get("maxTimeoutMs") != null
+                ? ((Number) arguments.get("maxTimeoutMs")).longValue() : 600_000L;
+        boolean runInBackground = arguments.get("runInBackground") != null
+                && Boolean.parseBoolean(String.valueOf(arguments.get("runInBackground")));
+
         log.info("execute_command 尝试运行命令: {}, Cwd: {}, Encoding: {}, IdleTimeout: {}ms, MaxTimeout: {}ms, RunInBackground: {}",
                 command, customCwd, forcedCharset != null ? forcedCharset.name() : "auto", idleTimeoutMs, maxTimeoutMs, runInBackground);
 
+        // 工作目录多级兜底：显式 cwd > worktreePath > 项目路径 > JVM 工作目录。
+        // 解析必须先于熔断预检：重复熔断指纹需绑定实际工作目录，
+        // 同一命令在不同仓库/目录下执行属于不同语义，严禁仅凭命令文本误判为重复
         String os = System.getProperty("os.name").toLowerCase();
         ProcessBuilder pb;
         if (os.contains("win")) {
@@ -143,8 +142,6 @@ public class RunCommandTool implements CuteTool {
         } else {
             pb = new ProcessBuilder("sh", "-c", command);
         }
-
-        // 工作目录多级兜底：显式 cwd > worktreePath > 项目路径 > JVM 工作目录
         File dir = null;
         if (StringUtils.hasText(customCwd)) {
             dir = workspacePathResolver.resolvePath(customCwd, agentContext).toFile();
@@ -157,10 +154,17 @@ public class RunCommandTool implements CuteTool {
         if (dir == null) {
             dir = new File(System.getProperty("user.dir")).getAbsoluteFile();
         }
-
         pb.directory(dir);
         log.info("execute_command 命令子进程 Cwd 物理重定向至路径: {}", dir.getAbsolutePath());
         pb.redirectErrorStream(true);
+
+        // 熔断保险丝：同一命令 + 同一实际工作目录 + 短时间内输出完全相同的无效重复调用检测，
+        // 防止模型陷入死循环空耗轮次
+        String repeatFingerprint = command + " @cwd:" + dir.getAbsolutePath();
+        String rejectReason = checkRepeatBreak(agentContext, repeatFingerprint);
+        if (rejectReason != null) {
+            return new JSONObject().fluentPut("error", rejectReason).toJSONString();
+        }
 
         int exitCode = -1;
         boolean idleTimeout = false;
@@ -407,8 +411,8 @@ public class RunCommandTool implements CuteTool {
             }
         }
 
-        // 命令完成后登记输出摘要，供下一次执行时做无效重复判定
-        recordCommandOutput(agentContext, command, outputResult);
+        // 命令完成后登记输出摘要（指纹与预检一致：命令 + 实际工作目录），供下一次执行时做无效重复判定
+        recordCommandOutput(agentContext, repeatFingerprint, outputResult);
 
         if (idleTimeout) {
             log.warn("execute_command 空闲超时中止: {}", command);
@@ -441,8 +445,9 @@ public class RunCommandTool implements CuteTool {
     /**
      * 同一命令无效重复执行检测（熔断保险丝）。
      * <p>
-     * 判定条件（全部满足才拒绝）：同一命令 + 3 分钟时间窗口内 + 已连续 5 次产生完全相同的输出。
+     * 判定条件（全部满足才拒绝）：同一指纹（命令 + 实际工作目录）+ 3 分钟时间窗口内 + 已连续 10 次产生完全相同的输出。
      * 输出一旦变化立即重置计数。检测到重复时返回拒绝理由文案，判定放行时返回 null。
+     * 指纹纳入工作目录的原因：同一命令在不同仓库/目录下执行语义完全不同，仅凭命令文本判定会造成跨目录误杀。
      * </p>
      */
     private String checkRepeatBreak(AgentContext agentContext, String command) {
