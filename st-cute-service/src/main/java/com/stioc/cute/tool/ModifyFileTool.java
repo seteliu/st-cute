@@ -1,6 +1,7 @@
 package com.stioc.cute.tool;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.stioc.cute.platform.common.NativeCharsetKit;
 import com.stioc.cute.tool.access.CuteTool;
 import com.stioc.cute.tool.access.ToolExecutionContext;
 import com.stioc.cute.tool.access.ToolNames;
@@ -12,8 +13,12 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharacterCodingException;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -102,21 +107,51 @@ public class ModifyFileTool implements CuteTool {
                 return new JSONObject().fluentPut("error", "目标路径是一个目录，无法执行代码修改: " + pathVal).toJSONString();
             }
 
-            // 强制安全门禁：修改前必先读取最新内容以防止幻觉
-            if (agentContext != null && !agentContext.getReadFiles().contains(file.getAbsolutePath())) {
-                log.warn("ModifyFileTool 安全防御触发：未读先改拦截 - {}", file.getAbsolutePath());
-                // 报错附带具体判定状态，帮助模型一次定位原因：
-                // 1) 本会话从未读取过该文件；2) 读取记录被新一轮用户输入/清空/回退操作重置（每轮新输入会清空已读集合，防止基于过时上下文修改）
-                String readFilesCount = agentContext.getReadFiles().isEmpty()
-                        ? "当前会话本轮的已读文件集合为空（可能已被新一轮用户输入或清空/回退操作重置）"
-                        : "当前会话本轮已读取过 " + agentContext.getReadFiles().size() + " 个其他文件，但不包含目标文件";
-                return new JSONObject().fluentPut("error",
-                        "拒绝执行代码修改。门禁判定规则：read_file 成功读取过的文件才允许修改，且每轮新用户消息会清空读取记录（防止基于过时上下文修改）。当前状态："
-                                + readFilesCount + "。请先使用 read_file 读取目标文件 [" + file.getName() + "] 的最新内容，然后重试修改。"
-                ).toJSONString();
+            // 强制安全门禁：修改前校验"读取过的内容仍与磁盘一致"以防止幻觉与过时修改。
+            // 哈希校验三分支：无记录 → 先读再改；有记录但磁盘内容已变 → 拦截重读；哈希一致 → 放行
+            if (agentContext != null) {
+                String absPath = file.getAbsolutePath();
+                String recordedHash = agentContext.getReadFiles().get(absPath);
+                if (recordedHash == null) {
+                    log.warn("ModifyFileTool 安全防御触发：未读先改拦截 - {}", absPath);
+                    return new JSONObject().fluentPut("error",
+                            "拒绝执行代码修改。门禁判定规则：read_file 成功读取过的文件才允许修改。当前状态：本会话尚未读取过该文件。"
+                                    + "请先使用 read_file 读取目标文件 [" + file.getName() + "] 的最新内容，然后重试修改。"
+                    ).toJSONString();
+                }
+                String currentHash = com.stioc.cute.security.access.FileHashSupport.computeFileHash(file);
+                if (!recordedHash.equals(currentHash)) {
+                    log.warn("ModifyFileTool 安全防御触发：文件内容已变化拦截 - {}", absPath);
+                    return new JSONObject().fluentPut("error",
+                            "拒绝执行代码修改。目标文件 [" + file.getName() + "] 的内容自上次 read_file 后已发生变化"
+                                    + "（可能被外部程序、用户或其他工具修改）。请重新 read_file 读取最新内容后再重试修改，"
+                                    + "防止基于过时上下文产生错误替换。"
+                    ).toJSONString();
+                }
             }
 
-            String fileContent = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+            // 编码与文本元数据一致化：修改读与 read_file 共用同一探测函数与同样本策略，保证对同一文件的
+            // 编码/BOM/换行风格判定严格一致，写回时按该编码重新编码，杜绝编码与换行符漂移
+            NativeCharsetKit.FileTextMeta meta = NativeCharsetKit.detectFileMeta(file.toPath());
+            Charset charset = meta.charset();
+            // UTF-16 文件不支持编辑（字节含 \x00 读侧即判 UTF-16 拒绝，编码转换亦非本工具职责），显式拒绝引导人工转码
+            if (meta.utf16Bom()) {
+                return new JSONObject().fluentPut("error",
+                        "该文件为 UTF-16 编码（检测到 UTF-16 BOM 字节序标记），replace_file_content 暂不支持编辑。"
+                                + "请先人工转换为 UTF-8 编码（如 Notepad++ 转码或 iconv 命令）后重试。").toJSONString();
+            }
+            // EOL 保真（注入归一）：模型侧内容统一按 \n 换行传入，注入前按文件主导风格转换，保证注入片段
+            // 与文件原有 EOL 风格一致、原有区域字节不动（内置防重复归一，模型已传 CRLF 不会二次转换）
+            newContent = NativeCharsetKit.normalizeEolToStyle(newContent, meta.eolStyle());
+            String fileContent;
+            try {
+                fileContent = Files.readString(file.toPath(), charset);
+            } catch (CharacterCodingException e) {
+                // 探测编码与真实编码不符（如 8KB 采样未命中深处的非法字节）导致严格解码失败，
+                // 交由统一错误处理器给出可行动提示，让模型显式指定 encoding 引导修正
+                log.warn("ModifyFileTool 修改读解码失败: {}, 探测的编码: {}", pathVal, charset.name());
+                return buildEncodingFailureResult(pathVal, charset);
+            }
 
             // 空文件防御，引导使用 write_to_file
             if (fileContent.isEmpty()) {
@@ -136,7 +171,9 @@ public class ModifyFileTool implements CuteTool {
                 return new JSONObject().fluentPut("error", "参数 'startLine' 和 'endLine' 必须同时指定或同时省略。").toJSONString();
             }
 
-            String updatedContent;
+            // 写回内容显式初始化为 null：所有匹配路径终点必须完成赋值，写回前守卫校验，
+            // 防御任何未预料的控制流路径把未赋值/异常状态带进物理写盘
+            String updatedContent = null;
             int matchStartOffset = -1;
             int matchEndOffset = -1;
 
@@ -171,22 +208,39 @@ public class ModifyFileTool implements CuteTool {
                         ).toJSONString();
                     }
                 } else {
-                    // 2. 模糊匹配子串 Fallback
-                    Pattern pattern = buildWhitespaceInsensitivePattern(oldContent);
-                    Matcher matcher = pattern.matcher(rangeContent);
-                    int matchCount = 0;
-                    while (matcher.find()) {
-                        matchCount++;
-                        if (matchCount == 1) {
-                            subStart = matcher.start();
-                            subEnd = matcher.end();
+                    // 1.5 EOL 变体精确重试：CRLF 文件上模型侧 \n 形态撞不上真实 \r\n（原样精确未命中），
+                    // 先试确定性换行变体（\n → \r\n），唯一命中即用，避免误入空白不敏感模糊匹配产生误替换
+                    String crlfVariant = oldContent.replace("\n", "\r\n");
+                    int vFirst = crlfVariant.equals(oldContent) ? -1 : rangeContent.indexOf(crlfVariant);
+                    if (vFirst != -1) {
+                        int vSecond = rangeContent.indexOf(crlfVariant, vFirst + crlfVariant.length());
+                        if (vSecond == -1) {
+                            subStart = vFirst;
+                            subEnd = vFirst + crlfVariant.length();
+                        } else {
+                            return new JSONObject().fluentPut("error",
+                                    "在指定的行号范围 [" + startLine + ", " + endLine + "] 内找到了多处 'oldContent' 的精确匹配（CRLF 换行变体）。请缩窄行号范围或提供更多上下文以确保唯一性。"
+                            ).toJSONString();
                         }
                     }
+                    if (subStart == -1) {
+                        // 2. 模糊匹配子串 Fallback（EOL 变体精确未命中时才进入）
+                        Pattern pattern = buildWhitespaceInsensitivePattern(oldContent);
+                        Matcher matcher = pattern.matcher(rangeContent);
+                        int matchCount = 0;
+                        while (matcher.find()) {
+                            matchCount++;
+                            if (matchCount == 1) {
+                                subStart = matcher.start();
+                                subEnd = matcher.end();
+                            }
+                        }
 
-                    if (matchCount > 1) {
-                        return new JSONObject().fluentPut("error",
-                                "在指定的行号范围 [" + startLine + ", " + endLine + "] 内找到了多处 (" + matchCount + " 处) 'oldContent' 的空白不敏感匹配。请缩窄行号范围或提供更多上下文以确保唯一性。"
-                        ).toJSONString();
+                        if (matchCount > 1) {
+                            return new JSONObject().fluentPut("error",
+                                    "在指定的行号范围 [" + startLine + ", " + endLine + "] 内找到了多处 (" + matchCount + " 处) 'oldContent' 的空白不敏感匹配。请缩窄行号范围或提供更多上下文以确保唯一性。"
+                            ).toJSONString();
+                        }
                     }
                 }
 
@@ -226,39 +280,85 @@ public class ModifyFileTool implements CuteTool {
                             "在文件 [" + file.getName() + "] 中找到了多处 (" + count + " 处) 'oldContent' 的精确匹配。为了安全起见，我们只能在唯一匹配时才能执行替换。请提供更多的上下文（如前后几行代码）或指定行号范围(startLine, endLine)来确保匹配的唯一性。"
                     ).toJSONString();
                 } else {
-                    // 全局模糊匹配 Fallback
-                    Pattern pattern = buildWhitespaceInsensitivePattern(oldContent);
-                    Matcher matcher = pattern.matcher(fileContent);
-                    int matchCount = 0;
-                    while (matcher.find()) {
-                        matchCount++;
-                        if (matchCount == 1) {
-                            matchStartOffset = matcher.start();
-                            matchEndOffset = matcher.end();
+                    // EOL 变体精确重试：CRLF 文件上模型侧 \n 形态撞不上真实 \r\n（原样精确未命中），
+                    // 先试确定性换行变体（\n → \r\n），唯一命中即用，避免误入空白不敏感模糊匹配产生误替换
+                    String crlfVariant = oldContent.replace("\n", "\r\n");
+                    int vCount = 0;
+                    if (!crlfVariant.equals(oldContent)) {
+                        int vIdx = 0;
+                        while ((vIdx = fileContent.indexOf(crlfVariant, vIdx)) != -1) {
+                            vCount++;
+                            vIdx += crlfVariant.length();
                         }
-                    }
-
-                    if (matchCount == 0) {
-                        // 防参数写反：oldContent 找不到，但 newContent 恰好能在文件中找到，大概率是两参数顺序颠倒了
-                        if (!newContent.isEmpty() && fileContent.contains(newContent)) {
+                        if (vCount == 1) {
+                            matchStartOffset = fileContent.indexOf(crlfVariant);
+                            matchEndOffset = matchStartOffset + crlfVariant.length();
+                            updatedContent = fileContent.substring(0, matchStartOffset) + newContent + fileContent.substring(matchEndOffset);
+                        } else if (vCount > 1) {
                             return new JSONObject().fluentPut("error",
-                                    "疑似参数顺序写反：oldContent（待替换原文）在文件中未找到，而 newContent 反而存在于文件中。请检查：oldContent 应为文件中现有内容，newContent 为替换后的新内容。"
+                                    "在文件 [" + file.getName() + "] 中找到了多处 (" + vCount + " 处) 'oldContent' 的精确匹配（CRLF 换行变体）。为了安全起见，我们只能在唯一匹配时才能执行替换。请提供更多的上下文（如前后几行代码）或指定行号范围(startLine, endLine)来确保匹配的唯一性。"
                             ).toJSONString();
                         }
-                        return new JSONObject().fluentPut("error",
-                                "在文件 [" + file.getName() + "] 中未找到要替换的 'oldContent' 匹配片段（精确匹配与空白不敏感匹配均失败）。请检查空格、缩进或换行是否与文件实际内容一致。"
-                        ).toJSONString();
-                    } else if (matchCount > 1) {
-                        return new JSONObject().fluentPut("error",
-                                "在文件 [" + file.getName() + "] 中未找到 'oldContent' 的精确匹配，且找到了多处 (" + matchCount + " 处) 空白不敏感匹配。为了安全起见，只能在唯一匹配时执行替换。请提供更多的上下文（如前后几行代码）或指定行号范围(startLine, endLine)来确保匹配的唯一性。"
-                        ).toJSONString();
-                    } else {
-                        updatedContent = fileContent.substring(0, matchStartOffset) + newContent + fileContent.substring(matchEndOffset);
+                    }
+                    if (vCount == 0) {
+                        // 全局模糊匹配 Fallback
+                        Pattern pattern = buildWhitespaceInsensitivePattern(oldContent);
+                        Matcher matcher = pattern.matcher(fileContent);
+                        int matchCount = 0;
+                        while (matcher.find()) {
+                            matchCount++;
+                            if (matchCount == 1) {
+                                matchStartOffset = matcher.start();
+                                matchEndOffset = matcher.end();
+                            }
+                        }
+
+                        if (matchCount == 0) {
+                            // 防参数写反：oldContent 找不到，但 newContent 恰好能在文件中找到，大概率是两参数顺序颠倒了
+                            if (!newContent.isEmpty() && fileContent.contains(newContent)) {
+                                return new JSONObject().fluentPut("error",
+                                        "疑似参数顺序写反：oldContent（待替换原文）在文件中未找到，而 newContent 反而存在于文件中。请检查：oldContent 应为文件中现有内容，newContent 为替换后的新内容。"
+                                ).toJSONString();
+                            }
+                            return new JSONObject().fluentPut("error",
+                                    "在文件 [" + file.getName() + "] 中未找到要替换的 'oldContent' 匹配片段（精确匹配与空白不敏感匹配均失败）。请检查空格、缩进或换行是否与文件实际内容一致。"
+                            ).toJSONString();
+                        } else if (matchCount > 1) {
+                            return new JSONObject().fluentPut("error",
+                                    "在文件 [" + file.getName() + "] 中未找到 'oldContent' 的精确匹配，且找到了多处 (" + matchCount + " 处) 空白不敏感匹配。为了安全起见，只能在唯一匹配时执行替换。请提供更多的上下文（如前后几行代码）或指定行号范围(startLine, endLine)来确保匹配的唯一性。"
+                            ).toJSONString();
+                        } else {
+                            updatedContent = fileContent.substring(0, matchStartOffset) + newContent + fileContent.substring(matchEndOffset);
+                        }
                     }
                 }
             }
 
-            Files.writeString(file.toPath(), updatedContent, StandardCharsets.UTF_8);
+            // 写前往返校验门（Round-trip Preservation）：按探测编码对原始字节做
+            // decode→encode 往返等式校验，等式不成立说明该编码非规范（如 GBK 撞上
+            // 非 GBK 字节），无法保证未触碰区域字节级原样还原，拒绝写入防止静默损坏
+            byte[] originalBytes = Files.readAllBytes(file.toPath());
+            String roundTripContent = new String(originalBytes, charset);
+            ByteBuffer reEncodedBuffer = charset.encode(roundTripContent);
+            byte[] reEncoded = Arrays.copyOf(reEncodedBuffer.array(), reEncodedBuffer.limit());
+            if (!Arrays.equals(originalBytes, reEncoded)) {
+                return buildRoundTripFailureResult(pathVal, charset);
+            }
+
+            // 写回守卫：updatedContent 未赋值说明控制流异常（不应发生），显式报错而非写脏数据
+            if (updatedContent == null) {
+                log.error("ModifyFileTool 控制流异常: 匹配流程结束但写回内容未生成, {}", pathVal);
+                return new JSONObject().fluentPut("error",
+                        "内部控制流异常：匹配流程已结束但未能生成替换后的内容，本次修改未执行。请检查参数后重试。").toJSONString();
+            }
+
+            Files.writeString(file.toPath(), updatedContent, charset);
+
+            // 写入成功后同步更新内容哈希：同一文件连续多次编辑时无需重复 read_file（门禁以最新哈希校验）
+            if (agentContext != null) {
+                agentContext.getReadFiles().put(file.getAbsolutePath(),
+                        com.stioc.cute.security.access.FileHashSupport.computeFileHash(file));
+            }
 
             // 提取修改位置前后 3 行的上下文切片提供闭环反馈
             int endPos = matchStartOffset + newContent.length();
@@ -472,5 +572,42 @@ public class ModifyFileTool implements CuteTool {
             }
         }
         return Pattern.compile(regex.toString());
+    }
+
+    /**
+     * 构建编码失败的结构化错误返回（感知 encoding 参数）。
+     * 裸的 CharacterCodingException 文案（如 "Input length = 1"）对使用者毫无可读性，
+     * 此处转译为「已尝试的编码 + 可行动建议」的提示，引导模型显式指定 encoding 修正。
+     *
+     * @param pathVal       模型传入的原始路径参数（用于错误文案回显）
+     * @param attemptedCharset 尝试失败的字符集
+     * @return 结构化错误 JSON
+     */
+    private String buildEncodingFailureResult(String pathVal, Charset attemptedCharset) {
+        return new JSONObject()
+                .fluentPut("error", "EncodingFailure")
+                .fluentPut("message", "文件 [" + pathVal + "] 按 " + attemptedCharset.name()
+                        + " 编码解码失败（存在非法字节序列）。该文件的真实编码大概率不是 " + attemptedCharset.name()
+                        + "，请先用 read_file（encoding=auto 或显式 encoding=utf-8/gbk）确认文件真实编码后再重试修改。")
+                .toJSONString();
+    }
+
+    /**
+     * 构建往返校验失败的结构化错误返回。
+     * 触发即代表该文件无法按当前判定编码做到字节级无损还原（编码非规范或局部损坏），
+     * 拒绝写入并引导模型改用 write_to_file 整文件重写或人工排查，而非静默产生编码损坏。
+     *
+     * @param pathVal       模型传入的原始路径参数（用于错误文案回显）
+     * @param attemptedCharset 尝试使用的字符集
+     * @return 结构化错误 JSON
+     */
+    private String buildRoundTripFailureResult(String pathVal, Charset attemptedCharset) {
+        return new JSONObject()
+                .fluentPut("error", "EncodingRoundTripFailure")
+                .fluentPut("message", "文件 [" + pathVal + "] 无法按 " + attemptedCharset.name()
+                        + " 编码做到字节级无损往返还原（文件可能存在混合编码或非规范字节）。"
+                        + "为防止写回时静默损坏未修改区域，本次修改已被拒绝。"
+                        + "若确需修改，请使用 write_to_file 以明确编码整体重写该文件，或人工检查文件编码后处理。")
+                .toJSONString();
     }
 }

@@ -331,7 +331,9 @@ public class ToolExecutionEngine {
                     }
                 }
 
-                // 6.4 如果是只读性质的文件工具，将其绝对路径存入 context.getReadFiles() 中
+                // 6.4 如果是只读性质的文件工具，将其绝对路径登记进 context.getReadFiles()（仅登记路径占位，无哈希）。
+                // ReadFileTool 执行体内部已记录带内容哈希的完整条目；此处兜底登记防止引擎层与工具层路径解析差异导致的漏记，
+                // 占位值为空哈希（门禁将因失配要求重读，安全方向保守）
                 if (success && ToolNames.READ_FILE.equalsIgnoreCase(name)) {
                     String pathVal = (String) args.get("path");
                     if (StringUtils.hasText(pathVal)) {
@@ -339,7 +341,7 @@ public class ToolExecutionEngine {
                             // 与 ReadFileTool/ModifyFileTool 统一走 WorkspacePathResolver 解析，
                             // 保证相对路径以项目根/worktree 为基准，而非 JVM 工作目录，避免门禁路径基准不一致
                             String absPath = workspacePathResolver.resolvePath(pathVal, context).toAbsolutePath().normalize().toString();
-                            context.getReadFiles().add(absPath);
+                            context.getReadFiles().putIfAbsent(absPath, "");
                         } catch (Exception ex) {
                             // ignore
                         }

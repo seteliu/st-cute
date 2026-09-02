@@ -60,7 +60,9 @@ public class RunCommandTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "【安全通用工具】在指定的运行目录下执行终端命令。注意：严禁使用此工具拼凑执行 'cat'、'find'、'grep' 等专用命令，当需要读取、寻找或全文搜索文件时，必须使用对应的只读工具。";
+        return "【安全通用工具】在指定的运行目录下执行终端命令。注意：严禁使用此工具拼凑执行 'cat'、'find'、'grep' 等专用命令，当需要读取、寻找或全文搜索文件时，必须使用对应的只读工具。"
+                + "验证类命令（编译/构建/测试等需依据退出码判断成败）必须单命令执行，禁止用 &、&&、|| 同行拼接多条命令（返回的 exitCode 仅代表最后一条命令，前序失败会被掩盖）；"
+                + "参数 cwd 即命令的工作目录，无需在命令里写 cd 前缀。";
     }
 
     @Override
@@ -105,6 +107,14 @@ public class RunCommandTool implements CuteTool {
         String command = (String) arguments.get("command");
         if (command == null || command.isBlank()) {
             return new JSONObject().fluentPut("error", "参数 'command' 不能为空。").toJSONString();
+        }
+
+        // 硬拦截：禁止使用 PowerShell cmdlet 写入文件。
+        // Windows 下 Set-Content/Out-File 极易产生编码问题（UTF-8 BOM 导致 javac 报"非法字符 \ufeff"、GBK 中文损坏），
+        // 提示词属软约束无法根治，工具层物理拦截才是真防线（本项目已两次实证翻车）
+        String psWriteReject = checkPowerShellWrite(command);
+        if (psWriteReject != null) {
+            return new JSONObject().fluentPut("error", psWriteReject).toJSONString();
         }
 
         // 解析编码参数：auto = 自动探测（默认），其他值按 Java 字符集名强制指定
@@ -435,11 +445,72 @@ public class RunCommandTool implements CuteTool {
         }
 
         log.info("execute_command 命令执行完成, exitCode: {}", exitCode);
+
+        // 空结果自描述契约：静默成功（exitCode=0 且无输出）时补充说明，避免空 output 落库后被回填层替换为通用占位
+        String finalOutput = outputResult;
+        if (exitCode == 0 && !StringUtils.hasText(finalOutput)) {
+            finalOutput = "[命令执行成功（exitCode=0），但无任何标准输出。属正常现象：如静默成功类命令、或输出被重定向到了文件]";
+        } else if (exitCode != 0) {
+            // 失败场景附加已知误判模式提示（方案3/5）：帮助模型当场纠偏，而非反复盲试
+            finalOutput = appendFailureHints(finalOutput);
+        }
+
         return new JSONObject()
                 .fluentPut("exitCode", exitCode)
                 .fluentPut("timeout", false)
-                .fluentPut("output", outputResult)
+                .fluentPut("output", finalOutput)
                 .toJSONString();
+    }
+
+    /**
+     * 失败场景附加已知误判模式提示段（方案3/5）。
+     * 仅在 exitCode != 0 时调用，提示内容只在真的失败时出现，不占常态上下文
+     */
+    private String appendFailureHints(String output) {
+        String hints = "";
+        String trimmed = output != null ? output.trim() : "";
+
+        // 模式1：管道末端命令无匹配导致退出码非 0 且无/极少输出（Windows findstr 典型场景）。
+        // 前置命令可能并未失败，模型易误判为命令失败而反复重试
+        if (trimmed.isEmpty() || trimmed.length() < 50) {
+            hints += "\n\n[提示] 命令退出码非 0 且几乎无输出。若命令使用了管道（如 mvn xxx | findstr \"关键字\"），"
+                    + "末端过滤命令无匹配时退出码即为 1，这并不代表前置命令失败。"
+                    + "建议：去掉管道过滤直接执行查看完整输出，或将输出重定向到文件（command > out.txt）后用 read_file 查看。";
+        }
+
+        // 模式2：增量编译缓存过期误判（git mv/文件移动后未改动代码却报"找不到符号"）
+        boolean hasSymbolError = trimmed.contains("找不到符号") || trimmed.contains("cannot find symbol");
+        boolean hasPackageError = trimmed.contains("不存在") || trimmed.contains("does not exist");
+        if (hasSymbolError && hasPackageError) {
+            hints += "\n\n[提示] 若此前刚执行过 git mv / 文件移动，或本次未修改任何代码却出现此编译错误，"
+                    + "很可能是增量编译缓存过期。建议先执行 mvn clean compile 重试，再判定为代码问题。";
+        }
+
+        return hints.isEmpty() ? output : output + hints;
+    }
+
+    /**
+     * 硬拦截检测：命令使用 PowerShell cmdlet 写入文件。
+     * 匹配规则（忽略大小写）：命令含 powershell/pwsh 且含 Set-Content/Out-File/Add-Content。
+     * 防呆不防恶：不检测 base64 绕过，目的是拦误用而非对抗。
+     *
+     * @return 拒绝理由文案；不命中返回 null
+     */
+    private String checkPowerShellWrite(String command) {
+        String lower = command.toLowerCase();
+        boolean isPowerShell = lower.contains("powershell") || lower.contains("pwsh ");
+        if (!isPowerShell) {
+            return null;
+        }
+        boolean hasWriteCmdlet = lower.contains("set-content") || lower.contains("out-file") || lower.contains("add-content");
+        if (!hasWriteCmdlet) {
+            return null;
+        }
+        log.warn("[PS写文件拦截] 命令使用 PowerShell cmdlet 写文件，已拒绝: {}", command);
+        return "拒绝执行。检测到使用 PowerShell 写入文件（Set-Content/Out-File/Add-Content）。"
+                + "Windows 下这些 cmdlet 极易产生编码问题（UTF-8 BOM 会导致 javac 报\"非法字符 \\ufeff\"，中文内容可能被写成 GBK 乱码）。"
+                + "请改用 write_to_file（整文件写入）或 replace_file_content（局部替换）完成文件写入；"
+                + "批量替换场景可分多次调用替换工具，或改用命令原生的重定向（>）配合 read_file 读取。";
     }
 
     /**

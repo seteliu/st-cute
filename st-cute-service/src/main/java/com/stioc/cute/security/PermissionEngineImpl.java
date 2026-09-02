@@ -257,13 +257,15 @@ public class PermissionEngineImpl implements PermissionEngine {
             }
         }
 
-        // 层级 4.5: 已读文件白名单强化 (ReadFile 读过的文件，其 Write/Modify 直接 ALLOW 放行)
+        // 层级 4.5: 已读文件白名单强化（read_file 读过且内容哈希仍与磁盘一致的文件，其 Write/Modify 直接 ALLOW 放行）
         if (isWriteOrModify && StringUtils.hasText(pathVal)) {
             try {
                 // 与 ReadFileTool/ModifyFileTool 统一走 WorkspacePathResolver 解析，
                 // 保证相对路径以项目根/worktree 为基准，而非 JVM 工作目录，避免白名单路径基准不一致
                 String absPath = workspacePathResolver.resolvePath(pathVal, context).toAbsolutePath().normalize().toString();
-                if (context.getReadFiles().contains(absPath)) {
+                String recordedHash = context.getReadFiles().get(absPath);
+                if (recordedHash != null && !recordedHash.isEmpty()
+                        && recordedHash.equals(FileHashSupport.computeFileHash(java.nio.file.Path.of(absPath)))) {
                     log.debug("权限裁决: ALLOW [已读文件白名单强化放行] - path={}", pathVal);
                     return "ALLOW";
                 }
