@@ -255,7 +255,7 @@ public class HookEngineServiceImpl implements HookEngineService {
             json.put("inputTokens", agent.getInputTokens());
             json.put("outputTokens", agent.getOutputTokens());
             json.put("cachedTokens", agent.getCachedTokens());
-            json.put("iterationCount", agent.getIterationCount());
+            json.put("loopCount", agent.getLoopCount());
             json.put("parentCid", agent.getParentCid());
             json.put("permissionMode", agent.getPermissionMode() != null ? agent.getPermissionMode().name() : null);
             json.put("providerGroup", agent.getProviderGroup());

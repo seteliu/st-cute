@@ -54,11 +54,11 @@ public class MessageStateMachineServiceImpl implements MessageStateMachineServic
             markPendingInputSuccess(context, input);
         }
 
-        // 2. 如果存在挂起的输入被消费，说明是新一轮交互的开始，在此重置 ReAct 循环计数与读取缓存
+        // 2. 如果存在挂起的输入被消费，说明是新一轮交互的开始，在此重置连续未知工具计数。
+        //    loopCount 的置 1 已上移至用户消息入口（MessageApi send/retry），此处不再处理；
+        //    读取缓存（readFiles 哈希表）不清空：修改门禁为内容哈希校验，文件未变跨轮次依然有效
         if (hasNewInput) {
-            context.setIterationCount(0);
             context.setConsecutiveUnknownTools(0);
-            context.getReadFiles().clear();
         }
 
         MessageEntity lastMsg = messageService.findLastMessage(cid).orElse(null);
@@ -68,10 +68,8 @@ public class MessageStateMachineServiceImpl implements MessageStateMachineServic
 
         Long activeAssistantMsgId;
         if (MessageRole.USER == lastMsg.getRole()) {
-            // 防止再次执行，由于前面已经消费过，这里仍安全通过并再次重置以防万一
-            context.setIterationCount(0);
+            // 防御性重置连续未知工具计数（loopCount 已由消息入口处理，此处不再触碰）
             context.setConsecutiveUnknownTools(0);
-            context.getReadFiles().clear();
             activeAssistantMsgId = createAssistant(context, MessageStatus.RUNNING);
         } else if (MessageRole.ASSISTANT == lastMsg.getRole()) {
             activeAssistantMsgId = lastMsg.getId();
