@@ -1,0 +1,49 @@
+[package]
+name = "st-cute-desktop"
+version = "0.1.6"
+description = "st-cute desktop shell wrapper"
+authors = ["stioc"]
+edition = "2021"
+
+[lib]
+name = "st_cute_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "st-cute"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-opener = "2"
+# 窗口状态持久化：自动记忆并恢复窗口位置、大小、最大化等状态
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.8"
+dirs = "5"
+ureq = { version = "2.10", features = ["json"] }
+chrono = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_System_JobObjects",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+] }
+
+# 开发环境编译调优：第三方依赖不生成庞大 PDB 调试符号，大幅缩减 target 目录体积
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+# 自身业务代码：保留行号与断点调试能力，精简类型符号
+[profile.dev]
+debug = 1
+
+

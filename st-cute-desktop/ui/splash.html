@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>st-cute</title>
+  <style>
+    :root {
+      --bg-color: #101014;
+      --card-bg: #18181c;
+      --text-main: #e3e3e7;
+      --text-sub: #a0a0a5;
+      --border: #2d2d30;
+      --primary: #81b6e5;
+      --error-bg: rgba(208, 48, 80, 0.1);
+      --error-border: rgba(208, 48, 80, 0.35);
+      --error-text: #fca5a5;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 440px;
+      width: 85%;
+      padding: 24px;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.08);
+      border-top-color: var(--text-main);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+
+    .status-text {
+      font-size: 13px;
+      color: var(--text-sub);
+      margin-bottom: 20px;
+      line-height: 1.5;
+      min-height: 20px;
+      transition: color 0.2s ease;
+    }
+
+    .error-box {
+      display: none;
+      background: var(--error-bg);
+      border: 1px solid var(--error-border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      width: 100%;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .error-box.active {
+      display: block;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .error-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--error-text);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .error-detail {
+      font-size: 12px;
+      color: var(--text-sub);
+      word-break: break-all;
+      line-height: 1.5;
+      font-family: Consolas, Monaco, monospace;
+    }
+
+    .actions {
+      display: none;
+      gap: 10px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .actions.active {
+      display: flex;
+      animation: fadeIn 0.25s ease;
+    }
+
+    button {
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--text-main);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: #242429;
+      border-color: #3e3e44;
+    }
+
+    button.primary {
+      background: #2a2a30;
+      border-color: #404048;
+      color: #ffffff;
+    }
+
+    button.primary:hover {
+      background: #35353c;
+      border-color: #555560;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="loading-spinner" id="spinner"></div>
+
+    <h1>st-cute</h1>
+    <div class="status-text" id="status-text">正在检测服务状态…</div>
+
+    <div class="error-box" id="error-box">
+      <div class="error-title">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        启动异常
+      </div>
+      <div class="error-detail" id="error-detail"></div>
+    </div>
+
+    <div class="actions" id="actions">
+      <button class="primary" onclick="retry()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+          <path d="M21 3v5h-5"></path>
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+          <path d="M8 16H3v5"></path>
+        </svg>
+        重试
+      </button>
+      <button onclick="openLogDir()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+        打开日志目录
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const statusText = document.getElementById('status-text');
+    const spinner = document.getElementById('spinner');
+    const errorBox = document.getElementById('error-box');
+    const errorDetail = document.getElementById('error-detail');
+    const actions = document.getElementById('actions');
+
+    function updateStatus(payload) {
+      if (!payload) return;
+      const { phase, detail } = payload;
+
+      if (phase === 'probing') {
+        statusText.innerText = '正在检测服务状态…';
+        spinner.style.display = 'block';
+        errorBox.classList.remove('active');
+        actions.classList.remove('active');
+      } else if (phase === 'starting') {
+        statusText.innerText = '正在启动 st-cute 服务（首次约需数秒）…';
+        spinner.style.display = 'block';
+        errorBox.classList.remove('active');
+        actions.classList.remove('active');
+      } else if (phase === 'ready' || phase === 'adopted') {
+        statusText.innerText = '服务已就绪，正在进入…';
+        spinner.style.display = 'block';
+      } else if (phase === 'error') {
+        statusText.innerText = '服务未能成功启动';
+        spinner.style.display = 'none';
+        errorDetail.innerText = detail || '未知错误，请检查日志。';
+        errorBox.classList.add('active');
+        actions.classList.add('active');
+      }
+    }
+
+    function retry() {
+      updateStatus({ phase: 'probing' });
+      if (window.__TAURI__ && window.__TAURI__.core) {
+        window.__TAURI__.core.invoke('retry_start').catch(console.error);
+      } else {
+        window.location.reload();
+      }
+    }
+
+    function openLogDir() {
+      if (window.__TAURI__ && window.__TAURI__.core) {
+        window.__TAURI__.core.invoke('open_log_dir').catch(console.error);
+      }
+    }
+
+    // 监听 Tauri 派发的后端状态事件
+    if (window.__TAURI__ && window.__TAURI__.event) {
+      window.__TAURI__.event.listen('backend-status', (event) => {
+        updateStatus(event.payload);
+      });
+
+      // 页面就绪后主动向 Rust 请求触发初次状态探测，防止时序竞态丢事件
+      if (window.__TAURI__.core) {
+        window.__TAURI__.core.invoke('app_ready').catch(console.error);
+      }
+    }
+  </script>
+</body>
+</html>

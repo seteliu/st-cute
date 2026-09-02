@@ -51,3 +51,10 @@ pnpm-debug.log*
 # GitHub Sync Local Metadata (开源仓本地同步元数据)
 # ==========================================
 sync-github-info.json
+
+# ==========================================
+# Desktop (Tauri 2 + Rust)
+# ==========================================
+st-cute-desktop/src-tauri/target/
+st-cute-desktop/src-tauri/resources/
+st-cute-desktop/src-tauri/gen/

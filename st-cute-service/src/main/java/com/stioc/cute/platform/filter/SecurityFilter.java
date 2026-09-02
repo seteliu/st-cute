@@ -22,7 +22,9 @@ public class SecurityFilter implements Filter {
     private static final String[] WHITE_LIST = {
         "/api/auth/login",
         "/api/mock/mcp/sse",
-        "/api/mock/mcp/message"
+        "/api/mock/mcp/message",
+        "/api/ping",
+        "/api/shutdown"
     };
 
     private static final String[] INTERCEPT_PREFIXES = {
