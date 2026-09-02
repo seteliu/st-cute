@@ -23,7 +23,7 @@ import com.stioc.cute.platform.contract.ContractProperty;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.stioc.cute.file.FileStorageService;
+import com.stioc.cute.file.access.FileStorageService;
 import com.stioc.cute.repository.MessageMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -324,8 +324,9 @@ public class MessageServiceImpl implements MessageService {
         messageMapper.insert(entity);
     }
 
-    public void updateById(MessageEntity entity) {
-        messageMapper.update(entity);
+    public boolean updateById(MessageEntity entity) {
+        // 返回实际影响行数判定：0 行说明目标消息不存在或无字段变更，供调用方识别静默失败
+        return messageMapper.update(entity) > 0;
     }
 
     public void deleteByCidAndIdGreaterThan(Long cid, Long messageId) {

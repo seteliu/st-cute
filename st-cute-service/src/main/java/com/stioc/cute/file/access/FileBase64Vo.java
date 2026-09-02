@@ -1,4 +1,4 @@
-package com.stioc.cute.file;
+package com.stioc.cute.file.access;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

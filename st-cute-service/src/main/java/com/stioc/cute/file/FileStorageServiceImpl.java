@@ -1,5 +1,8 @@
 package com.stioc.cute.file;
 
+import com.stioc.cute.file.access.FileBase64Vo;
+import com.stioc.cute.file.access.FileStorageService;
+import com.stioc.cute.file.access.FileUploadVo;
 import com.stioc.cute.platform.common.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -8,9 +11,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -20,11 +23,11 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 文件存储与管理核心服务
+ * 文件存储与管理核心服务实现
  */
 @Slf4j
 @Service
-public class FileStorageService {
+public class FileStorageServiceImpl implements FileStorageService {
 
     /**
      * 单文件大小上限：10 MB
@@ -47,22 +50,13 @@ public class FileStorageService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
 
-    /**
-     * 获取用户主目录下的 files 根物理目录
-     */
+    @Override
     public File getFilesRootDir() {
         File userHome = new File(System.getProperty("user.home"));
         return new File(userHome, ".st-cute/files");
     }
 
-    /**
-     * 上传并持久化文件至指定会话的文件目录
-     *
-     * @param cid      会话 ID
-     * @param file     上传的 MultipartFile
-     * @param compress 是否开启图片压缩与等比缩放（默认 true）
-     * @return 存储元数据对象
-     */
+    @Override
     public FileUploadVo uploadFile(Long cid, MultipartFile file, Boolean compress) {
         if (cid == null || cid <= 0) {
             throw new BusinessException("会话 ID 无效");
@@ -79,7 +73,7 @@ public class FileStorageService {
             originalFilename = "unknown_" + System.currentTimeMillis();
         }
 
-        String extension = getFileExtension(originalFilename);
+        String extension = FileStorageService.getFileExtension(originalFilename);
         if (!isExtensionAllowed(extension)) {
             throw new BusinessException("不支持的文件格式: " + extension);
         }
@@ -117,12 +111,25 @@ public class FileStorageService {
         try {
             if (shouldCompress) {
                 byte[] rawBytes = file.getBytes();
-                byte[] processedBytes = ImageProcessUtils.compressAndResize(rawBytes, extension, 2048, 0.75f);
+                // 上传链路压缩按平台统一规格执行（ImageProcessUtils 集中维护），大于原始体积时自动保留原字节
+                byte[] processedBytes = ImageProcessUtils.compressAndResize(rawBytes, extension,
+                        ImageProcessUtils.MAX_DIMENSION, ImageProcessUtils.COMPRESS_QUALITY);
                 if (processedBytes != null && processedBytes.length > 0) {
-                    try (FileOutputStream fos = new FileOutputStream(targetFile)) {
-                        fos.write(processedBytes);
-                    }
                     compressed = processedBytes.length < rawBytes.length;
+                    if (compressed) {
+                        // 压缩转码可能改变真实格式（如无透明 png/bmp 转 JPEG），探测真实格式同步存储后缀，
+                        // 保证落盘文件后缀、实际字节编码、对外的 MIME 三者一致
+                        String realFormat = ImageProcessUtils.detectImageFormat(processedBytes);
+                        if (StringUtils.hasText(realFormat) && !realFormat.equalsIgnoreCase(extension)) {
+                            extension = realFormat;
+                            newFilename = String.format("%s%s", FileStorageService.stripExt(newFilename),
+                                    StringUtils.hasText(extension) ? "." + extension : "");
+                            targetFile = new File(cidDir, newFilename);
+                        }
+                        try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+                            fos.write(processedBytes);
+                        }
+                    }
                 }
             }
 
@@ -131,10 +138,14 @@ public class FileStorageService {
             }
 
             long actualSize = targetFile.length();
-            String relativePath = ".st-cute/files/cid_" + cid + "/" + newFilename;
-            String mimeType = file.getContentType();
-            if (!StringUtils.hasText(mimeType)) {
-                mimeType = detectMimeType(extension);
+            String relativePath = USER_HOME_PREFIX + ".st-cute/files/cid_" + cid + "/" + newFilename;
+            // 后缀随压缩转码同步后，MIME 以落盘文件的真实后缀为准；后缀未变时优先保留原始 Content-Type
+            String mimeType;
+            if (compressed && StringUtils.hasText(file.getContentType())
+                    && file.getContentType().equalsIgnoreCase(FileStorageService.detectMimeType(extension))) {
+                mimeType = file.getContentType();
+            } else {
+                mimeType = FileStorageService.detectMimeType(extension);
             }
 
             log.info("文件上传成功: cid={}, 原始名={}, 存储路径={}, 大小={} bytes, 压缩={}",
@@ -154,9 +165,7 @@ public class FileStorageService {
         }
     }
 
-    /**
-     * 根据相对路径获取安全校验后的物理文件对象
-     */
+    @Override
     public File getSafeFile(String relativePath) {
         if (!StringUtils.hasText(relativePath)) {
             throw new BusinessException("文件路径不能为空");
@@ -187,12 +196,48 @@ public class FileStorageService {
         return targetFile;
     }
 
-    /**
-     * 获取指定图片的等比缩略图字节数据
-     */
+    @Override
+    public File resolveFlexiblePath(String pathVal, String baseDir) {
+        if (!StringUtils.hasText(pathVal)) {
+            return null;
+        }
+        String cleanPath = pathVal.trim().replace('\\', '/');
+
+        // $user/ 前缀：映射到用户主目录
+        if (cleanPath.startsWith(USER_HOME_PREFIX)) {
+            String rest = cleanPath.substring(USER_HOME_PREFIX.length());
+            if (rest.isBlank() || rest.contains("..")) {
+                return null;
+            }
+            Path userHome = Paths.get(System.getProperty("user.home"));
+            Path target = userHome.resolve(rest).toAbsolutePath().normalize();
+            return target.toFile().isFile() ? target.toFile() : null;
+        }
+
+        // Windows 绝对路径（盘符）与 Unix 绝对路径（/ 开头）
+        Path path = Paths.get(cleanPath);
+        if (path.isAbsolute()) {
+            Path target = path.toAbsolutePath().normalize();
+            return target.toFile().isFile() ? target.toFile() : null;
+        }
+
+        // 相对路径：以项目根/worktree 为基准
+        if (!StringUtils.hasText(baseDir)) {
+            return null;
+        }
+        Path target = Paths.get(baseDir).resolve(cleanPath).toAbsolutePath().normalize();
+        return target.toFile().isFile() ? target.toFile() : null;
+    }
+
+    @Override
     public byte[] getThumbnailBytes(String relativePath) {
         File file = getSafeFile(relativePath);
-        String ext = getFileExtension(file.getName());
+        return getThumbnailBytesFlexible(file);
+    }
+
+    @Override
+    public byte[] getThumbnailBytesFlexible(File file) {
+        String ext = FileStorageService.getFileExtension(file.getName());
         byte[] thumbnail = ImageProcessUtils.generateThumbnail(file, ext);
         if (thumbnail == null) {
             try {
@@ -204,16 +249,19 @@ public class FileStorageService {
         return thumbnail;
     }
 
-    /**
-     * 获取指定文件的 Base64 编码数据传输对象
-     */
+    @Override
     public FileBase64Vo getFileBase64Vo(String relativePath) {
         File file = getSafeFile(relativePath);
+        return getFileBase64VoFlexible(file);
+    }
+
+    @Override
+    public FileBase64Vo getFileBase64VoFlexible(File file) {
         try {
             byte[] bytes = Files.readAllBytes(file.toPath());
             String base64Str = Base64.getEncoder().encodeToString(bytes);
-            String ext = getFileExtension(file.getName());
-            String mimeType = detectMimeType(ext);
+            String ext = FileStorageService.getFileExtension(file.getName());
+            String mimeType = FileStorageService.detectMimeType(ext);
 
             return FileBase64Vo.builder()
                     .name(file.getName())
@@ -227,9 +275,7 @@ public class FileStorageService {
         }
     }
 
-    /**
-     * 删除单条相对路径对应的物理文件
-     */
+    @Override
     public boolean deleteFile(String relativePath) {
         if (!StringUtils.hasText(relativePath)) {
             return false;
@@ -247,9 +293,7 @@ public class FileStorageService {
         return false;
     }
 
-    /**
-     * 级联删除会话对应的整个附件文件夹
-     */
+    @Override
     public void deleteConversationFiles(Long cid) {
         if (cid == null || cid <= 0) {
             return;
@@ -269,53 +313,13 @@ public class FileStorageService {
         }
     }
 
-    public static String getFileExtension(String filename) {
-        if (!StringUtils.hasText(filename)) {
-            return "";
-        }
-        int idx = filename.lastIndexOf('.');
-        if (idx >= 0 && idx < filename.length() - 1) {
-            return filename.substring(idx + 1).toLowerCase();
-        }
-        return "";
-    }
-
-    public static boolean isExtensionAllowed(String extension) {
+    /**
+     * 判断扩展名是否在上传白名单内
+     */
+    private static boolean isExtensionAllowed(String extension) {
         if (!StringUtils.hasText(extension)) {
             return true;
         }
         return ALLOWED_EXTENSIONS.contains(extension.toLowerCase());
-    }
-
-    public static String detectMimeType(String extension) {
-        if (!StringUtils.hasText(extension)) {
-            return "application/octet-stream";
-        }
-        return switch (extension.toLowerCase()) {
-            case "jpg", "jpeg" -> "image/jpeg";
-            case "png" -> "image/png";
-            case "webp" -> "image/webp";
-            case "gif" -> "image/gif";
-            case "bmp" -> "image/bmp";
-            case "svg" -> "image/svg+xml";
-            case "pdf" -> "application/pdf";
-            case "txt", "log" -> "text/plain";
-            case "md", "markdown" -> "text/markdown";
-            case "json" -> "application/json";
-            case "csv" -> "text/csv";
-            case "xml" -> "application/xml";
-            case "yaml", "yml" -> "text/yaml";
-            case "html" -> "text/html";
-            case "css" -> "text/css";
-            case "js" -> "application/javascript";
-            case "ts" -> "application/typescript";
-            case "java" -> "text/x-java-source";
-            case "py" -> "text/x-python";
-            case "doc" -> "application/msword";
-            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-            case "xls" -> "application/vnd.ms-excel";
-            case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-            default -> "application/octet-stream";
-        };
     }
 }

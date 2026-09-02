@@ -1,6 +1,8 @@
 package com.stioc.cute.file.decode.impl;
 
+import com.stioc.cute.file.access.DecodeParam;
 import com.stioc.cute.file.decode.FileDecoder;
+import com.stioc.cute.llm.CuteAttachment;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.hslf.usermodel.HSLFSlide;
 import org.apache.poi.hslf.usermodel.HSLFSlideShow;
@@ -28,6 +30,11 @@ import java.util.List;
 @Component
 public class PptFileDecoder implements FileDecoder {
 
+    /**
+     * 单文档最大解析幻灯片页数限制，超出截断并追加提示
+     */
+    private static final int MAX_SLIDES = 100;
+
     @Override
     public boolean supports(String extension, String mimeType) {
         if ("pptx".equalsIgnoreCase(extension) || "ppt".equalsIgnoreCase(extension)) {
@@ -40,17 +47,10 @@ public class PptFileDecoder implements FileDecoder {
     }
 
     @Override
-    public String decode(File file) throws Exception {
-        if (file == null || !file.exists()) {
-            return "";
-        }
-
+    public List<CuteAttachment> decodeToAttachments(File file, DecodeParam ctx) throws Exception {
         String name = file.getName().toLowerCase();
-        if (name.endsWith(".ppt")) {
-            return decodePpt(file);
-        } else {
-            return decodePptx(file);
-        }
+        String content = name.endsWith(".ppt") ? decodePpt(file) : decodePptx(file);
+        return List.of(buildTextAttachment(file, ctx, content));
     }
 
     /**
@@ -68,7 +68,9 @@ public class PptFileDecoder implements FileDecoder {
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("【PPT 演示文稿解析，共 %d 页】\n", slides.size()));
 
-            for (int i = 0; i < slides.size(); i++) {
+            // 页数超出上限时截断，仅解析前 MAX_SLIDES 页
+            int slideLimit = Math.min(slides.size(), MAX_SLIDES);
+            for (int i = 0; i < slideLimit; i++) {
                 XSLFSlide slide = slides.get(i);
                 StringBuilder slideText = new StringBuilder();
 
@@ -102,6 +104,12 @@ public class PptFileDecoder implements FileDecoder {
                 }
             }
 
+            // 未展示的页统一汇总提示
+            if (slides.size() > MAX_SLIDES) {
+                sb.append(String.format("\n[说明: 本演示文稿共 %d 页，超过单文档解析上限 %d 页，仅解析前 %d 页]\n",
+                        slides.size(), MAX_SLIDES, MAX_SLIDES));
+            }
+
             return sb.toString().trim();
         }
     }
@@ -121,7 +129,9 @@ public class PptFileDecoder implements FileDecoder {
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("【PPT 演示文稿解析，共 %d 页】\n", slides.size()));
 
-            for (int i = 0; i < slides.size(); i++) {
+            // 页数超出上限时截断，仅解析前 MAX_SLIDES 页
+            int slideLimit = Math.min(slides.size(), MAX_SLIDES);
+            for (int i = 0; i < slideLimit; i++) {
                 HSLFSlide slide = slides.get(i);
                 StringBuilder slideText = new StringBuilder();
 
@@ -138,6 +148,12 @@ public class PptFileDecoder implements FileDecoder {
                     sb.append(String.format("\n--- [Slide %d: %s] ---\n", i + 1, slide.getTitle() != null ? slide.getTitle() : "幻灯片 " + (i + 1)));
                     sb.append(slideText.toString().trim()).append("\n");
                 }
+            }
+
+            // 未展示的页统一汇总提示
+            if (slides.size() > MAX_SLIDES) {
+                sb.append(String.format("\n[说明: 本演示文稿共 %d 页，超过单文档解析上限 %d 页，仅解析前 %d 页]\n",
+                        slides.size(), MAX_SLIDES, MAX_SLIDES));
             }
 
             return sb.toString().trim();

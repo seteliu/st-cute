@@ -1,8 +1,9 @@
 package com.stioc.cute.entrypoint.http;
 
-import com.stioc.cute.file.FileBase64Vo;
-import com.stioc.cute.file.FileStorageService;
-import com.stioc.cute.file.FileUploadVo;
+import com.stioc.cute.file.access.FileBase64Vo;
+import com.stioc.cute.file.access.FileStorageService;
+import com.stioc.cute.file.access.FileUploadVo;
+import com.stioc.cute.platform.common.BusinessException;
 import com.stioc.cute.platform.common.Result;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
@@ -64,8 +65,15 @@ public class FileApi {
             @RequestParam(value = "download", required = false, defaultValue = "false") Boolean download,
             HttpServletResponse response) {
         try {
+            // 多形态路径解析：$user/ 前缀 / 相对路径（后端工作目录基准）/ 绝对路径
+            File file = fileStorageService.resolveFlexiblePath(path, null);
+            if (file == null) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                return;
+            }
+
             if ("thumbnail".equalsIgnoreCase(mode)) {
-                byte[] thumbBytes = fileStorageService.getThumbnailBytes(path);
+                byte[] thumbBytes = fileStorageService.getThumbnailBytesFlexible(file);
                 response.setContentType("image/jpeg");
                 response.setContentLength(thumbBytes.length);
                 try (OutputStream os = response.getOutputStream()) {
@@ -76,7 +84,6 @@ public class FileApi {
             }
 
             // 默认为 raw 原始文件模式
-            File file = fileStorageService.getSafeFile(path);
             String ext = FileStorageService.getFileExtension(file.getName());
             String mimeType = FileStorageService.detectMimeType(ext);
 
@@ -106,11 +113,15 @@ public class FileApi {
     /**
      * 获取指定文件的 Base64 编码数据
      *
-     * @param path 相对路径
+     * @param path 多形态路径（$user/ 前缀、相对、绝对）
      */
     @GetMapping("/base64")
     public Result<FileBase64Vo> getBase64(@RequestParam("path") String path) {
-        FileBase64Vo vo = fileStorageService.getFileBase64Vo(path);
+        File file = fileStorageService.resolveFlexiblePath(path, null);
+        if (file == null) {
+            throw new BusinessException("未找到指定的文件: " + path);
+        }
+        FileBase64Vo vo = fileStorageService.getFileBase64VoFlexible(file);
         return Result.success(vo);
     }
 }

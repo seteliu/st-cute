@@ -1,6 +1,8 @@
 package com.stioc.cute.file.decode.impl;
 
+import com.stioc.cute.file.access.DecodeParam;
 import com.stioc.cute.file.decode.FileDecoder;
+import com.stioc.cute.llm.CuteAttachment;
 import com.stioc.cute.platform.common.NativeCharsetKit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -9,6 +11,7 @@ import org.springframework.util.StringUtils;
 import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -35,7 +38,14 @@ public class PlainTextFileDecoder implements FileDecoder {
     }
 
     @Override
-    public String decode(File file) throws Exception {
+    public List<CuteAttachment> decodeToAttachments(File file, DecodeParam ctx) throws Exception {
+        return List.of(buildTextAttachment(file, ctx, readTextContent(file)));
+    }
+
+    /**
+     * 读取并按探测字符集解码文本内容
+     */
+    private String readTextContent(File file) throws Exception {
         if (file == null || !file.exists()) {
             return "";
         }

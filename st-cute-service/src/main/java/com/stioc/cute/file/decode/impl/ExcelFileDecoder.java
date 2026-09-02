@@ -1,6 +1,8 @@
 package com.stioc.cute.file.decode.impl;
 
+import com.stioc.cute.file.access.DecodeParam;
 import com.stioc.cute.file.decode.FileDecoder;
+import com.stioc.cute.llm.CuteAttachment;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -24,14 +26,24 @@ import java.util.List;
 public class ExcelFileDecoder implements FileDecoder {
 
     /**
-     * 单个工作表最大导出数据行数限制，防止超大表格撑爆大模型上下文
+     * 单个工作表最大导出数据行数限制，超出截断并追加提示，防止超大表格撑爆大模型上下文
      */
-    private static final int MAX_ROWS_PER_SHEET = 300;
+    private static final int MAX_ROWS_PER_SHEET = 10000;
 
     /**
-     * 单行最大列数限制
+     * 单行最大列数限制，超出截断并追加提示
      */
-    private static final int MAX_COLS_PER_ROW = 50;
+    private static final int MAX_COLS_PER_ROW = 100;
+
+    /**
+     * 最大解析工作表数量限制，超出截断并追加提示
+     */
+    private static final int MAX_SHEETS = 20;
+
+    /**
+     * 单个单元格最大字符数限制，超出截断，防止单元格超大文本撑爆内存与上下文
+     */
+    private static final int MAX_CHARS_PER_CELL = 10000;
 
     @Override
     public boolean supports(String extension, String mimeType) {
@@ -45,7 +57,14 @@ public class ExcelFileDecoder implements FileDecoder {
     }
 
     @Override
-    public String decode(File file) throws Exception {
+    public List<CuteAttachment> decodeToAttachments(File file, DecodeParam ctx) throws Exception {
+        return List.of(buildTextAttachment(file, ctx, decodeWorkbook(file)));
+    }
+
+    /**
+     * 解析工作簿并将各 Sheet 转为 Markdown
+     */
+    private String decodeWorkbook(File file) throws Exception {
         if (file == null || !file.exists()) {
             return "";
         }
@@ -59,7 +78,9 @@ public class ExcelFileDecoder implements FileDecoder {
                 return "";
             }
 
-            for (int s = 0; s < numberOfSheets; s++) {
+            // 工作表数量超出上限时截断，仅解析前 MAX_SHEETS 个
+            int sheetLimit = Math.min(numberOfSheets, MAX_SHEETS);
+            for (int s = 0; s < sheetLimit; s++) {
                 Sheet sheet = workbook.getSheetAt(s);
                 String sheetName = sheet.getSheetName();
                 String sheetMarkdown = renderSheetAsMarkdown(sheet, formatter);
@@ -68,6 +89,12 @@ public class ExcelFileDecoder implements FileDecoder {
                     sb.append(String.format("### 工作表: %s\n\n", sheetName));
                     sb.append(sheetMarkdown).append("\n\n");
                 }
+            }
+
+            // 未展示的工作表统一汇总提示
+            if (numberOfSheets > MAX_SHEETS) {
+                sb.append(String.format("*(工作簿共 %d 个工作表，已截取展示前 %d 个)*\n",
+                        numberOfSheets, MAX_SHEETS));
             }
         }
 
@@ -87,6 +114,8 @@ public class ExcelFileDecoder implements FileDecoder {
         List<List<String>> matrix = new ArrayList<>();
         int maxCols = 0;
         int rowCount = 0;
+        // 记录全表最大列数，用于判断是否发生列截断
+        int totalMaxCols = 0;
 
         for (int r = firstRowNum; r <= lastRowNum && rowCount < MAX_ROWS_PER_SHEET; r++) {
             Row row = sheet.getRow(r);
@@ -99,6 +128,9 @@ public class ExcelFileDecoder implements FileDecoder {
             if (firstCellNum < 0 || lastCellNum < 0) {
                 continue;
             }
+            if (lastCellNum > totalMaxCols) {
+                totalMaxCols = lastCellNum;
+            }
 
             List<String> rowData = new ArrayList<>();
             boolean hasContent = false;
@@ -108,9 +140,20 @@ public class ExcelFileDecoder implements FileDecoder {
                 Cell cell = row.getCell(c);
                 String val = "";
                 if (cell != null) {
-                    val = formatter.formatCellValue(cell);
+                    // 单元格级容错：坏单元格（损坏样式、无缓存公式等）降级为占位符，不拖垮整表解析
+                    try {
+                        val = formatter.formatCellValue(cell);
+                    } catch (Exception cellEx) {
+                        log.debug("读取单元格内容失败，已降级为占位符: sheet={}, 行={}, 列={}, error={}",
+                                sheet.getSheetName(), r, c, cellEx.getMessage());
+                        val = "[单元格读取失败]";
+                    }
                     if (val != null) {
                         val = val.trim().replace("\n", " ").replace("|", "\\|");
+                        // 单格超长截断，防止极端大单元格撑爆内存与上下文
+                        if (val.length() > MAX_CHARS_PER_CELL) {
+                            val = val.substring(0, MAX_CHARS_PER_CELL) + "…(单元格超长已截断)";
+                        }
                     } else {
                         val = "";
                     }
@@ -166,6 +209,10 @@ public class ExcelFileDecoder implements FileDecoder {
         if (lastRowNum - firstRowNum + 1 > MAX_ROWS_PER_SHEET) {
             sb.append(String.format("\n*(当前工作表总共 %d 行，已截取展示前 %d 行)*\n",
                     (lastRowNum - firstRowNum + 1), MAX_ROWS_PER_SHEET));
+        }
+        if (totalMaxCols > MAX_COLS_PER_ROW) {
+            sb.append(String.format("\n*(当前工作表最宽行共 %d 列，已截取展示前 %d 列)*\n",
+                    totalMaxCols, MAX_COLS_PER_ROW));
         }
 
         return sb.toString().trim();
