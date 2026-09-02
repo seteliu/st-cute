@@ -100,7 +100,8 @@ watch(
       nextTick(() => {
         if (contentBoxRef.value) {
           const el = contentBoxRef.value
-          const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 60
+          // 必须完全在底部（距底 10px 以内）才自动跟随，避免用户稍向上翻阅被打断
+          const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 10
           if (isAtBottom) {
             el.scrollTop = el.scrollHeight
           }

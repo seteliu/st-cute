@@ -148,8 +148,17 @@ onMounted(async () => {
   let isFirstWsOpen = true
   wsService.on('OPEN', () => {
     appStore.isConnected = true
-    if (!isFirstWsOpen && conversationStore.activeCid !== null) {
-      conversationStore.selectConversation(conversationStore.activeCid, true)
+    if (!isFirstWsOpen) {
+      // 断线重连后：优先强刷当前会话详情（消息区立即可见可交互，用户最先感知），
+      // 再静默后台全量刷新会话列表（移动端列表通常隐藏，优先级低且不该阻塞详情刷新）。
+      // 离线期间错过的 S2C_CONVERSATION_STATUS 广播会让列表中的 loopRunning 转圈残留旧值，
+      // 后台重拉一次以数据库真值对齐全部会话状态，避免"发送按钮已停转、列表仍在转圈"的分裂观感
+      if (conversationStore.activeCid !== null) {
+        conversationStore.selectConversation(conversationStore.activeCid, true)
+      }
+      conversationStore.loadConversations().catch(e => {
+        console.error('断线重连后会话列表刷新失败:', e)
+      })
     }
     isFirstWsOpen = false
   })
@@ -260,6 +269,21 @@ onMounted(async () => {
       currentSess.waitingSubCids = payload.waitingSubCids
       currentSess.providerGroup = payload.providerGroup
       currentSess.providerModelName = payload.providerModelName
+    }
+  })
+
+  // 监听会话运行状态广播（全局广播、刻意不经过 shouldProcessEvent 过滤）：
+  // 让所有客户端的会话列表都能实时感知任意主会话的 running 状态，驱动转圈监控效果
+  wsService.on('S2C_CONVERSATION_STATUS', (event) => {
+    const payload = event.payload
+    if (!payload || payload.id === undefined || payload.id === null) return
+
+    const target = conversationStore.conversationList.find(s => s.id === Number(payload.id))
+    if (target) {
+      target.loopRunning = payload.loopRunning
+      // 同步刷新名称与最后更新时间，保持列表项展示与后端一致
+      if (payload.title) target.title = payload.title
+      if (payload.updatedAt) target.updatedAt = payload.updatedAt
     }
   })
 

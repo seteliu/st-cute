@@ -146,10 +146,25 @@
                 </div>
                 <template v-else>
                   <div class="conversation-title" :title="sess.title">{{ sess.title }}</div>
-                  <div class="conversation-meta">{{ formatTime(sess.updatedAt) }}</div>
+                  <div class="conversation-meta">
+                    {{ formatTime(sess.updatedAt) }}
+                    <!-- 运行状态监控：running 时显示转圈动效（右缘对齐 ✕ 按钮） -->
+                    <span v-if="sess.loopRunning === 1 && !isBatchMode(proj.id)" class="running-spinner" title="会话运行中">
+                      <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="2" x2="12" y2="6"></line>
+                        <line x1="12" y1="18" x2="12" y2="22"></line>
+                        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+                        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+                        <line x1="2" y1="12" x2="6" y2="12"></line>
+                        <line x1="18" y1="12" x2="22" y2="12"></line>
+                        <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+                        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                      </svg>
+                    </span>
+                  </div>
                   
-                  <!-- 非多选模式下的单独操作按钮 -->
-                  <template v-if="!isBatchMode(proj.id)">
+                  <!-- 非多选模式下的单独操作按钮（容器使按钮在条目下方纵向堆叠） -->
+                  <div v-if="!isBatchMode(proj.id)" class="conversation-item-actions">
                     <!-- 重命名按钮 -->
                     <span
                       class="edit-conversation-btn"
@@ -180,7 +195,7 @@
                       </template>
                       {{ t('sider.deleteConfirmContent') }}
                     </n-popconfirm>
-                  </template>
+                  </div>
                 </template>
               </div>
 
@@ -1493,6 +1508,36 @@ onUnmounted(() => {
 
 .conversation-edit-wrapper {
   padding: 2px 0;
+}
+
+/* 时间行作为转圈的定位基准（行内右缘锚定） */
+.conversation-meta {
+  position: relative;
+}
+
+/* 运行状态转圈：right:-4px 抵消条目 12px 内边距的余量，使右缘与 ✕ 按钮（right:8px）对齐；
+   尺寸 0.8rem 与 ✕ 字号同步缩放；随时间行垂直居中 */
+.running-spinner {
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.8rem;
+  height: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+  display: block;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .conversation-pagination {

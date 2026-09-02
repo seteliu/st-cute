@@ -78,7 +78,8 @@ const handleLogin = () => {
       if ((window as any).$message) {
         ;(window as any).$message.success('登录成功')
       }
-      router.push('/')
+      // replace 替代 push：登录成功后不留历史栈记录，防止后退键回到登录页
+      router.replace('/')
     } catch (err: any) {
       console.error('登录校验失败:', err)
       loading.value = false
@@ -94,7 +95,8 @@ const handleLogin = () => {
   justify-content: center;
   align-items: center;
   width: 100vw;
-  height: 100vh;
+  height: 100vh;  /* 回退：不支持小视口单位的环境 */
+  height: 100svh; /* 移动端小视口：按地址栏展开时的最小可视区域取高，避免登录页底部被截断 */
   background: radial-gradient(circle at center, #1b2838 0%, #0d131a 100%);
   overflow: hidden;
   perspective: 1200px; /* 开启 3D 透视 */

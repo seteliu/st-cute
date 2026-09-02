@@ -38,7 +38,8 @@ html, body, #app {
 }
 
 .app-container {
-  height: 100vh;
+  height: 100vh;  /* 回退：不支持小视口单位的环境 */
+  height: 100svh; /* 移动端小视口：按地址栏展开时的最小可视区域取高，避免地址栏弹出时底部截断出滚动条 */
   display: flex;
   flex-direction: column;
 }

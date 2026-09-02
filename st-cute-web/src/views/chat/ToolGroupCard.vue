@@ -416,6 +416,9 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   font-weight: bold;
   color: #e3e3e7;
   font-size: 0.85rem;
+  /* 工具名是行内主标识，禁止换行且不参与 flex 收缩，宽度不足时由参数提示出省略号 */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tool-args {
@@ -426,6 +429,8 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 250px;
+  /* 允许自身收缩，宽度不足时优先压缩参数提示（出省略号）而非挤压工具名 */
+  min-width: 0;
 }
 
 .tool-status-text {
@@ -433,12 +438,16 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   font-size: 0.75rem;
   font-style: italic;
   margin-left: 8px;
+  /* 状态词（如“加载中”）为短文本，禁止换行 */
+  white-space: nowrap;
 }
 
 .status-label {
   font-size: 0.75rem;
   margin-left: 8px;
   font-weight: bold;
+  /* 状态标签（如“[等待审批]”）为短文本，禁止换行 */
+  white-space: nowrap;
 }
 
 .status-label.waiting-approval {

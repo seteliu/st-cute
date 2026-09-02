@@ -282,7 +282,9 @@ watch(
   (newVal) => {
     if (!scrollerRef.value || newVal.length === 0) return
 
-    const threshold = 120 // 容差像素值
+    // 触底判定阈值：必须完全在底部（距底 10px 以内）才视为处于底部并自动维持贴底，
+    // 避免用户稍向上翻阅历史消息时被流式输出强行拉回底部
+    const threshold = 10 // 容差像素值
     const isAtBottom =
       scrollerRef.value.scrollHeight -
         scrollerRef.value.scrollTop -

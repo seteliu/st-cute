@@ -145,10 +145,11 @@ const hasError = computed(() => errorDetails.value.length > 0)
 // 弹窗与样式自适应控制 (自适应适配 PC 和移动端)
 const modalStyle = computed<CSSProperties>(() => {
   if (isMobile.value) {
+    // 移动端全屏弹层：使用 svh（小视口单位）按地址栏展开时的最小可视区域取高，避免地址栏弹出时底部截断
     return {
       width: '100vw !important',
-      height: '100vh !important',
-      maxHeight: '100vh !important',
+      height: '100svh !important',
+      maxHeight: '100svh !important',
       margin: '0 !important',
       borderRadius: '0 !important'
     }
@@ -162,8 +163,9 @@ const modalStyle = computed<CSSProperties>(() => {
 
 const cardStyle = computed<CSSProperties>(() => {
   if (isMobile.value) {
+    // 同上：svh 小视口单位，保证移动端地址栏展开时卡片完整可见
     return {
-      height: '100vh',
+      height: '100svh',
       display: 'flex',
       flexDirection: 'column',
       borderRadius: '0'
