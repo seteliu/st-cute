@@ -1,7 +1,6 @@
 package com.stioc.cute.agent.access;
 
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONObject;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +33,12 @@ public class LlmLoggerService {
      */
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
+    /**
+     * 单个日志文件的最大体积（20MB），超出后滚动到下一个序号文件。
+     * 软限制：并发写入瞬间可能略微超出，不做精确截断。
+     */
+    private static final long MAX_LOG_FILE_BYTES = 20L * 1024 * 1024;
+
     // ──────────────────────────────────────────────
     // 开关查询
     // ──────────────────────────────────────────────
@@ -49,62 +54,20 @@ public class LlmLoggerService {
     }
 
     // ──────────────────────────────────────────────
-    // 业务层日志
-    // ──────────────────────────────────────────────
-
-    /**
-     * 记录大模型单次交互的输入与输出 Payload 文本日志
-     */
-    public void logInteraction(Long cid, String provider, String model, String systemPrompt,
-                               String userText, String responseText, String reasoningText) {
-        if (!isHttpLogEnabled()) return;
-        try {
-            JSONObject requestJson = new JSONObject();
-            requestJson.put("model", model);
-            requestJson.put("system_prompt", systemPrompt);
-            requestJson.put("messages", buildUserMessage(userText));
-
-            JSONObject responseJson = new JSONObject();
-            responseJson.put("content", responseText);
-            if (reasoningText != null) {
-                responseJson.put("reasoning_content", reasoningText);
-            }
-
-            JSONObject detailJson = new JSONObject();
-            detailJson.put("cid", cid);
-            detailJson.put("provider", provider);
-            detailJson.put("request_payload", JSON.parse(maskSensitives(requestJson.toJSONString())));
-            detailJson.put("response_payload", JSON.parse(responseJson.toJSONString()));
-
-            String uuid = java.util.UUID.randomUUID().toString();
-            String logLine = String.format("【%s】【%s】【response】【%s】\n\n",
-                    LocalDateTime.now().format(DATE_FORMATTER),
-                    uuid,
-                    detailJson.toJSONString());
-
-            writeToTodayLogFile(logLine);
-        } catch (Exception e) {
-            log.error("写入 LLM Payload 调试日志异常: {}", e.getMessage(), e);
-        }
-    }
-
-    // ──────────────────────────────────────────────
     // Raw HTTP 日志（由 OkHttpLoggingInterceptor 调用）
     // ──────────────────────────────────────────────
 
     public void writeRawHttpRequest(String uuid, String url, String method, Map<String, List<String>> headers, String body) {
         if (!isHttpLogEnabled()) return;
         try {
-            JSONObject detailJson = new JSONObject();
-            detailJson.put("url", url);
-            detailJson.put("method", method);
-            detailJson.put("headers", headers);
-            detailJson.put("body", parseBodyOrString(maskSensitives(body)));
-
-            String logLine = String.format("【%s】【%s】【request】【%s】\n\n",
+            // 头部行 + 逐字段行格式，条目之间以空行分隔
+            String logLine = String.format("【%s】【%s】【request】\n【url】: %s\n【method】: %s\n【headers】: %s\n【body】: %s\n\n",
                     LocalDateTime.now().format(DATE_FORMATTER),
                     uuid,
-                    detailJson.toJSONString());
+                    url,
+                    method,
+                    JSON.toJSONString(headers),
+                    maskSensitives(body));
 
             writeToTodayLogFile(logLine);
         } catch (Exception e) {
@@ -115,17 +78,15 @@ public class LlmLoggerService {
     public void writeRawHttpResponse(String uuid, String url, int code, Map<String, List<String>> headers, String body, boolean isStream) {
         if (!isHttpLogEnabled()) return;
         try {
-            JSONObject detailJson = new JSONObject();
-            detailJson.put("url", url);
-            detailJson.put("status_code", code);
-            detailJson.put("is_stream", isStream);
-            detailJson.put("headers", headers);
-            detailJson.put("body", parseBodyOrString(body));
-
-            String logLine = String.format("【%s】【%s】【response】【%s】\n\n",
+            // 头部行 + 逐字段行格式，条目之间以空行分隔
+            String logLine = String.format("【%s】【%s】【response】\n【url】: %s\n【status_code】: %s\n【is_stream】: %s\n【headers】: %s\n【body】: %s\n\n",
                     LocalDateTime.now().format(DATE_FORMATTER),
                     uuid,
-                    detailJson.toJSONString());
+                    url,
+                    code,
+                    isStream,
+                    JSON.toJSONString(headers),
+                    body);
 
             writeToTodayLogFile(logLine);
         } catch (Exception e) {
@@ -140,17 +101,14 @@ public class LlmLoggerService {
     public void writeRawHttpStreamComplete(String uuid, String url, int code, Map<String, List<String>> headers, String completeStream) {
         if (!isHttpLogEnabled()) return;
         try {
-            JSONObject detailJson = new JSONObject();
-            detailJson.put("url", url);
-            detailJson.put("status_code", code);
-            detailJson.put("is_stream", true);
-            detailJson.put("headers", headers);
-            detailJson.put("body", completeStream);
-
-            String logLine = String.format("【%s】【%s】【response】【%s】\n\n",
+            // 头部行 + 逐字段行格式，条目之间以空行分隔
+            String logLine = String.format("【%s】【%s】【response】\n【url】: %s\n【status_code】: %s\n【is_stream】: true\n【headers】: %s\n【body】: %s\n\n",
                     LocalDateTime.now().format(DATE_FORMATTER),
                     uuid,
-                    detailJson.toJSONString());
+                    url,
+                    code,
+                    JSON.toJSONString(headers),
+                    completeStream);
 
             writeToTodayLogFile(logLine);
         } catch (Exception e) {
@@ -161,14 +119,12 @@ public class LlmLoggerService {
     public void writeRawHttpError(String uuid, String url, Throwable t) {
         if (!isHttpLogEnabled()) return;
         try {
-            JSONObject detailJson = new JSONObject();
-            detailJson.put("url", url);
-            detailJson.put("error", t != null ? t.getMessage() : "unknown error");
-
-            String logLine = String.format("【%s】【%s】【response】【%s】\n\n",
+            // 头部行 + 逐字段行格式，条目之间以空行分隔
+            String logLine = String.format("【%s】【%s】【response】\n【url】: %s\n【error】: %s\n\n",
                     LocalDateTime.now().format(DATE_FORMATTER),
                     uuid,
-                    detailJson.toJSONString());
+                    url,
+                    t != null ? t.getMessage() : "unknown error");
 
             writeToTodayLogFile(logLine);
         } catch (Exception e) {
@@ -182,40 +138,45 @@ public class LlmLoggerService {
 
     private void writeToTodayLogFile(String logLine) {
         try {
-            String dateStr = LocalDate.now().toString();
-            File todayLogFile = new File(ContractFile.getGlobalDir(), "logs/" + dateStr + "-http.log");
-            File parent = todayLogFile.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
+            File todayLogFile = resolveTodayLogFile(logLine);
             Files.writeString(todayLogFile.toPath(), logLine, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (Exception e) {
             log.error("追加日志到当天文件异常", e);
         }
     }
 
-    private Object parseBodyOrString(String body) {
-        if (body == null) return "";
-        String trimmed = body.trim();
-        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-            try {
-                return JSON.parse(trimmed);
-            } catch (Exception ignored) {
-            }
+    /**
+     * 解析当前应写入的日志文件：
+     * 当天 base 文件（http_yyyy-MM-dd.log）放不下时，按序号（_2、_3...）向后滚动，
+     * 返回第一个「不存在或加入本条内容后不超 20MB」的文件；跨天后自然从新一天的 base 文件重新开始。
+     */
+    private File resolveTodayLogFile(String logLine) {
+        String dateStr = LocalDate.now().toString();
+        File logDir = new File(ContractFile.getGlobalDir(), "logs");
+        if (!logDir.exists()) {
+            logDir.mkdirs();
         }
-        return body;
+        long nextBytes = logLine.getBytes(StandardCharsets.UTF_8).length;
+
+        File baseFile = new File(logDir, "http_" + dateStr + ".log");
+        if (!baseFile.exists() || baseFile.length() + nextBytes <= MAX_LOG_FILE_BYTES) {
+            return baseFile;
+        }
+
+        // base 文件放不下，从 _2 开始寻找可用的序号文件
+        int seq = 2;
+        while (true) {
+            File seqFile = new File(logDir, "http_" + dateStr + "_" + seq + ".log");
+            if (!seqFile.exists() || seqFile.length() + nextBytes <= MAX_LOG_FILE_BYTES) {
+                return seqFile;
+            }
+            seq++;
+        }
     }
 
     private String maskSensitives(String jsonStr) {
         if (jsonStr == null) return "";
         return jsonStr.replaceAll("\"api_?key\"\\s*:\\s*\"[^\"]+\"", "\"api_key\":\"******\"")
                 .replaceAll("Bearer\\s+[a-zA-Z0-9_\\-\\.]+", "Bearer ******");
-    }
-
-    private JSONObject buildUserMessage(String text) {
-        JSONObject msg = new JSONObject();
-        msg.put("role", "user");
-        msg.put("content", text);
-        return msg;
     }
 }

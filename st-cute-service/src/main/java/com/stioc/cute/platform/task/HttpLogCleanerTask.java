@@ -47,7 +47,7 @@ public class HttpLogCleanerTask {
             return;
         }
 
-        File[] files = logDir.listFiles((dir, name) -> name.endsWith("-http.log"));
+        File[] files = logDir.listFiles((dir, name) -> name.startsWith("http_") && name.endsWith(".log"));
         if (files == null || files.length == 0) {
             return;
         }
@@ -57,11 +57,11 @@ public class HttpLogCleanerTask {
 
         for (File file : files) {
             String name = file.getName();
-            // 文件名前缀格式为 "yyyy-MM-dd-http.log"，长为 15，前缀长为 10
-            if (name.length() < 10) {
+            // 文件名格式为 "http_yyyy-MM-dd.log"，"http_" 前缀长为 5，日期部分长为 10
+            if (name.length() < 15) {
                 continue;
             }
-            String datePart = name.substring(0, 10);
+            String datePart = name.substring(5, 15);
             try {
                 LocalDate fileDate = LocalDate.parse(datePart, DateTimeFormatter.ISO_LOCAL_DATE);
                 if (fileDate.isBefore(thresholdDate)) {

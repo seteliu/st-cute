@@ -33,18 +33,15 @@ import org.springframework.util.StringUtils;
 import com.stioc.cute.agent.event.AgentEventFactory;
 import com.stioc.cute.agent.event.AgentEventType;
 import com.stioc.cute.conversation.access.ConversationEntity;
-import com.stioc.cute.file.FileStorageService;
-import com.stioc.cute.file.ImageProcessUtils;
-import com.stioc.cute.file.decode.FileDecodeService;
+import com.stioc.cute.file.access.FileStorageService;
+import com.stioc.cute.file.access.DecodeParam;
+import com.stioc.cute.file.access.FileDecodeService;
 import com.mybatisflex.core.util.UpdateEntity;
 
 import jakarta.annotation.Resource;
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -160,10 +157,10 @@ public class LlmWindowManager {
                 List<CuteAttachment> cuteAttachments = null;
                 String userContent = dbMsg.getContent() != null ? dbMsg.getContent() : "";
 
-                if (isMultimodal && StringUtils.hasText(dbMsg.getAttachments())) {
+                if (StringUtils.hasText(dbMsg.getAttachments())) {
                     if (dbMsg.getId().equals(lastUserMsgId)) {
-                        // 最后一轮有效用户消息：完整加载多模态 Payload
-                        cuteAttachments = loadAttachments(dbMsg.getAttachments());
+                        // 最后一轮有效用户消息：完整加载附件 Payload（文本提取全模型可用，图片附件仅多模态模型产出）
+                        cuteAttachments = loadAttachments(dbMsg.getAttachments(), context, isMultimodal);
                     } else {
                         // 历史用户消息：生成轻量 Markdown 占位符追加在文本末尾
                         String placeholder = buildAttachmentPlaceholder(dbMsg.getAttachments());
@@ -210,12 +207,6 @@ public class LlmWindowManager {
                     rawResult = "{\"status\": \"WAITING_APPROVAL\", \"message\": \"该工具调用正在等待用户审批，尚未执行。\"}";
                 }
 
-                if (!StringUtils.hasText(rawResult)) {
-                    // 工具执行成功但无任何输出属正常场景（如静默成功命令、空目录遍历），
-                    // 占位文案需明确「执行成功且无输出」，避免误导模型判定为平台投递故障（msg miss）而触发无意义重试
-                    rawResult = "{\"status\": \"SUCCESS\", \"message\": \"工具已执行成功，但本次调用无任何输出内容。\"}";
-                }
-
                 String toolCallId = null;
                 String toolName = null;
                 if (StringUtils.hasText(dbMsg.getToolCalls())) {
@@ -228,9 +219,18 @@ public class LlmWindowManager {
                     }
                 }
 
+                if (!StringUtils.hasText(rawResult)) {
+                    // 空结果占位必须状态感知：正常流转中主工具已在工具侧实现空结果自描述，
+                    // 能落到此兜底的除命令工具静默成功外，主要是 FAILED 错误详情丢失与中断遗留的孤儿行。
+                    // 占位忠于落库状态（含 null 异常态），绝不把非 SUCCESS 谎报为「成功但无输出」，
+                    // 防止模型基于缺失数据继续推理（msg miss 事件的同性质教训）
+                    rawResult = buildEmptyToolResultPlaceholder(dbMsg.getStatus(), toolName);
+                }
+
                 List<CuteAttachment> cuteAttachments = null;
-                if (isMultimodal && StringUtils.hasText(dbMsg.getAttachments())) {
-                    cuteAttachments = loadAttachments(dbMsg.getAttachments());
+                if (StringUtils.hasText(dbMsg.getAttachments())) {
+                    // 文本附件全模型可消费（协议层以文本块渲染），图片附件仅多模态模型产出
+                    cuteAttachments = loadAttachments(dbMsg.getAttachments(), context, isMultimodal);
                 }
 
                 history.add(CuteMessage.builder()
@@ -260,6 +260,43 @@ public class LlmWindowManager {
         }
 
         return history;
+    }
+
+    /**
+     * 构建状态感知的空结果占位文案。
+     * 原则：占位必须忠于落库状态，宁可报「失败/中断」引导模型重试，
+     * 也绝不把非 SUCCESS 的空结果谎报为「成功但无输出」（会诱导模型基于缺失数据继续推理）。
+     * 谎报失败的代价是模型重试一次；谎报成功的代价是幻觉式继续干活，后者远贵于前者。
+     *
+     * @param status   落库的原始消息状态（可能为 null，null 视为数据异常）
+     * @param toolName 工具名（用于文案回显，缺失时以 unknown 兜底）
+     * @return 状态感知的占位 JSON 文案
+     */
+    private String buildEmptyToolResultPlaceholder(MessageStatus status, String toolName) {
+        String name = StringUtils.hasText(toolName) ? toolName : "unknown";
+        if (status == null) {
+            return String.format(
+                    "{\"status\": \"UNKNOWN\", \"error\": \"工具 %s 的结果与状态均缺失，请勿采信本条记录。\"}", name);
+        }
+        return switch (status) {
+            // 真实成功但无输出（静默成功命令、空目录遍历等），保留原有语义与文案不动
+            case SUCCESS -> String.format(
+                    "{\"status\": \"SUCCESS\", \"message\": \"工具 %s 已执行成功，但本次调用无任何输出内容。\"}", name);
+            // 失败但错误详情丢失：明确失败语义 + 可行动的重试指引
+            case FAILED -> String.format(
+                    "{\"status\": \"FAILED\", \"error\": \"工具 %s 执行失败，但错误详情未能保留。"
+                            + "如后续步骤依赖该结果，请重新调用该工具获取。\"}", name);
+            // 卡在中间态（服务中断/重启遗留的孤儿行）：结果从未产生，显式声明不可作为成功依据
+            case PENDING, RUNNING -> {
+                log.warn("渲染到停留在中间态的空结果 TOOL 消息（疑似服务中断遗留孤儿行）: toolName={}, status={}", name, status);
+                yield String.format(
+                        "{\"status\": \"INTERRUPTED\", \"error\": \"工具 %s 的执行记录停留在待执行/执行中状态，"
+                                + "疑似服务中断导致结果丢失，本条记录不可作为成功依据。如需该结果请重新调用工具。\"}", name);
+            }
+            // 兜底：WAITING_APPROVAL/REJECTED/CANCELED 已在上方分支显式处理，理论到不了这里
+            default -> String.format(
+                    "{\"status\": \"UNKNOWN\", \"error\": \"工具 %s 的结果与状态均缺失，请勿采信本条记录。\"}", name);
+        };
     }
 
     /**
@@ -605,13 +642,19 @@ public class LlmWindowManager {
     }
 
     /**
-     * 解析并加载消息关联的多模态附件物理数据
+     * 解析并加载消息关联的多模态附件物理数据。
+     * 支持多形态路径（$user/ 用户目录、项目相对、绝对路径），统一交由 FileDecodeService 解码，
+     * 单个附件文件可衍生多个附件（如：文档文本块 + 内嵌图片截图/提取图）
      */
-    private List<CuteAttachment> loadAttachments(String attachmentsJson) {
+    private List<CuteAttachment> loadAttachments(String attachmentsJson, AgentContext context, boolean isMultimodal) {
         List<CuteAttachment> list = new ArrayList<>();
         if (!StringUtils.hasText(attachmentsJson)) {
             return list;
         }
+
+        boolean allowImage = isMultimodal;
+        String baseDir = getProjectBasePath(context);
+
         try {
             JSONArray arr = JSON.parseArray(attachmentsJson.trim());
             if (arr == null || arr.isEmpty()) {
@@ -625,36 +668,42 @@ public class LlmWindowManager {
                 String path = obj.getString("path");
                 String name = obj.getString("name");
                 String mimeType = obj.getString("mimeType");
-                Long size = obj.getLong("size");
                 if (!StringUtils.hasText(path)) {
                     continue;
                 }
                 try {
-                    File file = fileStorageService.getSafeFile(path);
+                    // 多形态路径解析：$user/ 前缀 / 项目相对路径 / 绝对路径
+                    File file = fileStorageService.resolveFlexiblePath(path, baseDir);
+                    if (file == null) {
+                        // 文件已被删除或路径非法：不静默跳过，生成占位附件让模型明确感知该附件当前不可用。
+                        // 措辞必须带上时间语义：消息落库当时附件可能是加载成功的（如临时文件事后被清理），
+                        // 若只说「无法加载内容」会与消息正文中「已成功注入」的记录自相矛盾，误导模型推翻有效结论
+                        log.warn("附件文件不存在或路径非法，生成占位提示: path={}", path);
+                        String displayName = StringUtils.hasText(name) ? name : path;
+                        list.add(CuteAttachment.builder()
+                                .name(displayName)
+                                .path(path)
+                                .mimeType(mimeType)
+                                .isImage(false)
+                                .textContent(String.format(
+                                        "[📎 附件 %s 当前不可用：原文件已不存在或路径非法（可能已被清理/删除）。"
+                                                + "本消息正文中当时已成功加载的内容仍然有效，请勿仅凭附件缺失推翻历史结论；"
+                                                + "如确需附件内容，请重新获取文件或让用户再次提供。]", displayName))
+                                .build());
+                        continue;
+                    }
                     String ext = FileStorageService.getFileExtension(file.getName());
                     if (!StringUtils.hasText(mimeType)) {
                         mimeType = FileStorageService.detectMimeType(ext);
                     }
-                    boolean isImg = ImageProcessUtils.isImage(ext, mimeType);
-                    String base64Data = null;
-                    String textContent = null;
 
-                    if (isImg) {
-                        byte[] bytes = Files.readAllBytes(file.toPath());
-                        base64Data = Base64.getEncoder().encodeToString(bytes);
-                    } else {
-                        textContent = fileDecodeService.decode(file, ext, mimeType, FileDecodeService.DEFAULT_MAX_EXTRACT_CHARS);
-                    }
-
-                    list.add(CuteAttachment.builder()
-                            .name(name != null ? name : file.getName())
-                            .path(path)
-                            .mimeType(mimeType)
-                            .size(size != null ? size : file.length())
-                            .isImage(isImg)
-                            .base64Data(base64Data)
-                            .textContent(textContent)
-                            .build());
+                    // 统一交由解码服务处理：文本附件 + 图片衍生附件（allowImage 跟随多模态能力）
+                    DecodeParam decodeParam = DecodeParam.builder()
+                            .allowImage(allowImage)
+                            .maxChars(FileDecodeService.DEFAULT_MAX_EXTRACT_CHARS)
+                            .sourceName(name != null ? name : file.getName())
+                            .build();
+                    list.addAll(fileDecodeService.decodeToAttachments(file, ext, mimeType, decodeParam));
                 } catch (Exception e) {
                     log.warn("加载消息附件数据异常: path={}, error={}", path, e.getMessage());
                 }

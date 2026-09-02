@@ -28,6 +28,8 @@ mybatis-flex:
 
 # 日志配置
 logging:
+  pattern:
+    dateformat: "yyyy-MM-dd HH:mm:ss"
   level:
     root: INFO
     com.stioc.cute: INFO
