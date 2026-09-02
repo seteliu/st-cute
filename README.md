@@ -8,10 +8,10 @@
   <a href="./README.md">简体中文</a> | <a href="./README_EN.md">English</a>
 </p>
 
-**ST-Cute** 是一个前后端分离、天然支持多终端使用的 AI Coding Agent & Harness。
+**ST-Cute** 是一个前后端分离，同时提供桌面端与网页端的 AI Coding Agent & Harness。
 基于事件的ReAct Loop，支持RULE、SKILL、MCP、HOOK，兼容主流 .agents 目录配置。
-对于大模型的http请求和agent的工具调用，可观测，好驾驭。
-在简陋与臃肿之间，它是一个刚刚好的轻量级选手。
+可观测完整的http请求、工具调用过程。
+在简陋与臃肿之间，它是一个刚刚好的轻量级选手，好驾驭。
 
 [![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-green.svg)](https://spring.io/projects/spring-boot)
@@ -30,8 +30,8 @@
 
 ## 🎯 适用的用户
 * 💡 **想了解 Coding Agent 原理**：代码结构简洁，麻雀虽小五脏俱全，有设计但不过度设计，是绝佳的 Java 编写 Agent 范例。
-* 🔍 **追求高掌控力与完整的可观测性**：清晰监测工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志。
-* 📱 **想部署跨终端 Agent**：B/S 架构，WebUI 响应式适配，PC 端与移动端同源，“一处部署，到处可用”。
+* 🔍 **追求高掌控力与完整的可观测性**：清晰监测思考过程、工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志。
+* 📱 **想部署跨终端 Agent**：B/S 架构，WebUI 响应式适配，PC 端与移动端同源，“一处部署，多处连接”。
 * 🛡️ **安全纯粹**：纯绿色、无后门、支持路径沙箱。
 
 ---
@@ -44,6 +44,7 @@
 | **持久层** | SQLite 3 + MyBatis-Flex | 默认开启 WAL 模式，无需安装繁重数据库 |
 | **网络与通信** | OkHttp + WebSocket | REST API + 实时双向通信，完整 HTTP 探针日志 |
 | **前端** (`st-cute-web`) | Vue 3 + Vite 8 + TypeScript 6 | Naive UI 基础库，pnpm workspace 管理 |
+| **桌面壳** (`st-cute-desktop`) | Rust + Tauri | 原生窗体外壳，双击即用，自动托管后端生命周期 |
 
 ---
 
@@ -73,7 +74,7 @@
         - 可配置温度
     - 多模态
         - 图片
-        - PDF / Word / Excel / PPT 自动提取文本内容
+        - 内置工具原生支持 PDF / Word / Excel / PPT
     - 体验优化
         - 自定义换行键
         - 消息聚合展示开关
@@ -81,7 +82,8 @@
         - 大模型完整http日志开关
         - 安全访问码
     - 多终端
-        - 支持移动端
+        - 桌面客户端（Rust 桌面壳 + 内置 JRE，开箱即用）
+        - 网页端响应式适配，支持移动端
     - 多语言
         - 前端支持中英双语
 - **暂未发布，在计划中**
@@ -99,15 +101,23 @@
 
 ### 📦 预编译安装包直接运行（推荐）
 
-您可以直接在 GitHub 的 **[Releases](releases)** 页面下载对应系统的压缩包开箱即用：
+您可以直接在 GitHub 的 **[Releases](releases)** 页面下载对应系统的压缩包开箱即用。
 
-| 平台 / 包名 | 包含内容 | 启动方式 |
-| :--- | :--- | :--- |
-| **`st-cute-win-x64-x.x.x.zip`** | 内置裁剪 JRE + `st-cute.cmd` | 解压后双击 **`st-cute.cmd`** |
-| **`st-cute-linux-x64-x.x.x.tar.gz`** | 内置裁剪 JRE + `st-cute.sh` | 解压后在终端运行 **`./st-cute.sh`** |
-| **`st-cute-mac-arm64-x.x.x.tar.gz`** | 内置裁剪 JRE (Apple Silicon，M系列芯片) | 解压后双击 **`st-cute.command`**（或终端运行 `./st-cute.sh`） |
-| **`st-cute-mac-x64-x.x.x.tar.gz`** | 内置裁剪 JRE (Intel 芯片 Mac) | 解压后双击 **`st-cute.command`**（或终端运行 `./st-cute.sh`） |
-| **`st-cute-base-x.x.x.zip`** | 仅纯 JAR 包（无需内置 JRE） | 自备 Java 25+，运行 **`java -jar app.jar`** |
+| 平台 / 包名                                 | 包含内容 | 启动方式                                                      |
+|:--------------------------------------------| :--- |:--------------------------------------------------------------|
+| **`st-cute-desktop-win-x64-x.x.x.zip`**     | `st-cute.exe` 桌面壳 + `resources/`（内含 `app.jar` + 裁剪 JRE） | 解压后双击 **`st-cute.exe`**                                  |
+| **`st-cute-bundle-win-x64-x.x.x.zip`**      | `app.jar` + 裁剪 JRE + `st-cute.cmd` 控制台脚本 | 解压后双击 **`st-cute.cmd`**                                  |
+| **`st-cute-bundle-linux-x64-x.x.x.tar.gz`** | `app.jar` + 裁剪 JRE + `st-cute.sh` | 解压后在终端运行 **`./st-cute.sh`**                           |
+| **`st-cute-bundle-mac-arm64-x.x.x.tar.gz`** | `app.jar` + 裁剪 JRE (Apple Silicon，M系列芯片) + `st-cute.sh` / `st-cute.command` | 解压后双击 **`st-cute.command`**（或终端运行 `./st-cute.sh`） |
+| **`st-cute-bundle-mac-x64-x.x.x.tar.gz`**   | `app.jar` + 裁剪 JRE (Intel 芯片) + `st-cute.sh` / `st-cute.command` | 解压后双击 **`st-cute.command`**（或终端运行 `./st-cute.sh`） |
+| **`st-cute-base-x.x.x.zip`**                | 仅 `app.jar`（无内置 JRE 与启动脚本） | 自备 Java 25+，运行 **`java -jar app.jar`**                   |
+
+#### 🧩 它是如何运行的？
+
+ST-Cute 的核心是一个 **Java 后端服务**，而 Java 程序的运行依赖 **JRE**（Java 运行环境）。
+- base 包不带 jre，只包含 jar包（适合已有 Java 环境的同学）
+- bundle 包自带 jre，一键终端运行、通过网页访问
+- desktop 包自带桌面程序壳，一键运行并可直接使用，也可通过网页访问
 
 > [!TIP]
 > **Mac 首次双击提示“Apple无法验证 / 已阻止”处理办法**（仅需设置一次）：
@@ -116,8 +126,7 @@
 > 3. 页面向下滑动到 **“安全性”** 区域，点击 **【仍要打开】 (Open Anyway)** 并输入锁屏密码；
 > 4. 完成后，以后直接双击 **`st-cute.command`** 即可流畅运行！
 
-#### 🌐 默认访问地址
-服务启动成功后，打开浏览器访问：
+#### 🌐 网页访问地址
 👉 **`http://localhost:9661`**
 
 ---
@@ -157,6 +166,13 @@ pnpm dev
 ```
 * 开发调试模式下前端服务运行在 `http://localhost:9662`。
 
+#### 桌面客户端壳 (`st-cute-desktop`)（非必须）
+
+日常开发只需启动前后端服务，浏览器访问即可；仅在需要开发或调试 Rust 桌面壳本身时才需要关注此模块：
+* **技术栈**：Rust + Tauri 2，负责原生窗体外壳与后端生命周期托管
+* **环境要求**：Rust 工具链（`cargo`，Windows 下为 MSVC target）
+* **运行依赖**：壳会加载后端产物（`app.jar` + JRE），本地调试时需先将其置于 `st-cute-desktop/src-tauri/resources` 目录
+
 ---
 
 ## 📖 详细文档导览
@@ -174,9 +190,9 @@ pnpm dev
 
 ## 为什么写这个项目？
 最初是为了在 AI 浪潮中亲自感受“Coding Agent 是怎么从 0 到 1 做出来的”，所以亲手写一遍。
-与此同时，其他agent或多或少有些不满足的点：
-- 比如我想清晰地监测工具调用和完整的http日志。
-- 比如，我想在家里部署后，出去后手机进行连接，在地铁上也想Vibe Coding一下。
+与此同时，其他 Agent 或多或少有些不满足的点：
+- 可观测：比如我想清晰地监测工具调用和完整的http日志。
+- 多终端：比如，我想在家里部署后，出去后手机进行连接，在地铁上也想Vibe Coding一下。
 
 然后就发现，我可以更进一步，它不只是玩具，已经是实用品。
 
