@@ -120,7 +120,7 @@ HOOK 机制提供了对智能体执行生命周期的切面拦截能力。通过
 | **`inputTokens`** | Long | 累计输入 Token 数 |
 | **`outputTokens`** | Long | 累计输出 Token 数 |
 | **`cachedTokens`** | Long | 累计缓存命中 Token 数 |
-| **`iterationCount`** | Integer | 当前 ReAct 迭代轮数 |
+| **`loopCount`** | Integer | 当前循环轮次（第几轮），用户发消息置 1，每轮工具完成后由合法触发者推进 |
 | **`parentCid`** | Long | 父会话 ID（SubAgent 场景下非空） |
 | **`permissionMode`** | String | 当前权限模式（如 `READ_ONLY` / `SMART_APPROVAL`） |
 | **`providerGroup`** | String | 当前使用的模型供应商分组 |

@@ -8,6 +8,7 @@ import com.stioc.cute.skill.access.Skill;
 import com.stioc.cute.hook.access.HookRule;
 import com.stioc.cute.mcp.access.McpClientInstance;
 import com.stioc.cute.platform.common.CommonThread;
+import com.stioc.cute.platform.contract.ContractLock;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.Getter;
@@ -17,13 +18,13 @@ import org.slf4j.LoggerFactory;
 
 import okhttp3.Call;
 import java.util.Collection;
-import java.util.Comparator;
-import java.util.Set;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
 
 /**
  * 维护每个 Agent 运行实例的实时对话会话控制状态与计量信息
@@ -90,10 +91,12 @@ public class AgentContext {
     private volatile long cachedTokens = 0;
 
     /**
-     * 当前正在执行的 Loop 轮数。使用 AtomicInteger 保证自增原子性。
+     * 当前会话循环轮次（第几轮），同时充当循环触发的 CAS 令牌。
+     * 用户发消息时置 1；每轮工具全部完成后由唯一合法触发者在 cid 锁内
+     * compare(observed==current) + set(current+1) 消费并拉起下一轮循环。
      */
     @Getter(AccessLevel.NONE)
-    private final AtomicInteger iterationCount = new AtomicInteger(0);
+    private final AtomicInteger loopCount = new AtomicInteger(0);
 
     /**
      * 父会话 ID，如不为空，说明当前会话是由主智能体委派的 SubAgent 运行周期
@@ -167,9 +170,11 @@ public class AgentContext {
     private volatile String worktreeBranch = null;
 
     /**
-     * 当前 Loop 生命周期内成功读取过的文件绝对路径集合（双重强化门禁）
+     * 当前会话生命周期内成功读取过的文件内容指纹集合（绝对路径 → 内容哈希，双重强化门禁）。
+     * 修改类工具执行前校验哈希是否与磁盘当前内容一致：一致放行（防幻觉），不一致拦截并要求重读（防过时修改）。
+     * 相比旧的"每轮用户消息清空"策略，文件未变化时无需重复读取，消除长会话摩擦
      */
-    private final Set<String> readFiles = ConcurrentHashMap.newKeySet();
+    private final Map<String, String> readFiles = new ConcurrentHashMap<>();
 
     /**
      * 当前会话近期的命令重复执行追踪表 (命令指纹 -> 追踪器)。
@@ -190,39 +195,40 @@ public class AgentContext {
     private final List<AgentEventListener> listeners = new CopyOnWriteArrayList<>();
 
     /**
-     * 注册事件监听器
+     * 注册事件监听器。
+     * 按 ListenerTier 升序插入（DIRECT → CACHE → NOTIFY），保证监听器链
+     * 「先写盘落库 → 再同步内存缓存 → 最后异步推送前端」的固定执行顺序，
+     * 注册时一次排好，publishEvent 直接遍历，无需每次事件重复排序。
      */
     public void registerListener(AgentEventListener listener) {
-        if (listener != null) {
-            listeners.add(listener);
+        if (listener == null) {
+            return;
         }
+        int order = listener.getTier().getOrder();
+        int insertIdx = 0;
+        while (insertIdx < listeners.size()
+                && listeners.get(insertIdx).getTier().getOrder() <= order) {
+            insertIdx++;
+        }
+        listeners.add(insertIdx, listener);
     }
 
     /**
-     * 获取当前的迭代轮数。
+     * 获取当前的循环轮次（第几轮）。
      *
-     * @return 当前已迭代的次数
+     * @return 当前循环轮次
      */
-    public int getIterationCount() {
-        return iterationCount.get();
+    public int getLoopCount() {
+        return loopCount.get();
     }
 
     /**
-     * 设置当前的迭代轮数。
+     * 设置当前的循环轮次。
      *
-     * @param value 新的迭代次数值
+     * @param value 新的循环轮次值
      */
-    public void setIterationCount(int value) {
-        iterationCount.set(value);
-    }
-
-    /**
-     * 原子自增当前的迭代轮数，并返回新值。
-     *
-     * @return 自增后新的迭代轮数值
-     */
-    public int incrementAndGetIterationCount() {
-        return iterationCount.incrementAndGet();
+    public void setLoopCount(int value) {
+        loopCount.set(value);
     }
 
     /**
@@ -273,34 +279,49 @@ public class AgentContext {
             event.setTimestamp(System.currentTimeMillis());
         }
 
-        // 根据 ListenerTier 对监听器进行排序后链式同步/异步调用
-        List<AgentEventListener> sorted = this.listeners.stream()
-                .sorted(Comparator.comparingInt(l -> l.getTier().getOrder()))
-                .toList();
-
-        for (AgentEventListener listener : sorted) {
-            if (listener.getTier() == ListenerTier.DIRECT || listener.getTier() == ListenerTier.CACHE) {
-                // 第一、二层：同步执行，遇到 RuntimeException 抛出熔断
-                try {
-                    listener.onEvent(event);
-                } catch (RuntimeException e) {
-                    log.error("同步监听器处理事件发生异常，触发熔断阻断: listener={}, type={}, cid={}",
-                            listener.getClass().getSimpleName(), event.getType(), this.getCid(), e);
-                    throw e; // 硬阻断
+        // 穿透型事件：无第一、二层消费，免锁直推第三层异步串行队列
+        if (event.getType().isPassThrough()) {
+            for (AgentEventListener listener : this.listeners) {
+                if (listener.getTier() == ListenerTier.NOTIFICATION) {
+                    try {
+                        CommonThread.submitNotify(() -> listener.onEvent(event));
+                    } catch (Exception e) {
+                        log.error("异步监听器处理事件发生异常: listener={}, type={}, cid={}",
+                                listener.getClass().getSimpleName(), event.getType(), this.getCid(), e);
+                    }
                 }
-            } else {
-                // 第三层：异步串行执行推送前端，静默处理。
-                // 关键：入队 CommonThread 全局单线程串行执行器，入队顺序即推送顺序，
-                // 保证流式 chunk 等时序敏感事件的 WS 推送顺序严格与发布顺序一致，消除偶发乱序。
-                CommonThread.submitNotify(() -> {
+            }
+            return;
+        }
+
+        // 写命令事件：cid 数据锁覆盖第一、二层同步消费（DIRECT 写盘 + CACHE 回填），
+        // 保证「写入 → 回填 → 判定」在单一临界区完成，防止并行批双触发；
+        // 锁为可重入锁，与 ConversationServiceImpl.lockUpdateConversation 同源
+        Lock cidLock = ContractLock.CID_DATA_STRIPED.get(this.getCid());
+        cidLock.lock();
+        try {
+            for (AgentEventListener listener : this.listeners) {
+                if (listener.getTier() == ListenerTier.DIRECT || listener.getTier() == ListenerTier.CACHE) {
+                    // 第一、二层：同步执行，异常熔断阻断
                     try {
                         listener.onEvent(event);
-                    } catch (Exception e) {
-                        log.warn("异步推送通知监听器发生异常 (不阻断主流程): listener={}, type={}",
-                                listener.getClass().getSimpleName(), event.getType(), e);
+                    } catch (RuntimeException e) {
+                        log.error("同步监听器处理事件发生异常，触发熔断阻断: listener={}, type={}, cid={}",
+                                listener.getClass().getSimpleName(), event.getType(), this.getCid(), e);
+                        throw e; // 硬阻断
                     }
-                });
+                } else {
+                    // 第三层：异步串行推送前端
+                    try {
+                        CommonThread.submitNotify(() -> listener.onEvent(event));
+                    } catch (Exception e) {
+                        log.error("异步监听器处理事件发生异常: listener={}, type={}, cid={}",
+                                listener.getClass().getSimpleName(), event.getType(), this.getCid(), e);
+                    }
+                }
             }
+        } finally {
+            cidLock.unlock();
         }
     }
 

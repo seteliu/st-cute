@@ -61,7 +61,7 @@ public class EventListenerCacheSync implements AgentEventListener {
             context.setInputTokens(latest.getInputTokens() != null ? latest.getInputTokens() : 0);
             context.setOutputTokens(latest.getOutputTokens() != null ? latest.getOutputTokens() : 0);
             context.setCachedTokens(latest.getCachedTokens() != null ? latest.getCachedTokens() : 0);
-            context.setIterationCount(latest.getIterationCount() != null ? latest.getIterationCount() : 0);
+            context.setLoopCount(latest.getLoopCount() != null ? latest.getLoopCount() : 0);
             context.setCallToolCount(latest.getCallToolCount() != null ? latest.getCallToolCount() : 0);
             context.setProviderGroup(latest.getProviderGroup());
             context.setProviderModelName(latest.getProviderModelName());

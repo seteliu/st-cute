@@ -4,6 +4,7 @@ import com.stioc.cute.agent.access.AgentContext;
 import com.stioc.cute.agent.access.AgentContextManager;
 import com.stioc.cute.agent.access.AgentLoopCoordinator;
 import com.stioc.cute.conversation.access.ConversationService;
+import com.stioc.cute.platform.contract.ContractLock;
 import com.stioc.cute.message.access.MessageStatus;
 import com.stioc.cute.message.access.MessageEntity;
 import com.stioc.cute.message.access.MessageRole;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.locks.Lock;
 import java.util.stream.Collectors;
 
 /**
@@ -43,9 +45,11 @@ import java.util.stream.Collectors;
 public class StaleMessageCleanupService {
 
     /**
-     * 运行时扫描的超时门限（单位：分钟），超过此时长仍未完结则视为僵死
+     * 运行时扫描的超时门限（单位：分钟），超过此时长仍未完结则视为僵死。
+     * 60 分钟：兼顾长耗时工具（大型构建/安装类命令）的合法执行时长，
+     * 避免误杀慢任务；同时保证真正的僵死会话不会无限期占用屏障。
      */
-    private static final int STALE_THRESHOLD_MINUTES = 10;
+    private static final int STALE_THRESHOLD_MINUTES = 60;
 
     /**
      * 启动时扫描判定为僵死状态的消息状态集合
@@ -194,34 +198,57 @@ public class StaleMessageCleanupService {
     /**
      * 处理受影响的会话，清理其 Loop 运行态字段并回收内存上下文。
      * 若该会话是子智能体，则自动向其父智能体发送挂掉的工作报告，避免父会话被卡死。
+     * <p>
+     * 全程持有父/子会话的 cid 数据锁：僵死清理与正常完成回调（onToolCompleted/onSubAgentCompleted）
+     * 并发时，保证「扣减屏障 → 判定」与「清理重置」互斥串行，防止清理路径读到半扣减状态误触发下一轮，
+     * 也防止完成回调与清理路径交错产生屏障状态漂移。
+     * </p>
      */
     private void handleAffectedConversation(Long cid, String reason) {
         conversationService.findById(cid).ifPresent(conv -> {
             Long parentCid = conv.getParentCid();
             if (parentCid != null && parentCid != 0L) {
-                log.warn("[StaleCleanup] 检测到子会话 {} 异常中断，开始向父会话 {} 汇报", cid, parentCid);
-                // 1. 获取/构建子会话的运行上下文
-                AgentContext subContext = agentContextManager.getOrCreateContext(cid);
+                // 同时锁住父/子两个会话的数据锁（子会话清理与父会话屏障扣减涉及两侧实体）。
+                // 与 executeLoopSync 的循环锁不同源但无嵌套冲突：本方法不获取循环锁，
+                // 正常完成回调仅持数据锁，锁序固定（先子后父）无死锁环
+                Lock subDataLock = ContractLock.CID_DATA_STRIPED.get(cid);
+                Lock parentDataLock = ContractLock.CID_DATA_STRIPED.get(parentCid);
+                subDataLock.lock();
+                parentDataLock.lock();
+                try {
+                    log.warn("[StaleCleanup] 检测到子会话 {} 异常中断，开始向父会话 {} 汇报", cid, parentCid);
+                    // 1. 获取/构建子会话的运行上下文
+                    AgentContext subContext = agentContextManager.getOrCreateContext(cid);
 
-                // 2. 汇报给父 Agent 并更新父会话等待状态
-                AgentContext parentContext = agentContextManager.getOrCreateContext(parentCid);
-                boolean allDone = conversationService.handleSubAgentFinishedHook(parentContext, cid, reason);
-                if (allDone) {
-                    log.debug("[StaleCleanup] 所有子智能体已完成/超时清理，异步拉起父智能体: parentCid={}", parentCid);
-                    agentLoopCoordinator.executeLoopAsync(parentCid);
+                    // 2. 汇报给父 Agent 并更新父会话等待状态
+                    AgentContext parentContext = agentContextManager.getOrCreateContext(parentCid);
+                    boolean allDone = conversationService.handleSubAgentFinishedHook(parentContext, cid, reason);
+                    if (allDone) {
+                        log.debug("[StaleCleanup] 所有子智能体已完成/超时清理，异步拉起父智能体: parentCid={}", parentCid);
+                        agentLoopCoordinator.executeLoopAsync(parentCid);
+                    }
+
+                    // 3. 强制重置子会话自身的数据库 Loop 运行态字段（callToolCount、waitingToolIds、waitingSubCids）及内存状态
+                    conversationService.forceResetLoopState(subContext);
+
+                    // 4. 回收子会话内存运行上下文及其专属 MCP 等物理进程资源
+                    agentContextManager.removeContext(cid);
+                } finally {
+                    parentDataLock.unlock();
+                    subDataLock.unlock();
                 }
-
-                // 3. 强制重置子会话自身的数据库 Loop 运行态字段（callToolCount、waitingToolIds、waitingSubCids）及内存状态
-                conversationService.forceResetLoopState(subContext);
-
-                // 4. 回收子会话内存运行上下文及其专属 MCP 等物理进程资源
-                agentContextManager.removeContext(cid);
             } else {
                 // 顶层会话挂了，重置其数据库 Loop 状态，并回收内存上下文与 MCP 进程
                 log.debug("[StaleCleanup] 清理顶层会话 {} 异常残留状态", cid);
-                AgentContext context = agentContextManager.getOrCreateContext(cid);
-                conversationService.forceResetLoopState(context);
-                agentContextManager.removeContext(cid);
+                Lock dataLock = ContractLock.CID_DATA_STRIPED.get(cid);
+                dataLock.lock();
+                try {
+                    AgentContext context = agentContextManager.getOrCreateContext(cid);
+                    conversationService.forceResetLoopState(context);
+                    agentContextManager.removeContext(cid);
+                } finally {
+                    dataLock.unlock();
+                }
             }
         });
     }

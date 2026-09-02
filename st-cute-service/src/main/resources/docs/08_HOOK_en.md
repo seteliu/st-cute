@@ -120,7 +120,7 @@ The JSON file referenced by `ST_CUTE_HOOK_DATA_PATH` contains the following fiel
 | **`inputTokens`** | Long | Cumulative input token count |
 | **`outputTokens`** | Long | Cumulative output token count |
 | **`cachedTokens`** | Long | Cumulative cache-hit token count |
-| **`iterationCount`** | Integer | Current ReAct iteration count |
+| **`loopCount`** | Integer | Current loop round number; set to 1 on user message, advanced by the sole legal trigger after each tool round |
 | **`parentCid`** | Long | Parent session ID (non-null in SubAgent scenarios) |
 | **`permissionMode`** | String | Current permission mode (e.g. `READ_ONLY` / `SMART_APPROVAL`) |
 | **`providerGroup`** | String | Current model provider group |

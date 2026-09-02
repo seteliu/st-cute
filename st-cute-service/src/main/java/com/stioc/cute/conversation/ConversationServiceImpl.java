@@ -14,7 +14,7 @@ import com.stioc.cute.message.access.MessageStatus;
 import com.stioc.cute.platform.contract.ContractLock;
 import com.stioc.cute.project.access.ProjectService;
 import com.stioc.cute.provider.ProviderService;
-import com.stioc.cute.file.FileStorageService;
+import com.stioc.cute.file.access.FileStorageService;
 import com.stioc.cute.repository.ConversationMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -147,20 +147,18 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public void initRoundTools(AgentContext context, List<String> toolCallIds, int iterationDelta) {
+    public void initRoundTools(AgentContext context, List<String> toolCallIds) {
         Long cid = context.getCid();
         String waitingIdsStr = toolCallIds.isEmpty() ? null : String.join(",", toolCallIds);
 
-        // 1. 同步更新内存
-        int currentIter = context.getIterationCount();
-        context.setIterationCount(currentIter + iterationDelta);
+        // 1. 同步更新内存（循环轮次 loopCount 的推进已迁移至触发点 CAS，此处不再负责计数）
+        context.setCallToolCount(toolCallIds.size());
 
         // 2. 上报更新事件，委托直接层写盘
         ConversationEntity updatePayload = UpdateEntity.of(ConversationEntity.class);
         updatePayload.setId(cid);
         updatePayload.setCallToolCount(toolCallIds.size());
         updatePayload.setWaitingToolIds(waitingIdsStr);
-        updatePayload.setIterationCount(currentIter + iterationDelta);
         updatePayload.setUpdatedAt(LocalDateTime.now());
         context.publishEvent(AgentEventFactory.createConversationUpdate(context, updatePayload));
 
@@ -171,16 +169,34 @@ public class ConversationServiceImpl implements ConversationService {
     public boolean onToolCompleted(AgentContext context, String toolCallId) {
         Long cid = context.getCid();
         log.debug("onToolCompleted 开始执行: cid={}, toolCallId={}", cid, toolCallId);
-        // 1. 上报差量剔除工具事件
-        ConversationEntity updatePayload = UpdateEntity.of(ConversationEntity.class);
-        updatePayload.setId(cid);
-        updatePayload.setWaitingToolIds("-" + toolCallId);
-        context.publishEvent(AgentEventFactory.createConversationUpdate(context, updatePayload));
 
-        // 2. 利用事件底座同步刷新好的内存缓存进行 100% 精准且无延迟的判定
-        log.debug("onToolCompleted 判定屏障状态: cid={}, waitingTools={}, waitingSubCids={}, callToolCount={}",
-                cid, context.getWaitingToolIds(), context.getWaitingSubCids(), context.getCallToolCount());
-        return context.getWaitingToolIds().isEmpty() && context.getWaitingSubCids().isEmpty();
+        // 会话级排他锁：将「扣减屏障 → 判定」收敛进单一临界区，锁与 publishEvent 内部使用的
+        // 为同一把可重入锁（同 key 同源），此处外层加锁后事件链内重入无死锁。
+        // 修复：并行批多个完成回调交错执行时，多线程都可能读到"屏障已空"而重复拉起下一轮（双触发竞态）。
+        // 锁内临界区串行保证只有真实扣掉最后一项的线程能看到空集合，天然唯一触发。
+        Lock cidLock = ContractLock.CID_DATA_STRIPED.get(cid);
+        cidLock.lock();
+        try {
+            // 1. 入口验证：回调对应的 id 必须仍在等待集合中。
+            //    重复通知、迟到的滞留回调（如会话已被 forceReset 清空屏障后醒来）不携带扣减语义，
+            //    直接丢弃，从入口切断"空窗期内不带扣减的回调看到空集合"的幻影触发路径
+            if (!context.getWaitingToolIds().contains(toolCallId)) {
+                log.warn("[触发守卫] 回调 id 不在等待集合中（重复/迟到/清理后滞留），丢弃本次回调: cid={}, toolCallId={}",
+                        cid, toolCallId);
+                return false;
+            }
+
+            // 2. 上报差量剔除工具事件（事件链在锁内同步完成写盘与内存回填）
+            ConversationEntity updatePayload = UpdateEntity.of(ConversationEntity.class);
+            updatePayload.setId(cid);
+            updatePayload.setWaitingToolIds("-" + toolCallId);
+            context.publishEvent(AgentEventFactory.createConversationUpdate(context, updatePayload));
+
+            // 3. 判定：锁内临界区串行，只有真实扣掉最后一项的线程才能观察到空集合（唯一触发者）
+            return context.getWaitingToolIds().isEmpty() && context.getWaitingSubCids().isEmpty();
+        } finally {
+            cidLock.unlock();
+        }
     }
 
     @Override
@@ -237,15 +253,31 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     public boolean onSubAgentCompleted(AgentContext parentContext, Long subCid) {
         Long parentCid = parentContext.getCid();
-        ConversationEntity updatePayload = UpdateEntity.of(ConversationEntity.class);
-        updatePayload.setId(parentCid);
-        updatePayload.setWaitingSubCids("-" + subCid);
-        parentContext.publishEvent(AgentEventFactory.createConversationUpdate(parentContext, updatePayload));
 
-        // 2. 利用事件底座同步刷新好的内存缓存进行 100% 精准且无延迟的判定
-        log.debug("onSubAgentCompleted 判定屏障状态: parentCid={}, waitingTools={}, waitingSubCids={}, callToolCount={}",
-                parentCid, parentContext.getWaitingToolIds(), parentContext.getWaitingSubCids(), parentContext.getCallToolCount());
-        return parentContext.getWaitingToolIds().isEmpty() && parentContext.getWaitingSubCids().isEmpty();
+        // 会话级排他锁：与 onToolCompleted 对称的子 Agent 完成判定路径，
+        // 防止多子 Agent 完成回调交错时重复拉起父会话下一轮
+        Lock cidLock = ContractLock.CID_DATA_STRIPED.get(parentCid);
+        cidLock.lock();
+        try {
+            // 1. 入口验证：子会话 id 必须仍在等待集合中（对称 onToolCompleted 的触发守卫）。
+            //    僵死清理、forceReset 等路径已扣减过该 id 时，迟到的完成汇报直接丢弃
+            if (!parentContext.getWaitingSubCids().contains(subCid)) {
+                log.warn("[触发守卫] 子会话 id 不在等待集合中（重复/迟到/清理后滞留），丢弃本次汇报: parentCid={}, subCid={}",
+                        parentCid, subCid);
+                return false;
+            }
+
+            // 2. 上报差量剔除子会话事件（事件链在锁内同步完成写盘与内存回填）
+            ConversationEntity updatePayload = UpdateEntity.of(ConversationEntity.class);
+            updatePayload.setId(parentCid);
+            updatePayload.setWaitingSubCids("-" + subCid);
+            parentContext.publishEvent(AgentEventFactory.createConversationUpdate(parentContext, updatePayload));
+
+            // 3. 判定：锁内临界区串行，只有真实扣掉最后一项的线程才能观察到空集合（唯一触发者）
+            return parentContext.getWaitingToolIds().isEmpty() && parentContext.getWaitingSubCids().isEmpty();
+        } finally {
+            cidLock.unlock();
+        }
     }
 
     @Override
@@ -256,7 +288,10 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationEntity updatePayload = UpdateEntity.of(ConversationEntity.class);
         updatePayload.setId(cid);
         updatePayload.setCallToolCount(0);
-        updatePayload.setIterationCount(0);
+        // loopCount 重置为 0（无活动循环）：滞留的旧回调携带的 observed ≥1 与 0 不等，自动被 CAS 令牌拒绝
+        updatePayload.setLoopCount(0);
+        // 内存同步归零：防止内存残留轮次与 DB 漂移（下次用户发消息时 alignForNextStep 会置 1）
+        context.setLoopCount(0);
         updatePayload.setWaitingToolIds(null);
         updatePayload.setWaitingSubCids(null);
         updatePayload.setLoopRunning(0);
@@ -358,8 +393,19 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
+    /**
+     * 会话实体原子更新原语：在 cid 数据锁内完成「查最新实体 → modifier 变换 → 落库」。
+     * <p>
+     * 正常路径下本方法由 publishEvent 的 cid 锁覆盖，内部加锁为可重入防御（无额外开销）；
+     * 该防护同时保证任何绕过事件总线的直接调用依然具备原子性——差量运算（如 waiting 字段的
+     * -id 剔除）必须基于最新 DB 值，读改写过程不可被并发写穿透。
+     * </p>
+     *
+     * @param cid      会话 ID
+     * @param modifier 基于最新实体计算更新内容的变换函数，返回 null 时跳过持久化
+     */
     private void lockUpdateConversation(Long cid, Function<ConversationEntity, ConversationEntity> modifier) {
-        Lock lock = ContractLock.DATA_CENTER_STRIPED.get("datacenter:" + cid + ":ConversationEntity");
+        Lock lock = ContractLock.CID_DATA_STRIPED.get(cid);
         lock.lock();
         try {
             ConversationEntity latest = conversationMapper.selectOneById(cid);
@@ -388,7 +434,7 @@ public class ConversationServiceImpl implements ConversationService {
         updatePayload.setOutputTokens(0L);
         updatePayload.setCachedTokens(0L);
         updatePayload.setCallToolCount(0);
-        updatePayload.setIterationCount(0);
+        updatePayload.setLoopCount(0);
         updatePayload.setWaitingToolIds(null);
         updatePayload.setWaitingSubCids(null);
         updatePayload.setLoopRunning(0);

@@ -37,9 +37,10 @@ public interface ConversationService {
     String getProjectPath(Long cid);
 
     /**
-     * 初始化单轮调用的工具列表，并更新迭代计数（通过事件上报）
+     * 初始化单轮调用的工具列表（通过事件上报）。
+     * 循环轮次 loopCount 的推进已迁移至完成回调处的 CAS 消费，此处不再负责计数。
      */
-    void initRoundTools(AgentContext context, List<String> toolCallIds, int iterationDelta);
+    void initRoundTools(AgentContext context, List<String> toolCallIds);
 
     /**
      * 标记指定的工具调用已执行完成并剔除等待集合（通过事件上报）

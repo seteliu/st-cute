@@ -41,7 +41,7 @@ public class AgentLoopCoordinatorImpl implements AgentLoopCoordinator {
      * 同步执行 ReAct 推理循环，进行 cid 级互斥加锁排队
      */
     public void executeLoopSync(Long cid) {
-        Lock lock = ContractLock.LOOP_COORDINATOR_STRIPED.get("loopcoordinator:" + cid);
+        Lock lock = ContractLock.CID_LOOP_STRIPED.get(cid);
         lock.lock();
         try {
             log.debug("[AgentLoopCoordinator] 获得会话锁，开始执行 ReAct 循环: cid={}", cid);

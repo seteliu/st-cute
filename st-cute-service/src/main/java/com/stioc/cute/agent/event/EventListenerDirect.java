@@ -127,8 +127,12 @@ public class EventListenerDirect implements AgentEventListener {
 
     private void handleMessageUpdate(AgentEvent event) {
         if (event.getPayload() instanceof MessageEntity entity) {
-            log.debug("EventListenerDirect: 更新消息状态持久化: id={}, status={}", entity.getId(), entity.getStatus());
-            messageService.updateById(entity);
+            // 更新失败（影响 0 行）说明目标消息不存在或无字段变更，ERROR 留痕便于发现静默失败
+            boolean updated = messageService.updateById(entity);
+            if (!updated) {
+                log.error("MESSAGE_UPDATE 落库影响行数为 0: msgId={}, 目标状态={}",
+                        entity.getId(), entity.getStatus());
+            }
         }
     }
 

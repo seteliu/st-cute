@@ -10,14 +10,16 @@ import java.util.concurrent.locks.Lock;
 public class ContractLock {
 
     /**
-     * 会话数据写操作排他条带锁（包含会话与消息的读写加锁）
+     * 会话数据写操作排他条带锁（包含会话与消息的读写加锁）。
+     * key 直接使用 cid，覆盖会话实体的事件链写盘/内存回填与触发判定等所有会话数据临界区
      */
-    public static final Striped<Lock> DATA_CENTER_STRIPED = Striped.lock(512);
+    public static final Striped<Lock> CID_DATA_STRIPED = Striped.lock(512);
 
     /**
-     * 会话 ReAct 对话循环执行串行化条带锁
+     * 会话 ReAct 对话循环执行串行化条带锁。
+     * key 直接使用 cid
      */
-    public static final Striped<Lock> LOOP_COORDINATOR_STRIPED = Striped.lock(128);
+    public static final Striped<Lock> CID_LOOP_STRIPED = Striped.lock(128);
 
     /**
      * 文件物理排他写锁条带锁

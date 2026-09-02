@@ -111,12 +111,6 @@ public class ConversationEntity {
     private String unlockedToolNames;
 
     /**
-     * 当前 ReAct 循环已执行的总迭代轮次计数。
-     * 每轮 LLM 调用开始前 +1；本轮 LLM 无工具调用（Loop 天然完结）时清 0。
-     */
-    private Integer iterationCount;
-
-    /**
      * 当前会话绑定的物理隔离工作区绝对路径。
      * 由 enter_worktree 工具写入，exit_worktree 工具清除。
      * 工具执行时用于 cwd 重定向和写越界安全拦截，重启后必须恢复。
@@ -129,6 +123,15 @@ public class ConversationEntity {
      * 重启后 exit_worktree 需要凭此清理 git worktree，必须恢复。
      */
     private String worktreeBranch;
+
+    /**
+     * 当前会话循环轮次（第几轮）。
+     * 用户发消息时置 1（主动发起新一轮）；每轮工具全部完成后由唯一合法触发者在 cid 锁内
+     * CAS 消费（observed == current 时 set(current+1)）并拉起下一轮循环。
+     * 本字段同时充当一次性触发令牌：重复/迟到的完成回调因 observed 与 current 不等而被拒绝。
+     * 存库仅用于监控展示，历史数据无迁移价值，重启后自然归零重开。
+     */
+    private Integer loopCount;
 
     /**
      * 当前 ReAct 循环是否正在运行中 (1是 0否)

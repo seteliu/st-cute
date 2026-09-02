@@ -108,8 +108,10 @@ public interface MessageService {
 
     /**
      * 基础消息更新（直转 Mapper，根据 ID 更新非空字段）
+     *
+     * @return 是否实际更新到行（影响行数 > 0）
      */
-    void updateById(MessageEntity entity);
+    boolean updateById(MessageEntity entity);
 
     /**
      * 判断当前会话是否存在任何处于等待消费状态的 PENDING 消息。

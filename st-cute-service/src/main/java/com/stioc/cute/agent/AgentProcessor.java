@@ -114,15 +114,24 @@ public class AgentProcessor {
     }
 
     /**
-     * 准备本轮运行上下文，登记当前执行线程，并更新 loopRunning 为 true。
+     * 准备本轮运行上下文，登记当前执行线程，推进循环轮次，并更新 loopRunning 为 true。
+     * 循环轮次 loopCount：每次循环启动无条件 +1 并落库——用户消息入口已置 0（主动发起新一轮，
+     * 本处 +1 后从 1 开始计数），工具完成回调触发的自循环也在此统一推进，
+     * 避免依赖消息角色判定轮次来源（USER 角色消息未必是用户真实发起，如上下文压缩产生的消息）。
      * 注意：canceled 状态由 HTTP 入口层（用户主动发消息时）清除，此处不再重置，
      * 避免 cancel 信号在进入执行主体前被意外抹掉。
      */
     private void prepareRuntimeContext(AgentContext context) {
         Long cid = context.getCid();
         context.setActiveThread(Thread.currentThread());
+
+        // 循环轮次无条件推进（内存 + 落库同事件完成，供前端展示与 200 轮上限检查）
+        int newLoopCount = context.getLoopCount() + 1;
+        context.setLoopCount(newLoopCount);
+
         ConversationEntity updatePayload = UpdateEntity.of(ConversationEntity.class);
         updatePayload.setId(cid);
+        updatePayload.setLoopCount(newLoopCount);
         updatePayload.setLoopRunning(1);
         context.publishEvent(AgentEventFactory.createConversationUpdate(context, updatePayload));
     }
@@ -150,8 +159,9 @@ public class AgentProcessor {
             throw new InterruptedException("用户中断了智能体执行。");
         }
 
-        // 递增当前迭代轮数
-        int currentIter = context.incrementAndGetIterationCount();
+        // 循环轮次读取：loopCount 由触发点 CAS 推进（用户发消息置 1，每轮工具完成后 +1），
+        // 此处仅读取展示当前处于第几轮，不再负责递增
+        int currentIter = context.getLoopCount();
 
         // 2. 迭代上限保护：防止无限 ReAct 循环导致 Token 溢出或额度超支
         if (currentIter > maxIterations) {
@@ -163,7 +173,7 @@ public class AgentProcessor {
         // 统一通过发送 CONVERSATION_UPDATE 更新迭代进度（包含落库 -> 同步内存缓存 -> WS推送）
         ConversationEntity iterUpdate = UpdateEntity.of(ConversationEntity.class);
         iterUpdate.setId(cid);
-        iterUpdate.setIterationCount(currentIter);
+        iterUpdate.setLoopCount(currentIter);
         context.publishEvent(AgentEventFactory.createConversationUpdate(context, iterUpdate));
 
         // 3. 现查最新的历史消息（包含对齐后的上下文及前文的对话历史）
@@ -374,7 +384,7 @@ public class AgentProcessor {
      * 由 AgentProcessor 统一决策。
      */
     private void initToolRound(AgentContext context, List<String> toolCallIds) {
-        conversationService.initRoundTools(context, toolCallIds, 0);
+        conversationService.initRoundTools(context, toolCallIds);
     }
 
     /**

@@ -6,7 +6,9 @@ import com.stioc.cute.message.access.MessageEntity;
 import com.stioc.cute.repository.ConversationMapper;
 import com.stioc.cute.repository.MessageMapper;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.entrypoint.websocket.WebSocketEvent;
+import com.stioc.cute.platform.contract.ContractWsBroadcast;
 import com.stioc.cute.entrypoint.websocket.WebSocketSessionManager;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,8 @@ public class EventListenerWebSocket implements AgentEventListener {
     private ConversationMapper conversationMapper;
     @Resource
     private MessageMapper messageMapper;
+    @Resource
+    private ContractWsBroadcast contractWsBroadcast;
 
     @Override
     public ListenerTier getTier() {
@@ -53,6 +57,8 @@ public class EventListenerWebSocket implements AgentEventListener {
                 ConversationEntity latest = conversationMapper.selectOneById(entity.getId());
                 if (latest != null) {
                     payload = latest;
+                    // 额外向所有客户端广播一次会话运行状态（仅主会话），驱动各端会话列表的 running 转圈监控
+                    broadcastConversationStatus(latest);
                 }
             }
         } else if (event.getType() == AgentEventType.MESSAGE_UPDATE) {
@@ -77,6 +83,31 @@ public class EventListenerWebSocket implements AgentEventListener {
 
         // 3. 统一在最末尾进行网络帧外推
         sendWsFrame(event, wsType, payload);
+    }
+
+    /**
+     * 向所有客户端全局广播会话运行状态（仅主会话），
+     * 用于驱动各端会话列表的 running 转圈监控，无需按 cid 定向绑定
+     */
+    private void broadcastConversationStatus(ConversationEntity entity) {
+        try {
+            // 子会话不在左侧会话列表渲染，其状态变化广播出去是纯噪音，直接跳过
+            if (entity.getParentCid() != null && entity.getParentCid() != 0L) {
+                return;
+            }
+
+            // 载荷：id 与 loopRunning 驱动转圈监控，附带名称与最后更新时间便于前端同步刷新列表项
+            JSONObject payload = new JSONObject();
+            payload.put("id", entity.getId());
+            payload.put("loopRunning", entity.getLoopRunning());
+            payload.put("title", entity.getTitle());
+            payload.put("updatedAt", entity.getUpdatedAt());
+
+            // 事件类型统一收敛在广播契约中管理，避免魔数散落
+            contractWsBroadcast.broadcast(ContractWsBroadcast.EventType.CONVERSATION_STATUS, payload);
+        } catch (Exception e) {
+            log.error("广播会话运行状态失败: cid={}", entity.getId(), e);
+        }
     }
 
     private void sendWsFrame(AgentEvent event, String wsType, Object payload) {

@@ -103,9 +103,9 @@ public class AgentContextManagerImpl implements AgentContextManager {
                             ctx.setProviderModelName(conv.getProviderModelName());
                         }
 
-                        // 恢复迭代轮次计数，供进程重启后继续执行时判断是否超过上限
-                        if (conv.getIterationCount() != null && conv.getIterationCount() > 0) {
-                            ctx.setIterationCount(conv.getIterationCount());
+                        // 恢复循环轮次，供进程重启后继续执行时判断是否超过上限
+                        if (conv.getLoopCount() != null && conv.getLoopCount() > 0) {
+                            ctx.setLoopCount(conv.getLoopCount());
                         }
                         if (conv.getParentCid() != null) {
                             ctx.setParentCid(conv.getParentCid());
