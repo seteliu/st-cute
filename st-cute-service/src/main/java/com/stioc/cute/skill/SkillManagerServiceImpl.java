@@ -57,15 +57,14 @@ public class SkillManagerServiceImpl implements SkillManagerService {
 
         context.getSkills().clear();
 
-        // 1. 惰性装填全局公共技能
-        Map<String, Skill> globalSkills = projectSkills.computeIfAbsent("", k -> {
-            Map<String, Skill> temp = new ConcurrentHashMap<>();
-            File globalSkillsDir = ContractFile.getGlobalSkillsDir();
-            if (globalSkillsDir != null && globalSkillsDir.exists() && globalSkillsDir.isDirectory()) {
-                scanDirectory(globalSkillsDir.toPath(), "GLOBAL", temp);
-            }
-            return temp;
-        });
+        // 1. 重新扫描装填全局公共技能：每次重扫物理目录并刷新缓存以支持热重载（对齐 HookEngineServiceImpl 的做法），
+        //    避免惰性缓存导致磁盘上新增或修改的全局技能（如新装的技能包）永远无法被感知
+        Map<String, Skill> globalSkills = new ConcurrentHashMap<>();
+        File globalSkillsDir = ContractFile.getGlobalSkillsDir();
+        if (globalSkillsDir != null && globalSkillsDir.exists() && globalSkillsDir.isDirectory()) {
+            scanDirectory(globalSkillsDir.toPath(), "GLOBAL", globalSkills);
+        }
+        projectSkills.put("", globalSkills);
         context.getSkills().addAll(globalSkills.values());
 
         // 2. 装填并覆盖项目专属技能
