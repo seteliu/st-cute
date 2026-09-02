@@ -92,6 +92,30 @@
       @change="handleFileInputChange"
     />
 
+    <!-- Slash 快捷补全下拉（绝对定位于输入区上方） -->
+    <div v-if="slashVisible" ref="slashDropdownRef" class="slash-dropdown">
+      <div v-if="slashLoading" class="slash-hint">加载中...</div>
+      <div v-else-if="slashRenderGroups.length === 0" class="slash-hint">无匹配项</div>
+      <div v-else>
+        <div v-for="group in slashRenderGroups" :key="group.group" class="slash-group">
+          <div class="slash-group-title">{{ group.group }}</div>
+          <div
+            v-for="(item, idx) in group.items"
+            :key="item.name"
+            :ref="el => setSlashItemRef(el, group.startFlatIndex + idx)"
+            class="slash-item"
+            :class="{ 'slash-item-active': group.startFlatIndex + idx === slashHighlightIndex }"
+            @mousedown.prevent
+            @click="handleSlashItemClick(item)"
+            @mousemove="slashHighlightIndex = group.startFlatIndex + idx"
+          >
+            <div class="slash-item-name">/{{ item.name }}</div>
+            <div v-if="item.description" class="slash-item-desc" :title="item.description">{{ item.description }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="input-area">
       <n-input
         ref="inputInstRef"
@@ -278,6 +302,8 @@ import { useConversationStore } from '@/stores/conversation'
 import { useProjectStore } from '@/stores/project'
 import { useProviderStore } from '@/stores/provider'
 import { updateConversationProviderApi } from '@/api/conversation'
+import { getSlashListApi } from '@/api/slash'
+import type { SlashGroupItem, SlashItem } from '@/api/slash'
 import { uploadFile } from '@/api/file'
 import { t } from '@/i18n'
 
@@ -306,6 +332,45 @@ interface StagedFile {
 const stagedFiles = ref<StagedFile[]>([])
 const isDragging = ref(false)
 const isUploading = ref(false)
+
+// ==================== Slash 快捷补全状态 ====================
+// 下拉是否弹出（仅输入以 / 开头时为 true）
+const slashVisible = ref(false)
+// 后端返回的原始分组数据（每次弹出实时拉取，不缓存）
+const slashGroups = ref<SlashGroupItem[]>([])
+// 当前过滤关键词（/ 之后、空格之前的用户输入片段）
+const slashKeyword = ref('')
+// 过滤后拍平的选项总数中当前高亮的索引（默认高亮第一项）
+const slashHighlightIndex = ref(0)
+// 请求中标记
+const slashLoading = ref(false)
+// 关闭豁免标记：选中回填或手动关闭后，同一段 / 开头文本不再自动弹出，
+// 避免回填赋值触发 watch 导致「关闭又立即重开」的抖动；
+// 仅当文本不再以 / 开头时复位，之后重新输入 / 可再次触发
+const slashDismissed = ref(false)
+// 下拉容器 DOM 引用（用于键盘导航时滚动跟随）
+const slashDropdownRef = ref<HTMLElement | null>(null)
+// 全部选项元素引用表：拍平索引 -> DOM 元素
+const slashItemEls = new Map<number, HTMLElement>()
+
+/**
+ * 收集下拉选项元素引用（v-for 动态 ref 回调）
+ */
+const setSlashItemRef = (el: any, flatIndex: number) => {
+  if (el) {
+    slashItemEls.set(flatIndex, el as HTMLElement)
+  }
+}
+
+/**
+ * 键盘移动高亮后，将当前高亮项滚动到下拉可视范围内（不居中，仅贴边最小滚动）
+ */
+const scrollHighlightedIntoView = () => {
+  nextTick(() => {
+    const el = slashItemEls.get(slashHighlightIndex.value)
+    el?.scrollIntoView({ block: 'nearest' })
+  })
+}
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B'
@@ -580,6 +645,13 @@ watch(
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
       })
       stagedFiles.value = []
+      // 切换会话时同步关闭 slash 补全下拉；仅当当前输入仍以 / 开头（存在进行中的补全文本）
+      // 时才进入豁免期防止继续输入时重开；输入框为空/非 / 开头时不打豁免，
+      // 保证切换后首次输入 / 可正常触发
+      if (appStore.userInput.startsWith('/')) {
+        slashDismissed.value = true
+      }
+      closeSlashDropdown()
       nextTick(() => {
         if (!isInputDisabled.value) {
           inputInstRef.value?.focus()
@@ -635,7 +707,199 @@ const inputPlaceholder = computed(() => {
   return t('chat.inputPlaceholderEnter')
 })
 
+// ==================== Slash 快捷补全核心逻辑 ====================
+
+/**
+ * 将过滤后的分组数据渲染为带拍平索引的结构，供高亮与键盘选中定位使用
+ */
+const slashRenderGroups = computed(() => {
+  const keyword = slashKeyword.value.trim().toLowerCase()
+  let flatIndex = 0
+  return slashGroups.value
+    .map(group => {
+      const filteredItems = (group.items || []).filter(item =>
+        !keyword || item.name.toLowerCase().includes(keyword)
+      )
+      const startFlatIndex = flatIndex
+      flatIndex += filteredItems.length
+      return { group: group.group, items: filteredItems, startFlatIndex }
+    })
+    .filter(group => group.items.length > 0)
+})
+
+/**
+ * 过滤后的选项总条数（空列表时 Enter 完全无效的判定依据）
+ */
+const slashFilteredCount = computed(() => {
+  return slashRenderGroups.value.reduce((sum, group) => sum + group.items.length, 0)
+})
+
+/**
+ * 关闭下拉并复位状态
+ */
+const closeSlashDropdown = () => {
+  slashVisible.value = false
+  slashGroups.value = []
+  slashKeyword.value = ''
+  slashHighlightIndex.value = 0
+  slashLoading.value = false
+  // 清空选项元素引用表，避免下次弹出残留旧 DOM 引用
+  slashItemEls.clear()
+}
+
+/**
+ * 选中补全项：回填 /{name} （带尾随空格），关闭下拉，光标移至末尾并保持聚焦
+ */
+const applySlashItem = (item: SlashItem) => {
+  // 先打上豁免标记再回填：回填赋值会触发输入 watch，
+  // 若不打标记会因文本仍以 / 开头而被误判为重新触发（关闭后立即重开的抖动）
+  slashDismissed.value = true
+  appStore.userInput = `/${item.name} `
+  closeSlashDropdown()
+  nextTick(() => {
+    const textarea = inputInstRef.value?.textareaElRef
+    if (textarea) {
+      textarea.selectionStart = textarea.selectionEnd = (appStore.userInput || '').length
+      textarea.focus()
+    }
+  })
+}
+
+const handleSlashItemClick = (item: SlashItem) => {
+  applySlashItem(item)
+}
+
+/**
+ * 拉取 slash 分组列表（每次弹出实时请求，不缓存）
+ */
+const fetchSlashList = async () => {
+  const cid = conversationStore.activeCid
+  if (!cid) return
+  slashLoading.value = true
+  try {
+    const res = await getSlashListApi(cid)
+    slashGroups.value = Array.isArray(res) ? res : []
+  } catch (e) {
+    console.error('拉取 slash 补全列表失败:', e)
+    slashGroups.value = []
+  } finally {
+    slashLoading.value = false
+  }
+}
+
+/**
+ * 监听输入变化，判定 slash 触发与关闭（仅输入以 / 开头时触发）
+ */
+watch(
+  () => appStore.userInput,
+  (newVal) => {
+    const text = newVal || ''
+    if (!text.startsWith('/')) {
+      // 不以 / 开头（含清空）时关闭下拉，并复位豁免标记，
+      // 使之后重新输入 / 能再次正常触发
+      if (slashVisible.value) {
+        closeSlashDropdown()
+      }
+      slashDismissed.value = false
+      return
+    }
+
+    // 提取 / 之后、首个空格之前的关键词用于过滤
+    const rest = text.slice(1)
+    const spaceIdx = rest.indexOf(' ')
+    slashKeyword.value = spaceIdx >= 0 ? rest.slice(0, spaceIdx) : rest
+
+    // 处于豁免期（选中回填/手动关闭后同一文本生命周期）时不自动弹出
+    if (slashDismissed.value) {
+      return
+    }
+
+    if (!slashVisible.value) {
+      // 触发瞬间：弹出下拉并实时拉取后端列表
+      slashVisible.value = true
+      slashHighlightIndex.value = 0
+      fetchSlashList()
+    }
+  }
+)
+
+/**
+ * slash 下拉打开期间的键盘接管处理
+ * 设计约束：接管期间绝不触发消息发送；带修饰键的 Enter 原样放行换行；IME 组词期放行
+ */
+const handleSlashKeydown = (e: KeyboardEvent) => {
+  // 中文输入法组词期间的 Enter 为「确认候选词上屏」，不接管，原样放行
+  if (e.isComposing || e.keyCode === 229) {
+    return
+  }
+
+  // 高亮索引归一化：数据变化（过滤结果减少）后索引可能越界，钳制到有效范围
+  if (slashHighlightIndex.value >= slashFilteredCount.value) {
+    slashHighlightIndex.value = Math.max(0, slashFilteredCount.value - 1)
+  }
+
+  switch (e.key) {
+    case 'ArrowDown':
+      if (slashFilteredCount.value > 0) {
+        e.preventDefault()
+        slashHighlightIndex.value = (slashHighlightIndex.value + 1) % slashFilteredCount.value
+        scrollHighlightedIntoView()
+      }
+      break
+    case 'ArrowUp':
+      if (slashFilteredCount.value > 0) {
+        e.preventDefault()
+        slashHighlightIndex.value = (slashHighlightIndex.value - 1 + slashFilteredCount.value) % slashFilteredCount.value
+        scrollHighlightedIntoView()
+      }
+      break
+    case 'Escape':
+      e.preventDefault()
+      // 手动关闭同样进入豁免期：同一 / 开头文本生命周期内不再自动弹出，
+      // 输入不再以 / 开头（删掉斜杠/清空）后自动复位
+      slashDismissed.value = true
+      closeSlashDropdown()
+      break
+    case 'Enter':
+      // 仅裸 Enter 用于选中补全；带修饰键的 Enter 原样放行给输入框换行
+      if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) {
+        return
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      if (slashFilteredCount.value > 0) {
+        const item = resolveHighlightedItem()
+        if (item) {
+          applySlashItem(item)
+        }
+      }
+      // 列表为空时：什么都不做（既不选中也不发送）
+      break
+    default:
+      break
+  }
+}
+
+/**
+ * 根据当前高亮索引在渲染分组中定位对应选项
+ */
+const resolveHighlightedItem = (): SlashItem | null => {
+  for (const group of slashRenderGroups.value) {
+    const offset = slashHighlightIndex.value - group.startFlatIndex
+    if (offset >= 0 && offset < group.items.length) {
+      return group.items[offset]
+    }
+  }
+  return null
+}
+
 const handleEnterKey = (e: KeyboardEvent) => {
+  // slash 下拉打开期间，键盘事件优先由补全逻辑接管，绝不走到发送分支
+  if (slashVisible.value) {
+    handleSlashKeydown(e)
+    return
+  }
+
   if (e.key !== 'Enter' || isInputDisabled.value) {
     return
   }
@@ -896,4 +1160,82 @@ const handleProviderChange = async (val: string) => {
 .send-btn-active:active {
   transform: translateY(0);
 }
+
+/* ==================== Slash 快捷补全下拉样式 ==================== */
+.slash-dropdown {
+  position: absolute;
+  /* 弹出在输入区上方，与 .chat-footer 顶部保持 4px 间距 */
+  bottom: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  background-color: rgba(30, 30, 34, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.45);
+  z-index: 15;
+  scrollbar-width: thin;
+}
+
+.slash-dropdown::-webkit-scrollbar {
+  width: 4px;
+}
+
+.slash-dropdown::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+}
+
+.slash-dropdown::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.slash-hint {
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  color: #8c8c93;
+  text-align: center;
+}
+
+.slash-group + .slash-group {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.slash-group-title {
+  padding: 6px 12px 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #a0a0a5;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.slash-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+/* 高亮统一由 slash-item-active 类呈现（键盘导航与鼠标悬浮共用同一来源，
+   避免与 :hover 伪类叠加出现双高亮），鼠标悬浮经 mousemove 设置高亮索引 */
+.slash-item-active {
+  background-color: rgba(129, 182, 229, 0.15);
+}
+
+.slash-item-name {
+  font-size: 0.8rem;
+  color: #e3e3e7;
+  font-family: monospace;
+}
+
+.slash-item-desc {
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: #8c8c93;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 </style>
