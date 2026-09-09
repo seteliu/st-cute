@@ -52,21 +52,44 @@ const conversationStore = useConversationStore()
 
 // 强力贴底锁定磁铁
 const initialScrollPending = ref(true)
+// 贴底锁定计时器句柄：锁存续期内高度仍在收敛时重置计时，防范大会话首屏收敛慢导致锁提前释放
+let scrollLockTimer: ReturnType<typeof setTimeout> | null = null
+
+// 续期式贴底锁：holdForever 为 true 时锁定但不启动计时（加载期间保持强锁），否则静默 200ms 后释放
+const armScrollLock = (holdForever = false) => {
+  initialScrollPending.value = true
+  if (scrollLockTimer) {
+    clearTimeout(scrollLockTimer)
+    scrollLockTimer = null
+  }
+  if (!holdForever) {
+    scrollLockTimer = setTimeout(() => {
+      initialScrollPending.value = false
+      scrollLockTimer = null
+    }, 200)
+  }
+}
 
 watch(
   () => conversationStore.isMessageLoading,
   (loading) => {
     if (loading) {
-      initialScrollPending.value = true
+      // 加载期间保持强锁并清掉历史计时器，杜绝快速切换会话时旧计时器提前解锁
+      armScrollLock(true)
     } else {
-      // 200ms 内保持强力贴底锁死，防范 DOM 延迟撑开
-      setTimeout(() => {
-        initialScrollPending.value = false
-      }, 200)
+      // 200ms 内保持强力贴底锁死，防范 DOM 延迟撑开；期间高度仍在收敛则由 ResizeObserver 持续续期
+      armScrollLock()
     }
   },
   { immediate: true }
 )
+
+// 距底判定：距底 10px 容差内视为用户仍停留在底部
+const isNearBottom = () => {
+  const el = scrollerRef.value
+  if (!el) return false
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 10
+}
 
 // 锁，用于防止高度更新时的重入冲突
 let isUpdatingHeights = false
@@ -93,9 +116,8 @@ const getItemHeight = (index: number) => {
 // 样式设置：渲染时保持自适应，占位时强制高度撑开
 const getItemStyle = (index: number) => {
   if (isItemRendered(index)) {
-    return {
-      minHeight: props.estimatedItemSize + 'px'
-    }
+    // 渲染时由内容自然撑高：不强设 minHeight，避免折叠卡片等小体量消息被估算高度硬撑出大片空白，同时防止假高度污染实测缓存
+    return {}
   } else {
     return {
       height: getItemHeight(index) + 'px',
@@ -186,6 +208,8 @@ const initResizeObserver = () => {
     isUpdatingHeights = true
 
     let hasChanges = false
+    // 本轮是否发生真实高度变化（含最后一项）：用于贴底锁续期与锁外贴底校准
+    let lastItemChanged = false
     let scrollTopAdjustment = 0
     const currentStartIndex = visibleStartIndex.value
 
@@ -202,6 +226,7 @@ const initResizeObserver = () => {
             const oldHeight = getItemHeight(index)
             const diff = height - oldHeight
             heights.value[index] = height
+            lastItemChanged = true
 
             // 如果高度发生改变的项在当前可视区域首项的上方，累加调整高度以补偿滚动条位置
             if (index < currentStartIndex) {
@@ -224,11 +249,19 @@ const initResizeObserver = () => {
       scrollTop.value = scrollerRef.value.scrollTop
     }
 
-    if (hasChanges || initialScrollPending.value) {
+    if (hasChanges || lastItemChanged || initialScrollPending.value) {
+      // 贴底锁仍激活且本轮高度仍在收敛：续期锁存，渲染静默 200ms 后才释放，防范大会话首屏收敛慢被提前解锁
+      if (initialScrollPending.value && (hasChanges || lastItemChanged)) {
+        armScrollLock()
+      }
       // 异步刷新滚动高度
       nextTick(() => {
         handleScroll()
         if (initialScrollPending.value) {
+          scrollToBottom(false)
+        } else if (lastItemChanged && isNearBottom()) {
+          // 锁释放后最后一项仍被撑高（大 Markdown 渐进渲染等）：用户停留在底部附近时校准贴底，杜绝底部多出一截；
+          // 向上翻阅历史（距底远）时不打扰
           scrollToBottom(false)
         }
       })
@@ -282,14 +315,9 @@ watch(
   (newVal) => {
     if (!scrollerRef.value || newVal.length === 0) return
 
-    // 触底判定阈值：必须完全在底部（距底 10px 以内）才视为处于底部并自动维持贴底，
-    // 避免用户稍向上翻阅历史消息时被流式输出强行拉回底部
-    const threshold = 10 // 容差像素值
-    const isAtBottom =
-      scrollerRef.value.scrollHeight -
-        scrollerRef.value.scrollTop -
-        scrollerRef.value.clientHeight <
-      threshold
+    // 触底判定：必须完全在底部（距底 10px 容差内）才视为处于底部并自动维持贴底，
+    // 避免用户稍向上翻阅历史消息时被流式输出强行拉回底部（复用 isNearBottom 判定）
+    const isAtBottom = isNearBottom()
 
     if (isAtBottom || initialScrollPending.value) {
       // 统一瞬间定位贴底
@@ -297,6 +325,14 @@ watch(
     }
   },
   { deep: true }
+)
+
+// 切换会话时清空高度缓存：旧会话的实测高度对新会话是脏数据，会污染渲染区间计算导致贴底落点偏移
+watch(
+  () => conversationStore.activeCid,
+  () => {
+    heights.value = {}
+  }
 )
 
 // 初始化生命周期
@@ -311,6 +347,11 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  // 清理贴底锁定计时器，防范卸载后写入已销毁组件状态
+  if (scrollLockTimer) {
+    clearTimeout(scrollLockTimer)
+    scrollLockTimer = null
+  }
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null

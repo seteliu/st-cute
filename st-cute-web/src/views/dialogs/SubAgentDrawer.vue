@@ -205,6 +205,7 @@ import SubAgentStatusTag from '@/components/SubAgentStatusTag.vue'
 import { useResponsive } from '@/utils/useResponsive'
 import { Message } from '@/types'
 import { t } from '@/i18n'
+import { buildRenderItems, type RenderItem } from '@/utils/foldEngine'
 
 const agentStore = useAgentStore()
 const { isMobile } = useResponsive()
@@ -278,68 +279,17 @@ const contentStyle = computed<CSSProperties>(() => {
   }
 })
 
-export type RenderItem = 
-  | { type: 'message'; data: Message; tools?: Message[] } 
-  | { type: 'tool_group'; parentMessageId: number | string; tools: Message[] }
+// 渲染序列类型：统一复用共享折叠引擎的 RenderItem（与主会话 ChatContainer 同一实现）
+export type { RenderItem }
 
+// 渲染序列组装：统一走共享折叠引擎（与主会话 ChatContainer 复用同一实现，含 FOLDED 虚拟块透传）
 const filteredMessages = computed<RenderItem[]>(() => {
   const subAgent = agentStore.activeSubAgent;
   if (!subAgent || !subAgent.messages) return [];
-  const rawMsgs = subAgent.messages;
-  
-  // 1. 拆分普通消息与工具消息，将工具消息按 parentMessageId 分类
-  const normalMsgs: Message[] = [];
-  const toolMap = new Map<string | number, Message[]>();
-
-  for (const msg of rawMsgs) {
-    if (msg.role === 'tool') {
-      const pId = msg.parentMessageId || 'orphan_sub_tools';
-      if (!toolMap.has(pId)) {
-        toolMap.set(pId, []);
-      }
-      toolMap.get(pId)!.push(msg);
-    } else {
-      normalMsgs.push(msg);
-    }
-  }
-
-  // 2. 组装并嵌套注入工具列表，保持子代理中的头像不消失
-  const result: RenderItem[] = [];
-  for (const msg of normalMsgs) {
-    if (msg.role === 'system') {
-      continue;
-    }
-
-    const msgTools = toolMap.get(msg.id) || [];
-    const hasTools = msgTools.length > 0;
-
-    // 过滤无内容、无工具调用、且已成功（SUCCESS）的助手空消息（放行 CANCELED、FAILED、RUNNING、PENDING 等需展示状态的卡片）
-    if (msg.role === 'assistant' && !msg.content && !msg.thought && !msg.isStreaming && msg.status === 'SUCCESS' && !hasTools) {
-      continue;
-    }
-
-    result.push({
-      type: 'message',
-      data: msg,
-      tools: hasTools ? msgTools : undefined
-    });
-  }
-
-  // 兜底渲染没有任何父消息的孤儿工具消息
-  if (toolMap.has('orphan_sub_tools')) {
-    result.push({
-      type: 'tool_group',
-      parentMessageId: 'orphan_sub_tools',
-      tools: toolMap.get('orphan_sub_tools')!
-    });
-  }
-
+  const result = buildRenderItems(subAgent.messages);
   if (subAgent.truncated) {
-    result.unshift({
-      type: 'truncated_tip'
-    } as any);
+    result.unshift({ type: 'truncated_tip' });
   }
-
   return result;
 });
 

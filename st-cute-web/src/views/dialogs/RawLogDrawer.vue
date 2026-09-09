@@ -16,33 +16,10 @@
 
         <!-- 执行结果展示 -->
         <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; gap: 12px;">
-          <!-- 没截断时：直接显示全部内容 -->
-          <template v-if="!appStore.currentViewMessage || !appStore.currentViewMessage.beforeCompactContent">
-            <div class="log-section-title">{{ t('chat.resultLabel') }}:</div>
-            <pre
-              class="log-pre log-pre-main"
-              >{{ resultDisplay }}</pre>
-          </template>
-
-          <!-- 截断时：多显示一个截断前的完整日志 -->
-          <template v-else>
-            <!-- 1. 精简摘要 (content) -->
-            <div style="display: flex; flex-direction: column; gap: 4px; max-height: 200px; flex-shrink: 0; min-height: 0;">
-              <div class="log-section-title">{{ t('chat.compactSummaryLabel') }}:</div>
-              <pre
-                class="log-pre"
-                style="flex: 1; min-height: 0;"
-                >{{ compactSummaryDisplay }}</pre>
-            </div>
-
-            <!-- 2. 截断前的完整大日志 (beforeCompactContent) -->
-            <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
-              <div class="log-section-title">{{ t('chat.rawOutputLabel') }}:</div>
-              <pre
-                class="log-pre log-pre-main"
-                >{{ rawOutputDisplay }}</pre>
-            </div>
-          </template>
+          <div class="log-section-title">{{ t('chat.resultLabel') }}:</div>
+          <pre
+            class="log-pre log-pre-main"
+            >{{ resultDisplay }}</pre>
         </div>
       </div>
     </n-drawer-content>
@@ -139,18 +116,6 @@ const resultDisplay = computed(() => {
   const msg = appStore.currentViewMessage
   if (!msg) return appStore.rawLogContent
   return formatDisplayText(msg.content)
-})
-
-// 压缩摘要展示文本（截断场景）
-const compactSummaryDisplay = computed(() => {
-  const msg = appStore.currentViewMessage
-  return msg ? formatDisplayText(msg.content) : ''
-})
-
-// 压缩前完整原始输出展示文本（截断场景）
-const rawOutputDisplay = computed(() => {
-  const msg = appStore.currentViewMessage
-  return msg ? formatDisplayText(msg.beforeCompactContent) : ''
 })
 </script>
 

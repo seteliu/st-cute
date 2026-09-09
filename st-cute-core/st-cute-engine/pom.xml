@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/xsd/maven-4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.stioc</groupId>
+        <artifactId>st-cute-core</artifactId>
+        <version>0.2.0</version>
+        <!-- 聚合根 pom 位于上级目录 -->
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <!-- 引擎层：智能体执行引擎（loop/llm/tool/store/event/prompt 等），纯 Java 模块，不依赖 Spring 宿主 -->
+    <artifactId>st-cute-engine</artifactId>
+    <name>st-cute-engine</name>
+    <description>ST-Cute 智能体引擎层（纯 Java，无 Spring 宿主依赖）</description>
+
+    <dependencies>
+        <!-- 引擎自带 HTTP 客户端，供 LLM 调用使用 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-jvm</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+        </dependency>
+        <!-- 字符串与对象工具库 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+        <!-- 日志门面：引擎只面向 slf4j-api 编程，日志实现由宿主模块决定 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <!-- Token 计数（上下文窗口管理） -->
+        <dependency>
+            <groupId>com.knuddels</groupId>
+            <artifactId>jtokkit</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

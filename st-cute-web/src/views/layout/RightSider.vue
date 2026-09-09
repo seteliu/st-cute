@@ -175,7 +175,7 @@ const handleMouseUp = () => {
 const handleMouseMove = (e: MouseEvent) => {
   if (!isResizing) return
   let newWidth = window.innerWidth - e.clientX
-  if (newWidth < 200) newWidth = 200
+  if (newWidth < 240) newWidth = 240
   if (newWidth > 600) newWidth = 600
   scheduleWidthUpdate(newWidth)
 }
@@ -256,5 +256,21 @@ onUnmounted(() => {
   width: 4px;
   background-color: var(--primary-color) !important;
   box-shadow: 0 0 8px rgba(129, 182, 229, 0.6);
+}
+
+:deep(.inspector-tabs > .n-tabs-nav .n-tabs-nav-scroll-content) {
+  width: 100%;
+  display: flex;
+}
+
+:deep(.inspector-tabs > .n-tabs-nav .n-tabs-tab-wrapper) {
+  flex: 1 1 0%;
+  display: flex;
+  justify-content: center;
+}
+
+:deep(.inspector-tabs > .n-tabs-nav .n-tabs-tab) {
+  width: 100%;
+  justify-content: center;
 }
 </style>

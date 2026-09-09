@@ -17,7 +17,9 @@
           <strong style="color: #fff; font-size: 0.9rem;">{{ hk.name }}</strong>
           <span
             :class="['status-tag', hk.blocking ? 'offline' : 'running']"
-            style="font-size: 0.7rem; padding: 1px 4px; border-radius: 3px; background-color: #2f1c20; color: #d03050; border: 1px solid #d0305040;"
+            :style="hk.blocking
+              ? 'font-size: 0.7rem; padding: 1px 5px; border-radius: 3px; background-color: rgba(208, 48, 80, 0.15); color: #d03050; border: 1px solid rgba(208, 48, 80, 0.3);'
+              : 'font-size: 0.7rem; padding: 1px 5px; border-radius: 3px; background-color: rgba(99, 226, 183, 0.12); color: #63e2b7; border: 1px solid rgba(99, 226, 183, 0.3);'"
           >
             {{ hk.blocking ? t('inspector.blocking') : t('inspector.nonBlocking') }}
           </span>

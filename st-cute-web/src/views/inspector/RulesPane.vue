@@ -30,11 +30,11 @@
             <span class="val path-text" :title="rule.path">{{ rule.path }}</span>
           </div>
           <div class="detail-item">
-            <span class="label">Time:</span>
+            <span class="label">{{ t('inspector.updateTime') }}</span>
             <span class="val">{{ rule.updateTime }}</span>
           </div>
           <div class="detail-item">
-            <span class="label">Size:</span>
+            <span class="label">{{ t('inspector.fileSize') }}</span>
             <span class="val">{{ formatSize(rule.size) }}</span>
           </div>
         </div>
@@ -124,6 +124,11 @@ const formatSize = (bytes: number) => {
 .rule-name {
   color: #ffffff;
   font-size: 0.9rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .view-btn {

@@ -147,7 +147,7 @@
                 <template v-else>
                   <div class="conversation-title" :title="sess.title">{{ sess.title }}</div>
                   <div class="conversation-meta">
-                    {{ formatTime(sess.updatedAt) }}
+                    {{ formatTime(sess.updateTime || (sess as any).updatedAt) }}
                     <!-- 运行状态监控：running 时显示转圈动效（右缘对齐 ✕ 按钮） -->
                     <span v-if="sess.loopRunning === 1 && !isBatchMode(proj.id)" class="running-spinner" title="会话运行中">
                       <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -507,30 +507,6 @@
                     { label: t('settings.altEnterKey'), value: 'alt+enter' }
                   ]"
                   class="setting-item-control select-control"
-                  @update:value="appStore.saveBasicConfig"
-                />
-              </div>
-
-              <div class="setting-item-row">
-                <div class="setting-item-label">
-                  <span>{{ t('settings.messageAggregation') }}</span>
-                  <n-tooltip trigger="hover" placement="top-start">
-                    <template #trigger>
-                      <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                      </span>
-                    </template>
-                    <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                      {{ t('settings.messageAggregationTooltip') }}
-                    </div>
-                  </n-tooltip>
-                </div>
-                <n-switch
-                  v-model:value="appStore.messageAggregation"
                   @update:value="appStore.saveBasicConfig"
                 />
               </div>
@@ -1083,12 +1059,13 @@ const executeBatchDeleteConversations = async (projId: number) => {
 }
 
 // 按项目对全量主会话进行分组
+// （workspaceId 为项目 ID 字符串，分组键统一转换为数值以匹配项目列表）
 const rawConversationsByProject = computed(() => {
   const groups: Record<number, any[]> = {}
   conversationStore.conversationList.forEach((sess) => {
     if (sess.parentCid) return
-    const pId = sess.projectId
-    if (!pId) return
+    const pId = sess.workspaceId ? Number(sess.workspaceId) : NaN
+    if (!pId || Number.isNaN(pId)) return
     if (!groups[pId]) {
       groups[pId] = []
     }
@@ -1208,7 +1185,7 @@ const handleMouseUp = () => {
 const handleMouseMove = (e: MouseEvent) => {
   if (!isResizing) return
   let newWidth = e.clientX
-  if (newWidth < 150) newWidth = 150
+  if (newWidth < 240) newWidth = 240
   if (newWidth > 500) newWidth = 500
   scheduleWidthUpdate(newWidth)
 }

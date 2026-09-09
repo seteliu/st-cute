@@ -36,17 +36,10 @@ const TOOL_NAME_MAP: Record<string, string> = {
   'RunCommandTool': '执行命令',
 
   // 智能体扩展类
-  'discover_tools': '发现工具',
   'invoke_subagent': '调用子智能体',
   'load_skill': '加载技能',
   'get_doc': '获取规约文档',
-  'get_time': '获取时间',
-
-  // 工作区隔离类
-  'enter_worktree': '进入工作树',
-  'EnterWorktreeTool': '进入工作树',
-  'exit_worktree': '退出工作树',
-  'ExitWorktreeTool': '退出工作树'
+  'get_time': '获取时间'
 }
 
 /**

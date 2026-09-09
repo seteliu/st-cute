@@ -334,19 +334,19 @@ const isDragging = ref(false)
 const isUploading = ref(false)
 
 // ==================== Slash 快捷补全状态 ====================
-// 下拉是否弹出（仅输入以 / 开头时为 true）
+// 下拉是否弹出（光标前文本构成 /+关键词 形态时为 true）
 const slashVisible = ref(false)
 // 后端返回的原始分组数据（每次弹出实时拉取，不缓存）
 const slashGroups = ref<SlashGroupItem[]>([])
-// 当前过滤关键词（/ 之后、空格之前的用户输入片段）
+// 当前过滤关键词（光标前文本中 / 与光标之间的输入片段）
 const slashKeyword = ref('')
 // 过滤后拍平的选项总数中当前高亮的索引（默认高亮第一项）
 const slashHighlightIndex = ref(0)
 // 请求中标记
 const slashLoading = ref(false)
-// 关闭豁免标记：选中回填或手动关闭后，同一段 / 开头文本不再自动弹出，
+// 关闭豁免标记：选中回填或手动关闭后，光标前文本不再重新构成 / 形态前不再自动弹出，
 // 避免回填赋值触发 watch 导致「关闭又立即重开」的抖动；
-// 仅当文本不再以 / 开头时复位，之后重新输入 / 可再次触发
+// 光标前文本离开 / 形态后自动复位，之后重新输入 / 可再次触发
 const slashDismissed = ref(false)
 // 下拉容器 DOM 引用（用于键盘导航时滚动跟随）
 const slashDropdownRef = ref<HTMLElement | null>(null)
@@ -647,7 +647,7 @@ watch(
       stagedFiles.value = []
       // 切换会话时同步关闭 slash 补全下拉；仅当当前输入仍以 / 开头（存在进行中的补全文本）
       // 时才进入豁免期防止继续输入时重开；输入框为空/非 / 开头时不打豁免，
-      // 保证切换后首次输入 / 可正常触发
+      // 保证切换后首次输入 / 可正常触发（豁免在光标前文本离开 / 形态后自动复位）
       if (appStore.userInput.startsWith('/')) {
         slashDismissed.value = true
       }
@@ -748,19 +748,46 @@ const closeSlashDropdown = () => {
 }
 
 /**
- * 选中补全项：回填 /{name} （带尾随空格），关闭下拉，光标移至末尾并保持聚焦
+ * 选中补全项：基于光标区间的局部替换回填（不整体覆盖输入，
+ * 保留 / 之前与关键词之后的其他正文内容），关闭下拉，光标移至
+ * 插入内容末尾并保持聚焦
  */
 const applySlashItem = (item: SlashItem) => {
-  // 先打上豁免标记再回填：回填赋值会触发输入 watch，
-  // 若不打标记会因文本仍以 / 开头而被误判为重新触发（关闭后立即重开的抖动）
+  const textarea = inputInstRef.value?.textareaElRef
+  const text = appStore.userInput || ''
+  // 与触发 watch 同源的定位规则：以当前光标位置为终点，取光标前文本做 /关键词 正则匹配，
+  // 命中则只替换「/ 起到光标为止」的片段；不依赖 slashKeyword 状态，
+  // 避免下拉打开期间 ←/→ 移动光标（不触发 watch）导致的状态与光标漂移
+  if (textarea) {
+    const end = textarea.selectionStart ?? text.length
+    const m = text.slice(0, end).match(/^\/([a-zA-Z0-9_-]*)$/)
+    if (m) {
+      const start = end - m[1].length
+      // 先打上豁免标记再回填：回填赋值会触发输入 watch，
+      // 若不打标记会因光标前文本仍为 / 形态而被误判为重新触发（关闭后立即重开的抖动）
+      slashDismissed.value = true
+      // 仅替换光标前的 /关键词 片段，保留 / 之前与光标之后的其他正文
+      appStore.userInput = text.slice(0, start - 1) + `/${item.name} ` + text.slice(end)
+      nextTick(() => {
+        // 光标落在插入内容末尾（/{name}+空格 之后），保持聚焦
+        const cursor = start - 1 + item.name.length + 2
+        textarea.selectionStart = textarea.selectionEnd = cursor
+        textarea.focus()
+      })
+      closeSlashDropdown()
+      return
+    }
+  }
+  // 兜底：无法定位光标或光标前不构成 / 形态时退回整体回填（正常场景不会走到这里）
+  // 先打上豁免标记再回填，理由同上
   slashDismissed.value = true
   appStore.userInput = `/${item.name} `
   closeSlashDropdown()
   nextTick(() => {
-    const textarea = inputInstRef.value?.textareaElRef
-    if (textarea) {
-      textarea.selectionStart = textarea.selectionEnd = (appStore.userInput || '').length
-      textarea.focus()
+    const ta = inputInstRef.value?.textareaElRef
+    if (ta) {
+      ta.selectionStart = ta.selectionEnd = (appStore.userInput || '').length
+      ta.focus()
     }
   })
 }
@@ -788,14 +815,25 @@ const fetchSlashList = async () => {
 }
 
 /**
- * 监听输入变化，判定 slash 触发与关闭（仅输入以 / 开头时触发）
+ * 监听输入变化，判定 slash 触发与关闭（光标感知版）
+ * 触发条件：光标前文本恰好为「/ + 纯关键词」（/^\/[a-zA-Z0-9_-]*$/），
+ * 即 / 与光标之间只有关键词、无空格无其他正文——
+ * 这样空框输入 /、在已有内容首部插入 /（光标停在 / 与正文之间）均能正常触发，
+ * 且关键词只取 / 后到光标的片段，不会带着后面正文去匹配；
+ * 而 问题/xxx、行中斜杠等场景因 / 前有其他字符则不再误弹
  */
 watch(
   () => appStore.userInput,
   (newVal) => {
-    const text = newVal || ''
-    if (!text.startsWith('/')) {
-      // 不以 / 开头（含清空）时关闭下拉，并复位豁免标记，
+    const textarea = inputInstRef.value?.textareaElRef
+    // 取光标位置：取不到时退回文本末尾（与旧版整体匹配行为对齐）
+    const cursorPos = textarea ? (textarea.selectionStart ?? (newVal || '').length) : (newVal || '').length
+    const textBeforeCursor = (newVal || '').slice(0, cursorPos)
+    // 光标前文本须严格匹配 /关键词 形态，/ 前不能再有其他字符
+    const match = textBeforeCursor.match(/^\/([a-zA-Z0-9_-]*)$/)
+
+    if (!match) {
+      // 光标前文本不构成 / 触发形态（含清空、光标已越过斜杠区）时关闭下拉，并复位豁免标记，
       // 使之后重新输入 / 能再次正常触发
       if (slashVisible.value) {
         closeSlashDropdown()
@@ -804,10 +842,8 @@ watch(
       return
     }
 
-    // 提取 / 之后、首个空格之前的关键词用于过滤
-    const rest = text.slice(1)
-    const spaceIdx = rest.indexOf(' ')
-    slashKeyword.value = spaceIdx >= 0 ? rest.slice(0, spaceIdx) : rest
+    // 提取光标前 / 与光标之间的关键词用于过滤
+    slashKeyword.value = match[1]
 
     // 处于豁免期（选中回填/手动关闭后同一文本生命周期）时不自动弹出
     if (slashDismissed.value) {

@@ -30,7 +30,7 @@
         class="folded-wrapper"
       >
         <folded-message-card
-          :folded-items="item.foldedItems"
+          :folded="item.folded"
           :cid="cid"
         />
       </div>
@@ -62,7 +62,7 @@ const appStore = useAppStore()
 export type RenderItem =
   | { type: 'message'; data: Message; tools?: Message[] }
   | { type: 'tool_group'; parentMessageId: number | string; tools: Message[] }
-  | { type: 'folded'; foldedItems: RenderItem[] }
+  | { type: 'folded'; folded: Message }
   | { type: 'truncated_tip' }
 
 defineProps<{

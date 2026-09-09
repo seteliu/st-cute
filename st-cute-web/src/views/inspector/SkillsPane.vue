@@ -24,9 +24,10 @@
         <div style="font-size: 0.72rem; color: var(--text-color-secondary); display: flex; justify-content: space-between; flex-direction: column; gap: 2px;">
           <span>Source: {{ skill.source === 'PROJECT' ? 'Project' : 'Global' }}</span>
           <span
-            style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;"
+            :title="skill.path"
+            style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; cursor: default;"
           >
-            {{ skill.path }}
+            <bdi>{{ skill.path }}</bdi>
           </span>
         </div>
         <div v-if="skill.tools && skill.tools.length > 0" style="margin-top: 8px; border-top: 1px dashed #2d2d30; padding-top: 8px;">

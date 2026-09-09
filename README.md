@@ -8,15 +8,28 @@
   <a href="./README.md">简体中文</a> | <a href="./README_EN.md">English</a>
 </p>
 
-**ST-Cute** 是一个前后端分离，同时提供桌面端与网页端的 AI Coding Agent & Harness。
-基于事件的ReAct Loop，支持RULE、SKILL、MCP、HOOK，兼容主流 .agents 目录配置。
-可观测完整的http请求、工具调用过程。
-在简陋与臃肿之间，它是一个刚刚好的轻量级选手，好驾驭。
+**ST-Cute** 是一个前后端分离、同时提供桌面端与网页端的 AI Coding Agent & Harness，基于事件驱动的 ReAct Loop，兼容主流 .agents 目录配置。
 
 [![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-green.svg)](https://spring.io/projects/spring-boot)
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-brightgreen.svg)](https://vuejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+---
+
+## 🏛️ 项目特色
+
+**引擎与架构**
+
+- **内核亮点**：`st-cute-engine` 是纯 Java 零 Spring 依赖的引擎，不吃宿主环境。不仅本地Coding，对于Web 服务、云端 SaaS 皆可作宿主；ReAct 循环、事件总线、窗口防爆、循环自愈为引擎内建。工具实现、MCP实现、Skill管理由宿主自由发挥。可以作为 Java 编写 Agent 的范例。
+
+**使用与体验**
+
+- **轻量即用**：在简陋与臃肿之间刚刚好。解压即跑，功能齐全，好驾驭。
+- **多端同步**：一处部署，桌面端 / 网页端 / 移动端同步访问完整功能，响应式适配，地铁上也能 Vibe Coding。
+- **办公支持**：PDF / Word / Excel 内置工具直接读取，无需外挂转换。
+- **丝滑消息**：超流畅的消息列表，智能折叠降噪；思考过程、工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志全程可溯。
+- **安全纯粹**：纯绿色、无后门、支持路径沙箱。
 
 ---
 
@@ -28,19 +41,11 @@
 
 ---
 
-## 🎯 适用的用户
-* 💡 **想了解 Coding Agent 原理**：代码结构简洁，麻雀虽小五脏俱全，有设计但不过度设计，是绝佳的 Java 编写 Agent 范例。
-* 🔍 **追求高掌控力与完整的可观测性**：清晰监测思考过程、工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志。
-* 📱 **想部署跨终端 Agent**：B/S 架构，WebUI 响应式适配，PC 端与移动端同源，“一处部署，多处连接”。
-* 🛡️ **安全纯粹**：纯绿色、无后门、支持路径沙箱。
-
----
-
 ## 🛠️ 技术栈
 
 | 模块 | 技术选型 | 说明 |
 | :--- | :--- | :--- |
-| **后端** (`st-cute-service`) | Java 25 / Spring Boot 4.1 | 事件驱动与轻量架构 |
+| **后端** (`st-cute-core`) | Java 25 / Spring Boot 4.1 | 事件驱动与轻量架构 |
 | **持久层** | SQLite 3 + MyBatis-Flex | 默认开启 WAL 模式，无需安装繁重数据库 |
 | **网络与通信** | OkHttp + WebSocket | REST API + 实时双向通信，完整 HTTP 探针日志 |
 | **前端** (`st-cute-web`) | Vue 3 + Vite 8 + TypeScript 6 | Naive UI 基础库，pnpm workspace 管理 |
@@ -59,7 +64,7 @@
     - SKILL
     - MCP
     - HOOK
-    - RULE（AGENTS.md）
+    - RULE
     - SubAgent
     - 权限管控
         - 只读
@@ -150,9 +155,9 @@ ST-Cute 的核心是一个 **Java 后端服务**，而 Java 程序的运行依�
 * **构建工具**: `Maven 3.9+`
 * **Node.js**: `Node.js 22+` & `pnpm 11+`
 
-#### 启动后端服务 (`st-cute-service`)
+#### 启动后端服务 (`st-cute-core`，宿主模块 `st-cute-service`)
 ```bash
-cd st-cute-service
+cd st-cute-core/st-cute-service
 mvn clean spring-boot:run
 ```
 * 开发调试模式下后端服务运行在 `http://localhost:9661`。
@@ -173,28 +178,22 @@ pnpm dev
 * **环境要求**：Rust 工具链（`cargo`，Windows 下为 MSVC target）
 * **运行依赖**：壳会加载后端产物（`app.jar` + JRE），本地调试时需先将其置于 `st-cute-desktop/src-tauri/resources` 目录
 
+#### 🧪 关于单元测试
+
+test 部分由于目前采用真实内容模拟，出于隐私考虑，且该部分内容变动频次极高，暂不随本仓库开放。
+
 ---
 
 ## 📖 详细文档导览
 
-项目在 `st-cute-service/src/main/resources/docs/` 目录下提供了完整的模块化文档，点击下方链接快速查阅：
+项目在 `st-cute-core/st-cute-service/src/main/resources/docs/` 目录下提供了完整的模块化文档，点击下方链接快速查阅：
 
 * 🚀 **[快速开始](#-快速开始)**：包含安装包下载、环境要求与部署运行。
-* 📋 **[文件规约](st-cute-service/src/main/resources/docs/02_file_conventions.md)**：程序在运行中对于引用和产生的文件说明。
-* ⚙️ **[RULE 规则配置](st-cute-service/src/main/resources/docs/05_RULE.md)**：`AGENTS.md` 规则定义与智能体行为约束。
-* 🧩 **[SKILL 扩展指南](st-cute-service/src/main/resources/docs/06_SKILL.md)**：自定义技能声明与加载机制。
-* 🔌 **[MCP 协议接入](st-cute-service/src/main/resources/docs/07_MCP.md)**：Model Context Protocol (MCP) Server 配置与工具映射。
-* ⚓ **[HOOK 钩子机制](st-cute-service/src/main/resources/docs/08_HOOK.md)**：工具调用前后的生命周期拦截。
-
----
-
-## 为什么写这个项目？
-最初是为了在 AI 浪潮中亲自感受“Coding Agent 是怎么从 0 到 1 做出来的”，所以亲手写一遍。
-与此同时，其他 Agent 或多或少有些不满足的点：
-- 可观测：比如我想清晰地监测工具调用和完整的http日志。
-- 多终端：比如，我想在家里部署后，出去后手机进行连接，在地铁上也想Vibe Coding一下。
-
-然后就发现，我可以更进一步，它不只是玩具，已经是实用品。
+* 📋 **[文件规约](st-cute-core/st-cute-service/src/main/resources/docs/02_file_conventions.md)**：程序在运行中对于引用和产生的文件说明。
+* ⚙️ **[RULE 规则配置](st-cute-core/st-cute-service/src/main/resources/docs/05_RULE.md)**：`AGENTS.md` 规则定义与智能体行为约束。
+* 🧩 **[SKILL 扩展指南](st-cute-core/st-cute-service/src/main/resources/docs/06_SKILL.md)**：自定义技能声明与加载机制。
+* 🔌 **[MCP 协议接入](st-cute-core/st-cute-service/src/main/resources/docs/07_MCP.md)**：Model Context Protocol (MCP) Server 配置与工具映射。
+* ⚓ **[HOOK 钩子机制](st-cute-core/st-cute-service/src/main/resources/docs/08_HOOK.md)**：工具调用前后的生命周期拦截。
 
 ---
 

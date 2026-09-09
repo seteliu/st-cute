@@ -6,7 +6,6 @@ export interface BasicConfig {
   httpLog: boolean
   httpLogDays: number
   password?: string
-  messageAggregation?: boolean
   maxViewHistoryLimit?: number
   pathSandboxEnabled?: boolean
 }

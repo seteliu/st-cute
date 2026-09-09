@@ -18,9 +18,9 @@ export const useAppStore = defineStore('app', () => {
   const leftSiderCollapsed = ref(false)
   const rightSiderCollapsed = ref(false)
   
-  // 左右侧边栏宽度控制，默认分别为 280 和 380
+  // 左右侧边栏宽度控制，默认分别为 280 和 291
   const leftSiderWidth = ref(280)
-  const rightSiderWidth = ref(380)
+  const rightSiderWidth = ref(291)
 
   // 【预留】聊天消息头像展示开关：控制对话消息是否展示角色头像。
   // 当前无任何设置入口修改此值，仅作后续扩展预留，默认关闭（false）。
@@ -33,7 +33,6 @@ export const useAppStore = defineStore('app', () => {
   const httpLog = ref(false)
   const httpLogDays = ref(7)
   const password = ref('')
-  const messageAggregation = ref(true)
   const maxViewHistoryLimit = ref(2000)
   const pathSandboxEnabled = ref(true)
   
@@ -250,7 +249,7 @@ export const useAppStore = defineStore('app', () => {
           name: detail.toolName || '',
           arguments: detail.toolArguments || '{}'
         } as any
-        rawLogContent.value = detail.beforeCompactContent || detail.content || '无日志内容'
+        rawLogContent.value = detail.content || '无日志内容'
       } else {
         rawLogContent.value = '未找到对应的日志记录'
       }
@@ -288,7 +287,6 @@ export const useAppStore = defineStore('app', () => {
       httpLog.value = data.httpLog || false
       httpLogDays.value = data.httpLogDays !== undefined ? data.httpLogDays : 7
       password.value = data.password || ''
-      messageAggregation.value = data.messageAggregation !== undefined ? data.messageAggregation : true
       maxViewHistoryLimit.value = data.maxViewHistoryLimit || 2000
       pathSandboxEnabled.value = data.pathSandboxEnabled !== undefined ? data.pathSandboxEnabled : true
     } catch (e) {
@@ -306,7 +304,6 @@ export const useAppStore = defineStore('app', () => {
         httpLog: httpLog.value,
         httpLogDays: httpLogDays.value,
         password: password.value,
-        messageAggregation: messageAggregation.value,
         pathSandboxEnabled: pathSandboxEnabled.value
       })
       if ((window as any).$message) {
@@ -337,7 +334,6 @@ export const useAppStore = defineStore('app', () => {
     httpLog,
     httpLogDays,
     password,
-    messageAggregation,
     maxViewHistoryLimit,
     pathSandboxEnabled,
     

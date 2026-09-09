@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.0</version>
+        <relativePath/>
+    </parent>
+
+    <!-- 后端聚合根：仅负责模块聚合与三方依赖版本统一，不承载业务代码 -->
+    <groupId>com.stioc</groupId>
+    <artifactId>st-cute-core</artifactId>
+    <version>0.2.0</version>
+    <packaging>pom</packaging>
+    <name>st-cute-core</name>
+    <description>ST-Cute 后端聚合根（引擎层 st-cute-engine + 宿主服务层 st-cute-service）</description>
+
+    <!-- 子模块声明 -->
+    <modules>
+        <module>st-cute-engine</module>
+        <module>st-cute-service</module>
+    </modules>
+
+    <properties>
+        <java.version>25</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <!-- 三方依赖版本统一在根 pom 定版，子模块一律不写版本号 -->
+        <mybatis-flex.version>1.11.7</mybatis-flex.version>
+        <flyway.version>12.10.0</flyway.version>
+        <okhttp.version>5.4.0</okhttp.version>
+        <fastjson2.version>2.0.61</fastjson2.version>
+        <sqlite-jdbc.version>3.53.1.0</sqlite-jdbc.version>
+        <jtokkit.version>1.1.0</jtokkit.version>
+        <guava.version>33.6.0-jre</guava.version>
+        <pdfbox.version>3.0.8</pdfbox.version>
+        <poi.version>5.5.1</poi.version>
+        <lombok.version>1.18.46</lombok.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- 工程内部模块 -->
+            <dependency>
+                <groupId>com.stioc</groupId>
+                <artifactId>st-cute-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- 数据访问与迁移（覆盖 Spring Boot BOM 中对应版本） -->
+            <dependency>
+                <groupId>com.mybatis-flex</groupId>
+                <artifactId>mybatis-flex-spring-boot4-starter</artifactId>
+                <version>${mybatis-flex.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+
+            <!-- 引擎层三方依赖 -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp-jvm</artifactId>
+                <version>${okhttp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2</artifactId>
+                <version>${fastjson2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.knuddels</groupId>
+                <artifactId>jtokkit</artifactId>
+                <version>${jtokkit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
+
+            <!-- 宿主层依赖 -->
+            <dependency>
+                <groupId>org.xerial</groupId>
+                <artifactId>sqlite-jdbc</artifactId>
+                <version>${sqlite-jdbc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>${pdfbox.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-ooxml</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-scratchpad</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+
+            <!-- 公共工具与编译期组件 -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- 编译插件配置对所有子模块生效（默认生命周期插件，子模块无需显式声明） -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <source>${java.version}</source>
+                        <target>${java.version}</target>
+                        <encoding>${project.build.sourceEncoding}</encoding>
+                        <compilerArgs>
+                            <arg>-parameters</arg>
+                            <arg>-proc:full</arg>
+                            <arg>-J-Dfile.encoding=UTF-8</arg>
+                        </compilerArgs>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
+                <!-- 测试插件：统一文件编码，对所有子模块生效 -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration>
+                        <argLine>-Dfile.encoding=${project.build.sourceEncoding}</argLine>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

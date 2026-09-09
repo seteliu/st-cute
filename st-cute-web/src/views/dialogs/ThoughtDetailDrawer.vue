@@ -1,5 +1,5 @@
 <template>
-  <n-drawer v-model:show="appStore.showThoughtDrawer" :width="width" placement="right">
+  <n-drawer v-model:show="appStore.showThoughtDrawer" :width="width" placement="right" @after-enter="stickToBottom">
     <n-drawer-content :title="t('chat.thoughtDetailTitle')" closable style="background-color: #18181c; color: #fff;">
       <div class="thought-drawer-container">
         <!-- 头部操作与信息栏 -->
@@ -25,7 +25,11 @@
 
         <!-- 思考内容全文展示 -->
         <div class="thought-drawer-body">
-          <pre ref="contentBoxRef" class="thought-full-content">{{ currentThoughtText }}</pre>
+          <pre
+            ref="contentBoxRef"
+            class="thought-full-content"
+            @scroll="handleContentScroll"
+          >{{ currentThoughtText }}</pre>
         </div>
       </div>
     </n-drawer-content>
@@ -46,6 +50,30 @@ const conversationStore = useConversationStore()
 const agentStore = useAgentStore()
 
 const contentBoxRef = ref<HTMLElement | null>(null)
+
+// 用户是否停留在底部附近：由 @scroll 实时维护。内容增高不会触发 scroll 事件，
+// 因此该值天然表达"内容增长前是否贴底"，作为流式跟随的判定依据
+const isUserNearBottom = ref(true)
+
+// 距底判定：距底 10px 容差内视为停留在底部
+const isNearBottom = () => {
+  const el = contentBoxRef.value
+  if (!el) return false
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= 10
+}
+
+// 强制贴底并同步记录状态
+const stickToBottom = () => {
+  const el = contentBoxRef.value
+  if (!el) return
+  el.scrollTop = el.scrollHeight
+  isUserNearBottom.value = true
+}
+
+// 滚动事件：实时记录用户是否停留在底部附近（向上翻阅时置 false，翻回底部自动恢复跟随）
+const handleContentScroll = () => {
+  isUserNearBottom.value = isNearBottom()
+}
 
 const width = computed(() => {
   return isMobile.value ? '100%' : 650
@@ -78,34 +106,28 @@ const charCountText = computed(() => {
   return `共 ${len} 字符`
 })
 
-// 打开抽屉时初始化置底
+// 打开抽屉时初始化置底：nextTick 快速贴底；入场动画/内容挂载期间布局可能未定型导致单次贴底落空，
+// 因此在 n-drawer 的 after-enter（入场动画结束、布局稳定）再兜底校准一次
 watch(
   () => appStore.showThoughtDrawer,
   (show) => {
     if (show) {
+      isUserNearBottom.value = true
       nextTick(() => {
-        if (contentBoxRef.value) {
-          contentBoxRef.value.scrollTop = contentBoxRef.value.scrollHeight
-        }
+        stickToBottom()
       })
     }
   }
 )
 
-// 流式接收时自动跟随置底（若用户向上阅读则不强行打扰）
+// 流式接收时自动跟随置底：依据"内容增长前"的贴底记录判定，避免内容已长高导致实时判定误判为用户上翻而永不跟随；
+// 用户向上阅读（scroll 记录为 false）则不强行打扰
 watch(
   () => currentThoughtText.value,
   () => {
-    if (appStore.showThoughtDrawer) {
+    if (appStore.showThoughtDrawer && isUserNearBottom.value) {
       nextTick(() => {
-        if (contentBoxRef.value) {
-          const el = contentBoxRef.value
-          // 必须完全在底部（距底 10px 以内）才自动跟随，避免用户稍向上翻阅被打断
-          const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 10
-          if (isAtBottom) {
-            el.scrollTop = el.scrollHeight
-          }
-        }
+        stickToBottom()
       })
     }
   }

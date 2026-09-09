@@ -46,11 +46,10 @@
         class="worktree-content"
         style="display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 8px; height: calc(100vh - 240px);"
       >
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <div style="display: flex; align-items: center; margin-bottom: 4px;">
           <span style="font-size: 0.8rem; font-weight: bold; color: #888;">
             {{ t('review.modifiedFiles') }} ({{ worktreeStore.worktreeDiffs.length }})
           </span>
-          <span style="font-size: 0.75rem; color: #666;">{{ t('review.diffTip') }}</span>
         </div>
 
         <div
@@ -81,7 +80,13 @@
             >
               <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
                 <span :class="['change-dot', fd.changeType?.toLowerCase() || 'modify']"></span>
-                <span class="file-name-text" style="text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">{{ fd.filename }}</span>
+                <span
+                  class="file-name-text"
+                  :title="fd.filename"
+                  style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; min-width: 0; flex: 1;"
+                >
+                  <bdi>{{ fd.filename }}</bdi>
+                </span>
               </div>
               
               <span :class="['change-badge', fd.changeType?.toLowerCase() || 'modify']">

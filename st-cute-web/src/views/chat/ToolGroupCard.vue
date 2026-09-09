@@ -119,6 +119,8 @@ const getStatusClass = (status: string | undefined) => {
   if (lower === 'rejected') return 'rejected'
   if (lower === 'canceled') return 'canceled'
   if (lower === 'running' || lower === 'pending') return 'running'
+  // 执行失败：映射为红色圆点，与成功状态明确区分（main.css 已有 .failed 样式）
+  if (lower === 'failed') return 'failed'
   return 'success'
 }
 
@@ -403,6 +405,11 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 
 .tool-status-dot.canceled {
   background-color: var(--text-color-secondary);
+}
+
+.tool-status-dot.failed {
+  background-color: var(--status-error);
+  box-shadow: 0 0 6px rgba(208, 48, 80, 0.5);
 }
 
 @keyframes pulse {

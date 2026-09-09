@@ -5,8 +5,15 @@ export const getConversations = async (): Promise<Conversation[]> => {
   return request.get('/api/conversation/list')
 }
 
-export const getConversationMessages = async (cid: number): Promise<LimitMessageDto> => {
-  return request.get(`/api/message/list?cid=${cid}`)
+export const getConversationMessages = async (
+  cid: number,
+  options?: { folded?: boolean; minId?: number; maxId?: number }
+): Promise<LimitMessageDto> => {
+  const folded = options?.folded !== undefined ? options.folded : true
+  let url = `/api/message/list?cid=${cid}&folded=${folded}`
+  if (options?.minId !== undefined) url += `&minId=${options.minId}`
+  if (options?.maxId !== undefined) url += `&maxId=${options.maxId}`
+  return request.get(url)
 }
 
 export const deleteConversationById = async (cid: number): Promise<any> => {

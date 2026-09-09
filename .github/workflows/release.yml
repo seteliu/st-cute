@@ -46,8 +46,8 @@ jobs:
 
       - name: Copy Frontend Assets to Backend
         run: |
-          mkdir -p st-cute-service/src/main/resources/static
-          cp -r st-cute-web/dist/* st-cute-service/src/main/resources/static/
+          mkdir -p st-cute-core/st-cute-service/src/main/resources/static
+          cp -r st-cute-web/dist/* st-cute-core/st-cute-service/src/main/resources/static/
 
       - name: Set up JDK 25 with Maven cache
         uses: actions/setup-java@v4
@@ -58,18 +58,21 @@ jobs:
 
       - name: Build Backend with Maven
         run: |
-          cd st-cute-service
+          cd st-cute-core
           mvn clean package -DskipTests -B
 
       - name: Resolve Version, Prepare Dist Files & Build Base Package
         id: resolve_version
+        # 手动触发的版本号入参经环境变量传递，避免表达式直接内插 shell 造成注入风险
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           mkdir -p dist_app
-          cp st-cute-service/target/st-cute-service-*.jar dist_app/app.jar
+          cp st-cute-core/st-cute-service/target/st-cute-service-*.jar dist_app/app.jar
 
-          # 解析版本号优先级：输入的版本号 > Git Tag > pom.xml 中的 <version> (精准跳过 parent 块)
-          POM_VERSION=$(sed -n '/<\/parent>/,/<dependencies>/p' st-cute-service/pom.xml | grep -m 1 '<version>' | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r\n')
-          INPUT_VER="${{ inputs.version }}"
+          # 解析版本号优先级：输入的版本号 > Git Tag > 聚合根 pom.xml 中的 <version> (精准跳过 parent 块)
+          POM_VERSION=$(sed -n '/<\/parent>/,/<dependencies>/p' st-cute-core/pom.xml | grep -m 1 '<version>' | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r\n')
+          INPUT_VER="$INPUT_VERSION"
           if [ -n "$INPUT_VER" ]; then
               RAW_VER="$INPUT_VER"
           elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then

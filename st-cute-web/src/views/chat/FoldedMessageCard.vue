@@ -25,13 +25,13 @@
           </template>
           <div class="folded-warning-tooltip">
             <div class="warning-title">{{ t('chat.foldedWarningTitle') }}</div>
-            <div v-for="(err, idx) in errorDetails" :key="idx" class="warning-item">
+            <div v-for="(err, idx) in errorTexts" :key="idx" class="warning-item">
               • {{ err }}
             </div>
           </div>
         </n-tooltip>
       </div>
-      <n-button class="detail-btn" size="tiny" quaternary type="primary" @click="openDrawer">
+      <n-button class="detail-btn" size="tiny" quaternary type="primary" @click="openDetail">
         {{ t('chat.detail') }}
       </n-button>
     </div>
@@ -55,11 +55,20 @@
             <span class="subtitle-text">{{ t('chat.foldedDetailSubtitle', { assistant: assistantCount, tool: toolCount }) }}</span>
           </div>
         </template>
-        
+
         <div class="detail-body" :style="contentStyle">
           <div class="detail-chat-flow">
+            <!-- 详情加载中 -->
+            <div v-if="detailLoading" class="detail-loading">
+              <n-spin size="small" />
+            </div>
+            <!-- 详情加载失败 -->
+            <div v-else-if="detailError" class="detail-error">
+              {{ detailError }}
+            </div>
             <message-list-flow
-              :messages="foldedItems"
+              v-else
+              :messages="detailRenderItems"
               :is-sub-agent="true"
               :cid="cid"
             />
@@ -71,14 +80,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, defineAsyncComponent, type CSSProperties } from 'vue'
+import { ref, computed, defineAsyncComponent, watch, type CSSProperties } from 'vue'
 import { useResponsive } from '@/utils/useResponsive'
-import { RenderItem } from './MessageListFlow.vue'
 import { t } from '@/i18n'
 import { formatToolName } from '@/utils/toolName'
+import { buildRenderItems, type RenderItem } from '@/utils/foldEngine'
+import { getConversationMessages } from '@/api/conversation'
+import { Message, FoldErrorDetail } from '@/types'
 
 const props = defineProps<{
-  foldedItems: RenderItem[]
+  /** 折叠块虚拟消息（携带 foldedMinId/foldedMaxId/assistantCount/toolCount/errorDetails 元信息） */
+  folded: Message
   cid?: number | null
 }>()
 
@@ -87,60 +99,66 @@ const MessageListFlow = defineAsyncComponent(() => import('./MessageListFlow.vue
 const { isMobile } = useResponsive()
 const showDetail = ref(false)
 
-const openDrawer = () => {
+// 详情明细状态：按需范围查询加载（folded=false + minId/maxId），关闭弹窗即丢弃，防止内存积压
+const detailLoading = ref(false)
+const detailError = ref('')
+const detailMessages = ref<Message[]>([])
+const detailRenderItems = computed<RenderItem[]>(() => buildRenderItems(detailMessages.value))
+
+const assistantCount = computed(() => props.folded.assistantCount || 0)
+const toolCount = computed(() => props.folded.toolCount || 0)
+
+// 异常文案映射：kind+toolName 结构化条目 → i18n 文案（与后端约定，后端不拼死文案）
+const errorTexts = computed<string[]>(() => {
+  const details: FoldErrorDetail[] = props.folded.errorDetails || []
+  const texts: string[] = []
+  for (const d of details) {
+    if (d.kind === 'tool') {
+      texts.push(t('chat.foldedFailedTool', { name: formatToolName(d.toolName || 'tool') }))
+    } else {
+      texts.push(t('chat.foldedFailedMsg'))
+    }
+  }
+  return texts
+})
+
+const hasError = computed(() => errorTexts.value.length > 0)
+
+// 打开详情弹窗：携带折叠区间范围查询完整明细（不折叠平铺返回）
+const openDetail = async () => {
   showDetail.value = true
+  const minId = props.folded.foldedMinId
+  const maxId = props.folded.foldedMaxId
+  if (minId === undefined || maxId === undefined) {
+    detailError.value = t('chat.foldedDetailMissingRange')
+    return
+  }
+  if (!props.cid) {
+    detailError.value = t('chat.foldedDetailMissingRange')
+    return
+  }
+  detailLoading.value = true
+  detailError.value = ''
+  try {
+    const res = await getConversationMessages(props.cid, { folded: false, minId, maxId })
+    detailMessages.value = (res.messages || []).map(msg => {
+      if (msg.role) msg.role = msg.role.toLowerCase() as any
+      return msg
+    })
+  } catch (e) {
+    console.error('加载折叠详情消息失败:', e)
+    detailError.value = t('chat.foldedDetailLoadError')
+  } finally {
+    detailLoading.value = false
+  }
 }
 
-// 统计助手消息数
-const assistantCount = computed(() => {
-  return props.foldedItems.filter(
-    item => item.type === 'message' &&
-    (item.data.role === 'assistant' || item.data.role === 'branch' || item.data.role === 'compressed')
-  ).length
-})
-
-// 统计工具消息数
-const toolCount = computed(() => {
-  let count = 0
-  for (const item of props.foldedItems) {
-    if (item.type === 'message' && item.tools) {
-      count += item.tools.length
-    } else if (item.type === 'tool_group' && item.tools) {
-      count += item.tools.length
-    }
+// 关闭弹窗时丢弃明细，释放内存
+watch(showDetail, (val) => {
+  if (!val) {
+    detailMessages.value = []
   }
-  return count
 })
-
-// 扫描折叠项中的异常与失败操作
-const errorDetails = computed<string[]>(() => {
-  const errors: string[] = []
-  for (const item of props.foldedItems) {
-    if (item.type === 'message') {
-      if (item.data.status === 'FAILED') {
-        errors.push(t('chat.foldedFailedMsg'))
-      }
-      if (item.tools && item.tools.length > 0) {
-        for (const tool of item.tools) {
-          if (tool.status === 'FAILED') {
-            const name = tool.toolName || (tool as any).name || 'tool'
-            errors.push(t('chat.foldedFailedTool', { name: formatToolName(name) }))
-          }
-        }
-      }
-    } else if (item.type === 'tool_group' && item.tools) {
-      for (const tool of item.tools) {
-        if (tool.status === 'FAILED') {
-          const name = tool.toolName || (tool as any).name || 'tool'
-          errors.push(t('chat.foldedFailedTool', { name: formatToolName(name) }))
-        }
-      }
-    }
-  }
-  return errors
-})
-
-const hasError = computed(() => errorDetails.value.length > 0)
 
 // 弹窗与样式自适应控制 (自适应适配 PC 和移动端)
 const modalStyle = computed<CSSProperties>(() => {
@@ -350,6 +368,21 @@ const contentStyle = computed<CSSProperties>(() => {
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
+}
+
+/* 详情加载中 / 失败占位 */
+.detail-loading,
+.detail-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-color-muted);
+  font-size: 0.85rem;
+}
+
+.detail-error {
+  color: var(--status-error, #d03050);
 }
 
 /* 确保详情里的 virtual list 被限制在容器内滚动 */

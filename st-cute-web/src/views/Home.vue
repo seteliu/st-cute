@@ -32,7 +32,14 @@ import { onMounted, onUnmounted, computed, watch } from 'vue'
 import { initResponsive, useResponsive } from '@/utils/useResponsive'
 import { wsService } from '@/services/websocket'
 import { getConversationMessages } from '@/api/conversation'
-import { Message } from '@/types'
+import { Message, StreamChunkPayload } from '@/types'
+import {
+  appendIncomingMessage,
+  isInFoldedRange,
+  onAssistantTerminal,
+  onToolWaitingApproval,
+  applyResetDeletion
+} from '@/utils/foldEngine'
 
 // 状态 Store 引入
 import { useAppStore } from '@/stores/app'
@@ -88,8 +95,8 @@ onMounted(async () => {
   // 防御性清空先前残留的 WS 回调监听器，彻底解决 HMR 或重复 mount 导致的流式内容叠加 Bug
   wsService.clearAllCallbacks()
 
-  // 1. 初始化轮询与数据加载
-  worktreeStore.fetchWorktrees()
+  // 1. 初始化轮询（首次不主动拉取：此刻 activeCid 尚未就绪，fetchWorktrees 只会空转清态；
+  //    真正的首次拉取由后续 selectConversation 的 loadEnvAssets 链触发）
   worktreeTimer = window.setInterval(() => {
     worktreeStore.fetchWorktrees(true)
   }, 10000)
@@ -119,22 +126,6 @@ onMounted(async () => {
     } catch (e) {
       ;(window as any).$message?.error(t('home.historyError'))
     }
-
-    // 3. 项目与会话就绪后，并行加载与当前项目上下文绑定的专属扩展资源
-    const res3 = await Promise.allSettled([
-      agentStore.loadMcpStatus(),
-      agentStore.loadSkills(),
-      agentStore.loadHooks()
-    ])
-    if (res3[0].status === 'rejected') {
-      ;(window as any).$message?.error(t('home.mcpError'))
-    }
-    if (res3[1].status === 'rejected') {
-      ;(window as any).$message?.error(t('home.skillsError'))
-    }
-    if (res3[2].status === 'rejected') {
-      ;(window as any).$message?.error(t('home.hooksError'))
-    }
   } catch (e) {
     console.error('初始化配置拉取发生异常:', e)
   } finally {
@@ -151,7 +142,7 @@ onMounted(async () => {
     if (!isFirstWsOpen) {
       // 断线重连后：优先强刷当前会话详情（消息区立即可见可交互，用户最先感知），
       // 再静默后台全量刷新会话列表（移动端列表通常隐藏，优先级低且不该阻塞详情刷新）。
-      // 离线期间错过的 S2C_CONVERSATION_STATUS 广播会让列表中的 loopRunning 转圈残留旧值，
+      // 离线期间错过的 S2C_CONVERSATION_UPDATED 广播会让列表中的 loopRunning 转圈残留旧值，
       // 后台重拉一次以数据库真值对齐全部会话状态，避免"发送按钮已停转、列表仍在转圈"的分裂观感
       if (conversationStore.activeCid !== null) {
         conversationStore.selectConversation(conversationStore.activeCid, true)
@@ -167,7 +158,7 @@ onMounted(async () => {
     appStore.loopRunning = false
   })
 
-  // 判定是否是子会话。排除 parentCid 值为 0 或 '0' 的假子会话情况（0 代表主会话本身无父智能体）
+  // 判定是否是子会话。parentCid 为 null/undefined 或 0 代表主会话（本身无父智能体），非空合法 ID 代表子会话
   const isSubConversation = (parentCid: any): boolean => {
     return parentCid !== undefined && parentCid !== null && parentCid !== 0 && parentCid !== '0'
   }
@@ -217,11 +208,12 @@ onMounted(async () => {
     }
   })
 
-  // 监听大局会话整建制更新事件
+  // 监听大局会话整建制更新事件（全局广播，涵盖改名、状态监控、Token等）
   wsService.on('S2C_CONVERSATION_UPDATED', (event) => {
     const payload = event.payload
-    const cid = Number(event.cid)
-    const parentCid = event.parentCid
+    if (!payload) return
+    const cid = Number(event.cid ?? payload.id)
+    const parentCid = event.parentCid ?? payload.parentCid
 
     if (isSubConversation(parentCid)) {
       // 说明是子会话的更新：只要其父会话 ID 是当前活动主会话，就同步其最新的状态更新
@@ -256,9 +248,11 @@ onMounted(async () => {
       }
     }
 
-    // 同步更新会话列表中对应的那个
+    // 同步更新会话列表中对应的那个（包括改名、更新时间、running 转圈监控、Token等）
     const currentSess = conversationStore.conversationList.find(s => s.id === cid)
     if (currentSess) {
+      if (payload.title) currentSess.title = payload.title
+      if (payload.updateTime || payload.updatedAt) currentSess.updateTime = payload.updateTime || payload.updatedAt
       currentSess.inputTokens = payload.inputTokens
       currentSess.outputTokens = payload.outputTokens
       currentSess.cachedTokens = payload.cachedTokens
@@ -272,21 +266,6 @@ onMounted(async () => {
     }
   })
 
-  // 监听会话运行状态广播（全局广播、刻意不经过 shouldProcessEvent 过滤）：
-  // 让所有客户端的会话列表都能实时感知任意主会话的 running 状态，驱动转圈监控效果
-  wsService.on('S2C_CONVERSATION_STATUS', (event) => {
-    const payload = event.payload
-    if (!payload || payload.id === undefined || payload.id === null) return
-
-    const target = conversationStore.conversationList.find(s => s.id === Number(payload.id))
-    if (target) {
-      target.loopRunning = payload.loopRunning
-      // 同步刷新名称与最后更新时间，保持列表项展示与后端一致
-      if (payload.title) target.title = payload.title
-      if (payload.updatedAt) target.updatedAt = payload.updatedAt
-    }
-  })
-
   // 监听后端创建消息占位事件
   wsService.on('S2C_MESSAGE_CREATED', (event) => {
     if (!shouldProcessEvent(event)) return
@@ -297,15 +276,14 @@ onMounted(async () => {
     if (payload && payload.id) {
       const newMsg = payload
       if (newMsg.role) newMsg.role = newMsg.role.toLowerCase()
-      
+
       const isSub = isSubConversation(parentCid)
       const targetMessages = isSub
         ? (agentStore.getTargetAgent(Number(cid))?.messages || [])
         : conversationStore.messages
 
-      if (!targetMessages.some((m: any) => m.id === newMsg.id)) {
-        targetMessages.push(newMsg)
-      }
+      // 动态折叠 D1/D5：新消息仅追加外露（USER 直接追加冻结前段；助手/工具追加外露不动折叠块）
+      appendIncomingMessage(targetMessages, newMsg)
 
       // 额外解析并自愈子会话的 role
       if (isSub && newMsg.role === 'user' && typeof newMsg.content === 'string') {
@@ -335,43 +313,61 @@ onMounted(async () => {
         ? (agentStore.getTargetAgent(Number(cid))?.messages || [])
         : conversationStore.messages
 
+      // 动态折叠 D4：目标 id 落在折叠范围内的更新一律忽略，不更新不追加
       const target = targetMessages.find((m: any) => m.id === payload.id)
-      if (target) {
-        // 如果本地消息正在流式追加内容，则不能用服务端下发的 content 覆盖
-        // 否则会导致：流式输出快结束时，S2C_MESSAGE_UPDATED 将本地累积内容清空，消息块短暂消失
-        const isLocalStreaming = target.isStreaming === true
-        // 额外保护：即使 isStreaming 已结束，若本地已累积了较长的内容而服务端下发空内容
-        // （常见于服务端在流式完成后的 UPDATE 事件中 content 字段为 null/empty），也不覆盖
-        const serverSentEmptyContent = (payload.content === null || payload.content === undefined || payload.content === '')
-        const localHasContent = target.content && target.content.length > 0
-        const isPending = payload.status === 'PENDING'
+      const isFoldedTarget = isInFoldedRange(targetMessages, payload.id)
+      if (!isFoldedTarget) {
+        if (target) {
+          // 如果本地消息正在运行或服务端下发空内容（常见于工具调用或取消事件），则保留本地累积的 content 和 thought
+          const isLocalRunning = target.status === 'RUNNING'
+          const serverSentEmptyContent = (payload.content === null || payload.content === undefined || payload.content === '')
+          const localHasContent = target.content && target.content.length > 0
+          const isPending = payload.status === 'PENDING'
 
-        if (!isPending && (isLocalStreaming || (serverSentEmptyContent && localHasContent))) {
-          // 流式中或服务端给空内容：只更新非内容字段（状态、id、role等），保留本地累积的 content 和 thought
-          const { content, thought, isStreaming, ...restPayload } = payload
-          Object.assign(target, restPayload)
+          if (!isPending && (isLocalRunning || (serverSentEmptyContent && localHasContent))) {
+            // 运行中或服务端给空内容：只更新非内容字段（状态、id、role等），保留本地累积的 content 和 thought
+            const { content, thought, ...restPayload } = payload
+            Object.assign(target, restPayload)
+          } else {
+            // 正常情况：完全覆盖
+            Object.assign(target, payload)
+          }
+
+          // D2 工具转 WAITING_APPROVAL：所在小组起外露，之前小组并入折叠块
+          if (target.role === 'tool' && payload.status === 'WAITING_APPROVAL') {
+            onToolWaitingApproval(targetMessages, payload.id)
+          }
         } else {
-          // 正常情况：完全覆盖
-          Object.assign(target, payload)
+          targetMessages.push(payload)
         }
-      } else {
-        targetMessages.push(payload)
+
+        // D3 助手转终态
+        if (payload.role === 'assistant' || payload.role === 'branch' || payload.role === 'compressed') {
+          const m = targetMessages.find((m: any) => m.id === payload.id)
+          if (m && (m.status === 'SUCCESS' || m.status === 'FAILED' || m.status === 'CANCELED')) {
+            onAssistantTerminal(targetMessages, payload.id)
+          }
+        }
       }
 
       if (payload.role === 'assistant' && (payload.status === 'SUCCESS' || payload.status === 'FAILED' || payload.status === 'CANCELED')) {
         if (!isSub) {
           appStore.loopRunning = false
+          conversationStore.loadConversations()
         }
       }
-      if (payload.status === 'FAILED' || payload.status === 'CANCELED') {
-        if (!isSub) {
-          appStore.loopRunning = false
-        } else {
-          // 如果是子代理的消息变成 FAILED/CANCELED，则将该子代理的运行状态设为 failed
-          const sub = agentStore.getTargetAgent(Number(cid))
-          if (sub) {
+      if (isSub) {
+        const sub = agentStore.getTargetAgent(Number(cid))
+        if (sub) {
+          if (payload.status === 'SUCCESS') {
+            sub.status = 'success'
+          } else if (payload.status === 'FAILED' || payload.status === 'CANCELED') {
             sub.status = 'failed'
           }
+        }
+      } else {
+        if (payload.status === 'FAILED' || payload.status === 'CANCELED') {
+          appStore.loopRunning = false
         }
       }
     }
@@ -412,60 +408,51 @@ onMounted(async () => {
 
   const handleChatStream = (event: any, isReasoning: boolean) => {
     if (!shouldProcessEvent(event)) return
-    const payload = event.payload
+    const payload = event.payload as StreamChunkPayload
     const parentCid = event.parentCid
     const cid = event.cid
+
+    const msgId = Number(payload.id)
+    const chunkText = payload.text
+    if (!msgId || !chunkText) return
 
     if (isSubConversation(parentCid)) {
       const sub = agentStore.getTargetAgent(Number(cid))
       if (sub) {
-        let currentMsg = null
-        if (payload.messageId) {
-          currentMsg = sub.messages.find((m: any) => m.id === payload.messageId)
-        }
+        let currentMsg = sub.messages.find((m: any) => m.id === msgId)
         if (!currentMsg) {
-          currentMsg = sub.messages.find((m: any) => m.role === 'assistant' && (m.isStreaming || m.status === 'RUNNING'))
+          currentMsg = sub.messages.find((m: any) => m.role === 'assistant' && (m.status === 'RUNNING' || m.status === 'PENDING'))
         }
         if (!currentMsg) {
           const newMsg: Message = {
-            id: payload.messageId || -Date.now(),
+            id: msgId,
             role: 'assistant',
             content: '',
             thought: '',
-            isStreaming: true,
             status: 'RUNNING'
           }
           sub.messages.push(newMsg)
           currentMsg = newMsg
         }
         if (isReasoning) {
-          currentMsg.thought = (currentMsg.thought || '') + payload.content
+          currentMsg.thought = (currentMsg.thought || '') + chunkText
         } else {
-          currentMsg.content += payload.content
-        }
-        if (payload.isEnd) {
-          currentMsg.isStreaming = false
-          currentMsg.status = 'SUCCESS'
-          sub.status = 'success'
+          currentMsg.content += chunkText
         }
       }
       return
     }
 
-    let currentMsg = null
-    if (payload.messageId) {
-      currentMsg = conversationStore.messages.find(m => m.id === payload.messageId)
+    let currentMsg = conversationStore.messages.find(m => m.id === msgId)
+    if (!currentMsg) {
+      currentMsg = conversationStore.messages.find(m => m.role === 'assistant' && (m.status === 'RUNNING' || m.status === 'PENDING'))
     }
     if (!currentMsg) {
-      currentMsg = conversationStore.messages.find(m => m.role === 'assistant' && (m.isStreaming || m.status === 'RUNNING'))
-    }
-    if (!currentMsg && (payload.content || isReasoning)) {
       currentMsg = {
-        id: payload.messageId || ('assistant_' + Date.now()),
+        id: msgId,
         role: 'assistant' as const,
         content: '',
         thought: '',
-        isStreaming: true,
         status: 'RUNNING' as const
       }
       conversationStore.messages.push(currentMsg)
@@ -473,17 +460,9 @@ onMounted(async () => {
 
     if (currentMsg) {
       if (isReasoning) {
-        currentMsg.thought = (currentMsg.thought || '') + payload.content
+        currentMsg.thought = (currentMsg.thought || '') + chunkText
       } else {
-        currentMsg.content += payload.content
-      }
-      if (payload.isEnd) {
-        currentMsg.isStreaming = false
-        if (currentMsg.status === 'RUNNING') {
-          currentMsg.status = 'SUCCESS'
-        }
-        appStore.loopRunning = false
-        conversationStore.loadConversations()
+        currentMsg.content += chunkText
       }
     }
   }
@@ -508,11 +487,12 @@ onMounted(async () => {
     if (isSub) {
       const sub = agentStore.getTargetAgent(Number(cid))
       if (sub) {
-        sub.messages = sub.messages.filter((m: any) => m.id <= targetId)
+        // 动态折叠 D6：普通消息保留 id <= targetId；FOLDED 块保留 maxId <= targetId（USER 不在折叠块内，无跨界）
+        applyResetDeletion(sub.messages, targetId)
       }
     } else {
       if (cid === conversationStore.activeCid) {
-        conversationStore.messages = conversationStore.messages.filter((m: any) => m.id <= targetId)
+        applyResetDeletion(conversationStore.messages, targetId)
         appStore.loopRunning = false
       }
     }
@@ -559,7 +539,6 @@ onMounted(async () => {
       appStore.httpLog = event.payload.httpLog || false
       appStore.httpLogDays = event.payload.httpLogDays !== undefined ? event.payload.httpLogDays : 7
       appStore.password = event.payload.password || ''
-      appStore.messageAggregation = event.payload.messageAggregation !== undefined ? event.payload.messageAggregation : true
     }
   })
 
@@ -569,6 +548,13 @@ onMounted(async () => {
       providerStore.providerList = event.payload
     } else {
       providerStore.loadProviders()
+    }
+  })
+
+  // 监听 MCP 状态更新事件：MCP 服务异步启动完成或工具集变动时，服务端推送最新全量状态，直接替换看板数据
+  wsService.on('S2C_MCP_UPDATED', (event) => {
+    if (event.payload) {
+      agentStore.mcpList = event.payload
     }
   })
 

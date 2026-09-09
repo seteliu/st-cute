@@ -19,6 +19,7 @@ import { useAppStore } from './app'
 import { useProviderStore } from './provider'
 import { useProjectStore } from './project'
 import { useAgentStore } from './agent'
+import { useWorktreeStore } from './worktree'
 import { Message, Conversation } from '@/types'
 
 export const useConversationStore = defineStore('conversation', () => {
@@ -53,8 +54,9 @@ export const useConversationStore = defineStore('conversation', () => {
     try {
       const data = await getConversations()
       // 过滤出绑定了有效项目的会话，防止历史孤儿脏数据干扰
-      const validConversations = data.filter(s => 
-        s.projectId && projectStore.projectList.some(p => p.id === s.projectId)
+      // （workspaceId 为项目 ID 字符串，与项目列表 id 数值比对需弱等转换）
+      const validConversations = data.filter(s =>
+        s.workspaceId && projectStore.projectList.some(p => String(p.id) === String(s.workspaceId))
       )
       conversationList.value = validConversations
       
@@ -76,12 +78,16 @@ export const useConversationStore = defineStore('conversation', () => {
       if (activeCid.value === null) {
         // 默认选中时，优先选择当前活跃项目下的主会话
         const mainConversations = validConversations.filter(s => !s.parentCid)
-        const activeProjectConv = mainConversations.find(s => s.projectId === projectStore.activeProjectId)
+        const activeProjectConv = mainConversations.find(s =>
+          projectStore.activeProjectId !== null && String(s.workspaceId) === String(projectStore.activeProjectId)
+        )
         if (activeProjectConv) {
           await selectConversation(activeProjectConv.id)
         } else if (mainConversations.length > 0) {
           await selectConversation(mainConversations[0].id)
-        } else if (projectStore.projectList.length > 0) {
+        } else if (projectStore.projectList.length > 0 && projectStore.activeProjectId !== null) {
+          // 只有当前项目确实存在且 activeProjectId 有效时，才自动创建会话
+          // 避免删除项目后立即创建孤立会话
           await createConversation(projectStore.activeProjectId || undefined)
         }
       }
@@ -99,10 +105,12 @@ export const useConversationStore = defineStore('conversation', () => {
     isMessageSpinning.value = true
 
     // 联动切换当前选中的项目并初始化 Token 用量展示
+    // （workspaceId 为项目 ID 字符串，changeActiveProject 需要数值 ID，做安全转换）
     const sess = conversationList.value.find(s => s.id === id)
     if (sess) {
-      if (sess.projectId) {
-        projectStore.changeActiveProject(sess.projectId)
+      const projectIdNum = sess.workspaceId ? Number(sess.workspaceId) : NaN
+      if (!Number.isNaN(projectIdNum)) {
+        projectStore.changeActiveProject(projectIdNum)
       }
       inputTokens.value = sess.inputTokens || 0
       outputTokens.value = sess.outputTokens || 0
@@ -125,27 +133,6 @@ export const useConversationStore = defineStore('conversation', () => {
           role: roleLower
         }
       })
-
-      // 获取当前环境信息（包括 token、skill、hook、mcp 等）并同步分发至 Store
-      const envInfo = await getContextInfoApi(id)
-      const agentStore = useAgentStore()
-      agentStore.skillsList = envInfo.skills || []
-      agentStore.hooksList = envInfo.hooks || []
-      agentStore.mcpList = envInfo.mcpServers || []
-      agentStore.rulesList = envInfo.rules || []
-      if (envInfo.permissionMode) {
-        appStore.permissionMode = envInfo.permissionMode
-      } else {
-        appStore.permissionMode = 'READ_ONLY'
-      }
-      
-      // 顺便同步最新的 Token 用量与 LoopRunning 状态
-      inputTokens.value = envInfo.inputTokens || 0
-      outputTokens.value = envInfo.outputTokens || 0
-      cachedTokens.value = envInfo.cachedTokens || 0
-      if (envInfo.loopRunning !== undefined) {
-        appStore.loopRunning = envInfo.loopRunning
-      }
     } catch (e) {
       console.error('加载历史消息与会话状态失败:', e)
       ;(window as any).$message?.error('加载历史消息与会话状态失败，请检查网络或后端连接')
@@ -156,6 +143,41 @@ export const useConversationStore = defineStore('conversation', () => {
         isMessageSpinning.value = false
       }, 150)
     }
+
+    // 环境资产静默加载：消息列表就绪后执行，独立 try 且不阻塞本函数返回，全程不触发转圈。
+    // 顺序：先拉环境上下文 info（权限模式、Token 用量、技能等）；worktree 与变动列表优先级最低，info 完成后再拉。
+    // 守卫：回包时若已切走到其他会话则整体中止，避免旧会话慢响应污染新会话状态（新会话会自行触发加载）
+    const loadEnvAssets = async () => {
+      try {
+        const envInfo = await getContextInfoApi(id)
+        if (activeCid.value !== id) return
+        const agentStore = useAgentStore()
+        agentStore.skillsList = envInfo.skills || []
+        agentStore.hooksList = envInfo.hooks || []
+        agentStore.mcpList = envInfo.mcpServers || []
+        agentStore.rulesList = envInfo.rules || []
+        if (envInfo.permissionMode) {
+          appStore.permissionMode = envInfo.permissionMode
+        } else {
+          appStore.permissionMode = 'READ_ONLY'
+        }
+
+        // 顺便同步最新的 Token 用量与 LoopRunning 状态
+        inputTokens.value = envInfo.inputTokens || 0
+        outputTokens.value = envInfo.outputTokens || 0
+        cachedTokens.value = envInfo.cachedTokens || 0
+        if (envInfo.loopRunning !== undefined) {
+          appStore.loopRunning = envInfo.loopRunning
+        }
+
+        const worktreeStore = useWorktreeStore()
+        await worktreeStore.fetchWorktrees(true)
+      } catch (e) {
+        console.error('加载会话环境上下文信息失败:', e)
+        ;(window as any).$message?.error('加载会话环境上下文信息失败，请检查网络或后端连接')
+      }
+    }
+    loadEnvAssets()
   }
 
   // 新建会话
@@ -166,9 +188,10 @@ export const useConversationStore = defineStore('conversation', () => {
       return
     }
     
+    // workspaceId 为项目 ID 的字符串形态（Coding 宿主语义，由后端 WorkspaceResolver 解释）
     const payload: Partial<Conversation> = {
       title: '新会话',
-      projectId: pId
+      workspaceId: String(pId)
     }
 
     try {
@@ -193,11 +216,25 @@ export const useConversationStore = defineStore('conversation', () => {
 
       if (activeCid.value === id) {
         activeCid.value = null
-        if (conversationList.value.length > 0) {
+        // 优先在当前选中项目的会话中选择
+        const currentProjectId = projectStore.activeProjectId
+        const projectConversations = currentProjectId
+          ? conversationList.value.filter(s => String(s.workspaceId) === String(currentProjectId))
+          : []
+        
+        if (projectConversations.length > 0) {
+          // 当前项目还有会话，选中第一个
+          await selectConversation(projectConversations[0].id)
+        } else if (currentProjectId === null && conversationList.value.length > 0) {
+          // 无活跃项目时的兜底：无项目上下文才有资格跳到其他会话
           await selectConversation(conversationList.value[0].id)
-        } else {
+        } else if (currentProjectId !== null) {
+          // 当前项目的会话已删光但项目还在：留在当前项目下新建会话，不跳其他项目的会话（与刷新后 loadConversations 行为一致）
           clearContext()
-          createConversation()
+          createConversation(currentProjectId || undefined)
+        } else {
+          // 没有项目了，彻底清空
+          clearContext()
         }
       }
     } catch (e) {
@@ -214,11 +251,25 @@ export const useConversationStore = defineStore('conversation', () => {
 
       if (activeCid.value !== null && ids.includes(activeCid.value)) {
         activeCid.value = null
-        if (conversationList.value.length > 0) {
+        // 优先在当前选中项目的会话中选择
+        const currentProjectId = projectStore.activeProjectId
+        const projectConversations = currentProjectId
+          ? conversationList.value.filter(s => String(s.workspaceId) === String(currentProjectId))
+          : []
+        
+        if (projectConversations.length > 0) {
+          // 当前项目还有会话，选中第一个
+          await selectConversation(projectConversations[0].id)
+        } else if (currentProjectId === null && conversationList.value.length > 0) {
+          // 无活跃项目时的兜底：无项目上下文才有资格跳到其他会话
           await selectConversation(conversationList.value[0].id)
-        } else {
+        } else if (currentProjectId !== null) {
+          // 当前项目的会话已删光但项目还在：留在当前项目下新建会话，不跳其他项目的会话（与刷新后 loadConversations 行为一致）
           clearContext()
-          createConversation()
+          createConversation(currentProjectId || undefined)
+        } else {
+          // 没有项目了，彻底清空
+          clearContext()
         }
       }
     } catch (e) {

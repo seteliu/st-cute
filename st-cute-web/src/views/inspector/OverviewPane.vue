@@ -1,17 +1,17 @@
 <template>
   <div class="pane-content">
     <h4>{{ t('overview.envTitle') }}</h4>
-    <div class="info-card" style="padding: 16px; margin-bottom: 20px; background: rgba(30, 30, 35, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);">
+    <div class="info-card" style="padding: 12px; margin-bottom: 16px; background: rgba(30, 30, 35, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);">
       <div style="display: flex; flex-direction: column; gap: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem;">{{ t('overview.currentProject') }}</span>
-          <span style="color: var(--text-color-bright); font-weight: bold; font-size: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+          <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.currentProject') }}</span>
+          <n-ellipsis style="min-width: 0; color: var(--text-color-bright); font-weight: bold; font-size: 0.85rem; text-align: right;">
             {{ currentProject ? currentProject.name : t('overview.unselected') }}
-          </span>
+          </n-ellipsis>
         </div>
         <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: var(--text-color-secondary); font-size: 0.85rem;">{{ t('overview.physicalPath') }}</span>
+            <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.physicalPath') }}</span>
             <n-button
               v-if="currentProject?.path"
               quaternary
@@ -33,34 +33,53 @@
           </span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem;">{{ t('overview.os') }}</span>
-          <span style="color: var(--text-color-bright); font-size: 0.85rem;">Windows 11</span>
+          <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.os') }}</span>
+          <span style="color: var(--text-color-bright); font-size: 0.85rem; white-space: nowrap;">Windows 11</span>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem;">{{ t('overview.gitBranch') }}</span>
-          <n-tag size="mini" round :bordered="false" style="font-family: monospace; color: #ffffff; background-color: rgba(255, 255, 255, 0.08);">
+        <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.gitBranch') }}</span>
+            <n-button
+              v-if="worktreeStore.selectedWorktree?.branch"
+              quaternary
+              circle
+              size="tiny"
+              :title="t('overview.copyBranch')"
+              @click="handleCopyBranch(worktreeStore.selectedWorktree.branch)"
+            >
+              <template #icon>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </template>
+            </n-button>
+          </div>
+          <span style="word-break: break-all; font-family: monospace; font-size: 0.75rem; color: #a0a0a5; background: rgba(0,0,0,0.15); padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.03);">
             {{ worktreeStore.selectedWorktree?.branch || t('inspector.none') }}
-          </n-tag>
+          </span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem;">{{ t('overview.activeProcess') }}</span>
+          <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.activeProcess') }}</span>
           <n-button
             secondary
             strong
             type="info"
             size="tiny"
+            style="flex-shrink: 0;"
             @click="showProcessModal = true"
           >
             {{ t('overview.viewDetails') }}
           </n-button>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem;">{{ t('overview.activeNetwork') }}</span>
+          <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.activeNetwork') }}</span>
           <n-button
             secondary
             strong
             type="info"
             size="tiny"
+            style="flex-shrink: 0;"
             @click="showLlmModal = true"
           >
             {{ t('overview.viewDetails') }}
@@ -84,9 +103,11 @@
       style="cursor: pointer; margin-bottom: 12px; position: relative;"
       @click="agentStore.openSubAgentDrawer(Number(sub.cid))"
     >
-      <div class="subagent-header" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px;">
-        <span class="role" style="font-weight: bold; font-size: 0.85rem; color: var(--text-color-bright);">{{ sub.role }}</span>
-        <sub-agent-status-tag :status="sub.status" />
+      <div class="subagent-header" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <n-ellipsis style="min-width: 0; flex: 1;">
+          <span class="role" style="font-weight: bold; font-size: 0.85rem; color: var(--text-color-bright);">{{ sub.role }}</span>
+        </n-ellipsis>
+        <sub-agent-status-tag :status="sub.status" style="flex-shrink: 0;" />
       </div>
       <div class="subagent-task">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -374,6 +395,15 @@ const handleCopyPath = (path: string) => {
     message.success('项目物理路径已复制到剪贴板')
   }).catch(() => {
     message.error('物理路径复制失败')
+  })
+}
+
+const handleCopyBranch = (branch: string) => {
+  if (!branch) return
+  navigator.clipboard.writeText(branch).then(() => {
+    message.success('Git 分支名已复制到剪贴板')
+  }).catch(() => {
+    message.error('Git 分支名复制失败')
   })
 }
 

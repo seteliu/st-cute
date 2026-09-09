@@ -20,7 +20,7 @@
         <div v-if="appStore.showMessageAvatar" class="avatar">{{ avatarLabel }}</div>
         <div class="msg-content-wrapper">
           <div 
-            v-if="message.content || message.thought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || ((message.isStreaming || message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !message.thought)" 
+            v-if="message.content || message.thought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || ((message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !message.thought)" 
             class="msg-content"
           >
             <!-- 附件区域展示 -->
@@ -57,10 +57,15 @@
               <span v-else-if="message.status === 'FAILED'">上下文压缩失败</span>
               <span v-else>上下文压缩状态: {{ message.status }}</span>
             </div>
-            <div v-else v-html="formattedContent"></div>
-            <!-- 思考中指示 (大模型正在运行/加载且尚未有输出内容时，显示三个小点跳动动效) -->
             <div
-              v-if="message.role !== 'compressed' && (message.isStreaming || message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !message.thought"
+              v-else
+              class="markdown-content"
+              :class="{ 'is-running': isStreamingRunning && !!message.content }"
+              v-html="formattedContent"
+            ></div>
+            <!-- 思考中指示 (大模型正在运行/加载且尚未有输出正文内容时，显示三个小点跳动动效) -->
+            <div
+              v-if="message.role !== 'compressed' && isStreamingRunning && !message.content"
               class="thinking-animation"
             >
               <span class="thinking-dot"></span>
@@ -218,6 +223,13 @@ const avatarLabel = computed(() => {
   return 'A'
 })
 
+// 消息是否处于流式执行/活跃中
+const isStreamingRunning = computed(() => {
+  return props.message.role !== 'compressed' &&
+    props.message.role !== 'user' &&
+    (props.message.status === 'RUNNING' || props.message.status === 'PENDING')
+})
+
 // 只允许最后一个用户消息之后的消息可以重试，防止历史消息中重试导致上下文错乱
 const canRetry = computed(() => {
   if (props.isSubAgent || props.message.status !== 'FAILED') {
@@ -307,7 +319,7 @@ const formatTime = (timeStr?: string) => {
 const cachedTime = ref('')
 
 const displayTime = computed(() => {
-  const formatted = formatTime(props.message.createdAt)
+  const formatted = formatTime(props.message.createTime || (props.message as any).createdAt)
   if (formatted) {
     cachedTime.value = formatted
   }
@@ -316,10 +328,26 @@ const displayTime = computed(() => {
 </script>
 
 <style scoped>
-.cursor-typing {
-  font-size: 0.85rem;
-  color: var(--status-warning);
-  font-style: italic;
+/* 正文末尾呼吸打字光标 */
+.markdown-content.is-running :deep(> :last-child::after) {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  margin-left: 4px;
+  vertical-align: -1.5px;
+  background-color: var(--primary-color);
+  border-radius: 2px;
+  animation: cursor-breathe 1.2s infinite ease-in-out;
+}
+
+@keyframes cursor-breathe {
+  0%, 100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.95;
+  }
 }
 
 .thinking-animation {

@@ -8,15 +8,28 @@
   <a href="./README.md">简体中文</a> | <a href="./README_EN.md">English</a>
 </p>
 
-**ST-Cute** is a decoupled front-end and back-end AI Coding Agent & Harness, shipping as both a desktop client and a web application.
-Built on an event-driven ReAct Loop, it supports RULE, SKILL, MCP, and HOOK, and is compatible with mainstream `.agents` directory configurations.
-It offers full observability into LLM HTTP requests and the tool call process.
-Between overly simple tools and bloated frameworks, it strikes the perfect balance as a lightweight player that is just right—easy to handle.
+**ST-Cute** is a decoupled front-end and back-end AI Coding Agent & Harness, shipping as both a desktop client and a web application. Built on an event-driven ReAct Loop, it is compatible with mainstream `.agents` directory configurations.
 
 [![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-green.svg)](https://spring.io/projects/spring-boot)
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-brightgreen.svg)](https://vuejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+---
+
+## 🏛️ Project Highlights
+
+**Engine & Architecture**
+
+- **Kernel highlights**: `st-cute-engine` is a pure-Java engine with zero Spring dependencies, fully decoupled from its host environment. Beyond local coding, web services and cloud SaaS can all act as hosts; the ReAct loop, event bus, context-window protection, and self-healing are built into the engine, while tools, MCP, and skill management are left to the host. It also serves as a reference for building Agents in Java.
+
+**Usage & Experience**
+
+- **Lightweight & ready-to-run**: just right between oversimplified and bloated. Unzip and run, full-featured. Easy to handle.
+- **Multi-device sync**: deploy once, and desktop / web / mobile clients all get the full feature set, with responsive mobile-friendly UI — Vibe Coding even on the subway.
+- **Office document support**: built-in tools read PDF / Word / Excel directly, no external conversion needed.
+- **Silky messages**: ultra-smooth message list with smart folding; thinking process, tool call chains, SubAgent execution status, active subprocesses, and complete LLM HTTP request/response logs fully traceable.
+- **Pure & secure**: 100% portable, no backdoors, with path sandbox support.
 
 ---
 
@@ -28,19 +41,11 @@ Between overly simple tools and bloated frameworks, it strikes the perfect balan
 
 ---
 
-## 🎯 Target Audience
-* 💡 **Want to understand Coding Agent principles**: Clean code structure, small but complete, well-designed without over-engineering—an excellent Java-based Agent reference.
-* 🔍 **Pursue full control & complete observability**: Clearly monitor thinking process, tool call chains, SubAgent execution status, active subprocesses, and complete LLM HTTP request/response logs.
-* 📱 **Deploy a cross-device Agent**: B/S architecture with responsive WebUI; PC and mobile share the same origin—"Deploy once, connect from multiple devices".
-* 🛡️ **Pure & secure**: 100% portable, no backdoors, with path sandbox support.
-
----
-
 ## 🛠️ Tech Stack
 
 | Module | Technology | Description |
 | :--- | :--- | :--- |
-| **Backend** (`st-cute-service`) | Java 25 / Spring Boot 4.1 | Event-driven lightweight architecture |
+| **Backend** (`st-cute-core`) | Java 25 / Spring Boot 4.1 | Event-driven lightweight architecture |
 | **Persistence** | SQLite 3 + MyBatis-Flex | WAL mode enabled by default, no heavy database setup |
 | **Communication** | OkHttp + WebSocket | REST API + real-time bi-directional streaming, complete HTTP probe logs |
 | **Frontend** (`st-cute-web`) | Vue 3 + Vite 8 + TypeScript 6 | Naive UI component library, managed via pnpm workspace |
@@ -150,9 +155,9 @@ If you want to do secondary development or build from source:
 * **Build Tool**: `Maven 3.9+`
 * **Node.js**: `Node.js 22+` & `pnpm 11+`
 
-#### Start Backend Service (`st-cute-service`)
+#### Start Backend Service (`st-cute-core`, host module `st-cute-service`)
 ```bash
-cd st-cute-service
+cd st-cute-core/st-cute-service
 mvn clean spring-boot:run
 ```
 * In dev debug mode, the backend runs at `http://localhost:9661`.
@@ -173,28 +178,22 @@ Daily development only requires starting the frontend and backend services and a
 * **Environment Requirements**: Rust toolchain (`cargo`, MSVC target on Windows)
 * **Runtime Dependencies**: The shell loads backend artifacts (`app.jar` + JRE); for local debugging, place them under the `st-cute-desktop/src-tauri/resources` directory first
 
+#### 🧪 About Unit Tests
+
+The `test` module currently relies on real-world content simulations. Out of privacy considerations, and given the high frequency of changes in this part, it is not included in this repository for now.
+
 ---
 
 ## 📖 Documentation Guide
 
-Modular documentation is available under the `st-cute-service/src/main/resources/docs/` directory. Click the links below for quick reference:
+Modular documentation is available under the `st-cute-core/st-cute-service/src/main/resources/docs/` directory. Click the links below for quick reference:
 
 * 🚀 **[Quick Start](#-quick-start)**: Package download, environment requirements, and deployment.
-* 📋 **[File Conventions](st-cute-service/src/main/resources/docs/02_file_conventions_en.md)**: Files referenced and produced at runtime.
-* ⚙️ **[RULE Configuration](st-cute-service/src/main/resources/docs/05_RULE_en.md)**: `AGENTS.md` rule definitions and agent behavior constraints.
-* 🧩 **[SKILL Extension Guide](st-cute-service/src/main/resources/docs/06_SKILL_en.md)**: Custom skill declarations and the loading mechanism.
-* 🔌 **[MCP Protocol Integration](st-cute-service/src/main/resources/docs/07_MCP_en.md)**: Model Context Protocol (MCP) server configuration and tool mapping.
-* ⚓ **[HOOK Mechanism](st-cute-service/src/main/resources/docs/08_HOOK_en.md)**: Lifecycle interception before and after tool calls.
-
----
-
-## Why This Project?
-It started as a hands-on journey during the AI wave to experience "how a Coding Agent is built from 0 to 1", so I wrote one myself.
-Meanwhile, other Agents more or less had unsatisfying points:
-- Observability: For example, I wanted to clearly monitor tool calls and complete HTTP logs.
-- Multi-device: For example, I wanted to deploy it at home, connect from my phone when going out, and Vibe Coding on the subway.
-
-Then I realized I could go one step further—it's not just a toy anymore, it's a practical tool.
+* 📋 **[File Conventions](st-cute-core/st-cute-service/src/main/resources/docs/02_file_conventions_en.md)**: Files referenced and produced at runtime.
+* ⚙️ **[RULE Configuration](st-cute-core/st-cute-service/src/main/resources/docs/05_RULE_en.md)**: `AGENTS.md` rule definitions and agent behavior constraints.
+* 🧩 **[SKILL Extension Guide](st-cute-core/st-cute-service/src/main/resources/docs/06_SKILL_en.md)**: Custom skill declarations and the loading mechanism.
+* 🔌 **[MCP Protocol Integration](st-cute-core/st-cute-service/src/main/resources/docs/07_MCP_en.md)**: Model Context Protocol (MCP) server configuration and tool mapping.
+* ⚓ **[HOOK Mechanism](st-cute-core/st-cute-service/src/main/resources/docs/08_HOOK_en.md)**: Lifecycle interception before and after tool calls.
 
 ---
 

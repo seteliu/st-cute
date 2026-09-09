@@ -190,26 +190,35 @@ export const useAgentStore = defineStore('agent', () => {
     })
   }
 
-  const loadSkills = async () => {
+  // 统一加载当前会话的项目上下文扩展资源 (Skills, Hooks, MCP, Rules)
+  const loadContextAssets = async (cid?: number) => {
     try {
       const conversationStore = useConversationStore()
-      const cid = conversationStore.activeCid
-      if (cid === null) return
-      const envInfo = await getContextInfoApi(cid)
-      skillsList.value = envInfo.skills || []
+      const targetCid = cid ?? conversationStore.activeCid
+      if (targetCid === null || targetCid === undefined) return
+      const envInfo = await getContextInfoApi(targetCid)
+      if (envInfo) {
+        skillsList.value = envInfo.skills || []
+        hooksList.value = envInfo.hooks || []
+        mcpList.value = envInfo.mcpServers || []
+        rulesList.value = envInfo.rules || []
+      }
     } catch (e) {
-      console.error('加载技能列表失败:', e)
+      console.error('加载项目上下文扩展资源失败:', e)
     }
   }
+
+  const loadSkills = async () => loadContextAssets()
+  const loadHooks = async () => loadContextAssets()
+  const loadMcpStatus = async () => loadContextAssets()
+  const loadRules = async () => loadContextAssets()
 
   const handleReloadSkills = async () => {
     reloadingSkills.value = true
     try {
       const conversationStore = useConversationStore()
       const success = await conversationStore.reloadProjectAssets()
-      if (success) {
-        await loadSkills()
-      } else {
+      if (!success) {
         if ((window as any).$message) {
           ;(window as any).$message.error('重载当前项目技能包失败')
         } else {
@@ -223,26 +232,12 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  const loadHooks = async () => {
-    try {
-      const conversationStore = useConversationStore()
-      const cid = conversationStore.activeCid
-      if (cid === null) return
-      const envInfo = await getContextInfoApi(cid)
-      hooksList.value = envInfo.hooks || []
-    } catch (e) {
-      console.error('加载切面挂钩列表失败:', e)
-    }
-  }
-
   const handleReloadHooks = async () => {
     reloadingHooks.value = true
     try {
       const conversationStore = useConversationStore()
       const success = await conversationStore.reloadProjectAssets()
-      if (success) {
-        await loadHooks()
-      } else {
+      if (!success) {
         if ((window as any).$message) {
           ;(window as any).$message.error('重载当前项目挂钩配置失败')
         } else {
@@ -256,26 +251,12 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  const loadMcpStatus = async () => {
-    try {
-      const conversationStore = useConversationStore()
-      const cid = conversationStore.activeCid
-      if (cid === null) return
-      const envInfo = await getContextInfoApi(cid)
-      mcpList.value = envInfo.mcpServers || []
-    } catch (e) {
-      console.error('加载 MCP 状态失败:', e)
-    }
-  }
-
   const handleReloadMcp = async (serverName: string) => {
     reloadingServer.value = serverName
     try {
       const conversationStore = useConversationStore()
       const success = await conversationStore.reloadProjectAssets()
-      if (success) {
-        await loadMcpStatus()
-      } else {
+      if (!success) {
         if ((window as any).$message) {
           ;(window as any).$message.error('重载 MCP 失败')
         } else {
@@ -289,26 +270,12 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  const loadRules = async () => {
-    try {
-      const conversationStore = useConversationStore()
-      const cid = conversationStore.activeCid
-      if (cid === null) return
-      const envInfo = await getContextInfoApi(cid)
-      rulesList.value = envInfo.rules || []
-    } catch (e) {
-      console.error('加载项目规约列表失败:', e)
-    }
-  }
-
   const handleReloadRules = async () => {
     reloadingRules.value = true
     try {
       const conversationStore = useConversationStore()
       const success = await conversationStore.reloadProjectAssets()
-      if (success) {
-        await loadRules()
-      } else {
+      if (!success) {
         if ((window as any).$message) {
           ;(window as any).$message.error('重载当前项目规约失败')
         } else {
@@ -362,6 +329,7 @@ export const useAgentStore = defineStore('agent', () => {
     deleteSubAgent,
     handleSubPermissionDecision,
     syncSubAgents,
+    loadContextAssets,
     loadSkills,
     handleReloadSkills,
     loadHooks,
