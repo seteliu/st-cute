@@ -68,4 +68,9 @@ public final class ToolNames {
      * 移动/复制文件工具协议名
      */
     public static final String MOVE_FILE = "move_file";
+
+    /**
+     * SearXNG 联网聚合搜索工具协议名
+     */
+    public static final String WEB_SEARCH = "web_search";
 }

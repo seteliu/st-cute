@@ -1,4 +1,4 @@
-package com.stioc.cute.tool.support;
+package com.stioc.cute.tool.types;
 
 import com.alibaba.fastjson2.annotation.JSONField;
 import com.fasterxml.jackson.annotation.JsonIgnore;

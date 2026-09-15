@@ -35,6 +35,10 @@ const TOOL_NAME_MAP: Record<string, string> = {
   'execute_command': '执行命令',
   'RunCommandTool': '执行命令',
 
+  // 联网搜索类
+  'web_search': '联网搜索',
+  'SearxngSearchTool': '联网搜索',
+
   // 智能体扩展类
   'invoke_subagent': '调用子智能体',
   'load_skill': '加载技能',

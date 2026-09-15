@@ -41,4 +41,13 @@ st-cute:
   # 应用版本号（构建时由 Maven 资源过滤注入 pom 的 project.version）
   version: @project.version@
   llm-log:
-    http-log: true
+    # 原始 HTTP 日志默认关闭（如需排查 LLM 交互报文可手动改为 true）
+    http-log: false
+  search:
+    searxng:
+      # SearXNG 聚合搜索服务基地址（不含 /search 路径，宿主层联网搜索工具数据源）
+      base-url: http://61jun.com:9201
+      # 访问令牌（部署级静态配置，不参与全局系统设置 config.json 的合并）
+      token: st-searxng-gogogo
+      # 搜索请求读取超时（秒）
+      timeout-seconds: 15

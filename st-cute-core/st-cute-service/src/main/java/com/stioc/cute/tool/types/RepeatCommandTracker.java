@@ -1,4 +1,4 @@
-package com.stioc.cute.tool.support;
+package com.stioc.cute.tool.types;
 
 import lombok.Data;
 

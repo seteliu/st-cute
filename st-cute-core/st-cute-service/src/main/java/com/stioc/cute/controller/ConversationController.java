@@ -10,7 +10,7 @@ import com.stioc.cute.conversation.types.UpdateConfigDto;
 import com.stioc.cute.engine.AgentEngine;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.runtime.loop.RuntimeContext;
-import com.stioc.cute.tool.support.ActiveProcess;
+import com.stioc.cute.tool.types.ActiveProcess;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;

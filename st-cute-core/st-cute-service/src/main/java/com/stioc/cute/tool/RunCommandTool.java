@@ -9,8 +9,8 @@ import com.stioc.cute.engine.tool.types.ToolResult;
 import com.stioc.cute.project.ProjectService;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.runtime.loop.RuntimeContext;
-import com.stioc.cute.tool.support.ActiveProcess;
-import com.stioc.cute.tool.support.RepeatCommandTracker;
+import com.stioc.cute.tool.types.ActiveProcess;
+import com.stioc.cute.tool.types.RepeatCommandTracker;
 import com.stioc.cute.engine.event.AgentEventFactory;
 import com.stioc.cute.platform.common.LineMixedCharsetReader;
 import com.stioc.cute.platform.common.NativeCharsetKit;
@@ -155,12 +155,15 @@ public class RunCommandTool implements CuteTool {
             return ToolResult.error("参数 'command' 不能为空。");
         }
 
-        // 硬拦截：禁止使用 PowerShell cmdlet 写入文件。
+        // 硬拦截：禁止使用 PowerShell cmdlet 写入文件（仅 Windows 启用）。
         // Windows 下 Set-Content/Out-File 极易产生编码问题（UTF-8 BOM 导致 javac 报"非法字符 \ufeff"、GBK 中文损坏），
-        // 提示词属软约束无法根治，工具层物理拦截才是真防线（本项目已两次实证翻车）
-        String psWriteReject = checkPowerShellWrite(command);
-        if (psWriteReject != null) {
-            return ToolResult.error(psWriteReject);
+        // 提示词属软约束无法根治，工具层物理拦截才是真防线（本项目已两次实证翻车）；
+        // Linux/macOS 的 pwsh 7 默认 utf8NoBOM 写入，风险低，不拦截避免误伤
+        if (System.getProperty("os.name").toLowerCase().contains("win")) {
+            String psWriteReject = checkPowerShellWrite(command);
+            if (psWriteReject != null) {
+                return ToolResult.error(psWriteReject);
+            }
         }
 
         // 解析编码参数：auto = 自动探测（默认），其他值按 Java 字符集名强制指定
@@ -632,10 +635,12 @@ public class RunCommandTool implements CuteTool {
         String hints = "";
         String trimmed = output != null ? output.trim() : "";
 
-        // 模式1：管道末端命令无匹配导致退出码非 0 且无/极少输出（Windows findstr 典型场景）。
-        // 前置命令可能并未失败，模型易误判为命令失败而反复重试
+        // 模式1：管道末端命令无匹配导致退出码非 0 且无/极少输出。
+        // 前置命令可能并未失败，模型易误判为命令失败而反复重试（过滤命令按平台区分示例）
         if (trimmed.isEmpty() || trimmed.length() < 50) {
-            hints += "\n\n[提示] 命令退出码非 0 且几乎无输出。若命令使用了管道（如 mvn xxx | findstr \"关键字\"），"
+            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+            String filterExample = isWindows ? "findstr \"关键字\"" : "grep \"关键字\"";
+            hints += "\n\n[提示] 命令退出码非 0 且几乎无输出。若命令使用了管道（如 mvn xxx | " + filterExample + "），"
                     + "末端过滤命令无匹配时退出码即为 1，这并不代表前置命令失败。"
                     + "建议：去掉管道过滤直接执行查看完整输出，或将输出重定向到文件（command > out.txt）后用 read_file 查看。";
         }

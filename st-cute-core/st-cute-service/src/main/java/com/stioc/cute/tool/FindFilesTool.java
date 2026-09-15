@@ -6,7 +6,7 @@ import com.stioc.cute.engine.tool.types.ToolAccessLevel;
 import com.stioc.cute.engine.tool.types.ToolArgs;
 import com.stioc.cute.engine.tool.types.ToolExecutionContext;
 import com.stioc.cute.engine.tool.types.ToolResult;
-import com.stioc.cute.tool.support.FileSearchConstants;
+import com.stioc.cute.tool.types.FileSearchConstants;
 import com.stioc.cute.tool.ToolNames;
 import com.stioc.cute.project.ProjectService;
 import com.stioc.cute.engine.loop.core.AgentContext;

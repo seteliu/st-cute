@@ -3,6 +3,7 @@ package com.stioc.cute.service;
 import com.stioc.cute.service.types.FileBase64Vo;
 import com.stioc.cute.service.types.FileUploadVo;
 import com.stioc.cute.platform.common.BusinessException;
+import com.stioc.cute.platform.contract.ContractFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -290,17 +291,37 @@ public class FileStorageService {
             return;
         }
         try {
-            File rootDir = getFilesRootDir();
+            // 级联清理该会话的附件目录（files）与临时目录（tmp）下的 cid 文件夹
+            deleteCidDirectory(getFilesRootDir(), cid);
+            deleteCidDirectory(getTmpRootDir(), cid);
+            log.info("已成功级联清空并删除会话物理文件目录: cid={}", cid);
+        } catch (Exception e) {
+            log.warn("清理会话物理附件目录异常: cid={}, error={}", cid, e.getMessage());
+        }
+    }
+
+    /**
+     * 获取临时文件根目录：~/.st-cute/tmp（会话级临时目录约定为该目录下的 cid_{cid} 子目录，
+     * 随会话删除一并级联清理）
+     */
+    public File getTmpRootDir() {
+        return new File(ContractFile.getGlobalDir(), "tmp");
+    }
+
+    /**
+     * 递归清空并删除指定根目录下的会话级 cid_{cid} 目录（目录不存在时静默跳过）
+     */
+    private void deleteCidDirectory(File rootDir, Long cid) {
+        try {
             File cidDir = new File(rootDir, "cid_" + cid);
             if (cidDir.exists() && cidDir.isDirectory()) {
                 Files.walk(cidDir.toPath())
                         .sorted(Comparator.reverseOrder())
                         .map(Path::toFile)
                         .forEach(File::delete);
-                log.info("已成功级联清空并删除会话物理文件目录: cid={}", cid);
             }
         } catch (Exception e) {
-            log.warn("清理会话物理附件目录异常: cid={}, error={}", cid, e.getMessage());
+            log.warn("删除会话目录失败: root={}, cid={}, error={}", rootDir.getName(), cid, e.getMessage());
         }
     }
 
