@@ -680,6 +680,9 @@ watch(
 
 const isInputDisabled = computed(() => {
   return (
+    // WebSocket 未连接时整体禁用输入与发送（含按钮与 Enter 两条路径）：
+    // 回显与流式内容全靠 WS 推送，断线期间发送只会导致"发了没反应"的半死状态
+    !appStore.isConnected ||
     appStore.loopRunning ||
     projectStore.projectList.length === 0 ||
     !projectStore.activeProjectId ||
@@ -689,6 +692,10 @@ const isInputDisabled = computed(() => {
 })
 
 const inputPlaceholder = computed(() => {
+  // 未连接 WS 时优先提示连接状态（此时输入框整体禁用，用户需要知道原因）
+  if (!appStore.isConnected) {
+    return t('chat.inputPlaceholderDisconnected')
+  }
   if (projectStore.projectList.length === 0) {
     return t('chat.inputPlaceholderNoProject')
   }

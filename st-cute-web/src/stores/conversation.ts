@@ -29,6 +29,8 @@ export const useConversationStore = defineStore('conversation', () => {
   const truncated = ref(false)
   const isMessageLoading = ref(false)
   const isMessageSpinning = ref(false)
+  // 静默加载模式的延迟转圈定时器句柄（仅断线重连强刷场景使用）
+  let spinnerDelayTimer: ReturnType<typeof setTimeout> | null = null
   const inputTokens = ref(0)
   const outputTokens = ref(0)
   const cachedTokens = ref(0)
@@ -97,12 +99,30 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   // 选择会话
-  const selectConversation = async (id: number, force = false) => {
+  // silent: 静默加载模式（断线重连后强刷场景使用）。转圈不立即出现，
+  // 延迟 1 秒后仍未加载完成才降级显示加载动画，快速重连则全程无感知
+  const selectConversation = async (id: number, force = false, silent = false) => {
     if (!force && activeCid.value === id) return
+    // 入口统一摘除上一次静默加载的延迟转圈定时器，防止竞态：
+    // 静默等待期内用户手动切换会话时，旧定时器若未清理会让新会话莫名转圈
+    if (spinnerDelayTimer !== null) {
+      clearTimeout(spinnerDelayTimer)
+      spinnerDelayTimer = null
+    }
     activeCid.value = id
     wsService.setCid(id)
-    isMessageLoading.value = true
-    isMessageSpinning.value = true
+
+    if (silent) {
+      // 静默模式：1 秒内拉完则全程不转圈，超时才降级显示加载动画
+      spinnerDelayTimer = setTimeout(() => {
+        isMessageLoading.value = true
+        isMessageSpinning.value = true
+        spinnerDelayTimer = null
+      }, 1000)
+    } else {
+      isMessageLoading.value = true
+      isMessageSpinning.value = true
+    }
 
     // 联动切换当前选中的项目并初始化 Token 用量展示
     // （workspaceId 为项目 ID 字符串，changeActiveProject 需要数值 ID，做安全转换）
@@ -137,6 +157,11 @@ export const useConversationStore = defineStore('conversation', () => {
       console.error('加载历史消息与会话状态失败:', e)
       ;(window as any).$message?.error('加载历史消息与会话状态失败，请检查网络或后端连接')
     } finally {
+      // 先摘除尚未触发的静默延迟定时器（快速重连场景：请求已在 1 秒内完成，转圈从未出现过）
+      if (spinnerDelayTimer !== null) {
+        clearTimeout(spinnerDelayTimer)
+        spinnerDelayTimer = null
+      }
       isMessageLoading.value = false
       // 150ms 后停止转轮背景，保持首屏灵敏度
       setTimeout(() => {
@@ -282,7 +307,11 @@ export const useConversationStore = defineStore('conversation', () => {
   const sendUserMsg = (attachments?: string) => {
     const text = appStore.userInput.trim()
     if (!text || appStore.loopRunning) return
-    
+
+    // WebSocket 未连接时禁止发送：消息虽走 HTTP 通道，但回显与流式内容全靠 WS 推送，
+    // 断线期间发送会导致"发了没反应"的半死状态，直接静默拦截
+    if (!appStore.isConnected) return
+
     const id = activeCid.value
     if (id === null) return
 

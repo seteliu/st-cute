@@ -144,8 +144,9 @@ onMounted(async () => {
       // 再静默后台全量刷新会话列表（移动端列表通常隐藏，优先级低且不该阻塞详情刷新）。
       // 离线期间错过的 S2C_CONVERSATION_UPDATED 广播会让列表中的 loopRunning 转圈残留旧值，
       // 后台重拉一次以数据库真值对齐全部会话状态，避免"发送按钮已停转、列表仍在转圈"的分裂观感
+      // 会话详情强刷走静默模式：快速重连（1 秒内完成）全程无转圈无动画，超时才降级显示加载态
       if (conversationStore.activeCid !== null) {
-        conversationStore.selectConversation(conversationStore.activeCid, true)
+        conversationStore.selectConversation(conversationStore.activeCid, true, true)
       }
       conversationStore.loadConversations().catch(e => {
         console.error('断线重连后会话列表刷新失败:', e)

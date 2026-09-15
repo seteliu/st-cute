@@ -100,6 +100,7 @@ export default {
     inputPlaceholderNoActiveProject: '请先选择一个活跃项目...',
     inputPlaceholderNoProvider: '请先在左侧“系统设置”中配置大模型供应商 (Provider)...',
     inputPlaceholderNoCid: '请先在此项目下创建或选择一个会话...',
+    inputPlaceholderDisconnected: '正在连接服务，连接成功后即可发送消息...',
     inputPlaceholderAltEnter: '输入消息，Alt+Enter 发送，Enter 换行...',
     inputPlaceholderEnter: '输入消息，Enter 发送，Shift+Enter 换行...',
     send: '发送',

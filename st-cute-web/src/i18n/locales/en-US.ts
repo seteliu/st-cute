@@ -100,6 +100,7 @@ export default {
     inputPlaceholderNoActiveProject: 'Please select an active project...',
     inputPlaceholderNoProvider: 'Please configure Model Provider in "System Settings"...',
     inputPlaceholderNoCid: 'Please create or select a chat in this project...',
+    inputPlaceholderDisconnected: 'Connecting to server, you can send messages once connected...',
     inputPlaceholderAltEnter: 'Type message, Alt+Enter to send, Enter for new line...',
     inputPlaceholderEnter: 'Type message, Enter to send, Shift+Enter for new line...',
     send: 'Send',
