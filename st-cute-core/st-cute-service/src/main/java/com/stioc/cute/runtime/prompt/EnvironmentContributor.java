@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -66,7 +67,24 @@ public class EnvironmentContributor implements SystemPromptContributor {
         }
 
         // 5. 权限模式说明
-        sb.append("- 当前安全与权限模式: ").append(describePermissionMode(context.getPermissionMode()));
+        sb.append("- 当前安全与权限模式: ").append(describePermissionMode(context.getPermissionMode())).append("\n");
+
+        // 6. 会话 ID 与用户级目录（供大模型定位附件、全局配置，并约定临时目录落点）
+        String globalDirPath = ContractFile.getGlobalDir().getAbsolutePath().replace("\\", "/");
+        sb.append("- 当前会话 ID (cid): ").append(context.getCid()).append("\n");
+        sb.append("- 本工具用户级目录: ").append(globalDirPath)
+                .append("（附件存储、全局配置、日志等均在此目录下）\n");
+        sb.append("- 临时目录约定: 需要临时文件/目录时，若用户未明确指定位置，请统一在 ")
+                .append(globalDirPath).append("/tmp/cid_").append(context.getCid()).append("/ 下创建\n");
+
+        // 7. Git Bash 可用性指引：仅 Windows 且实际探测到 bash.exe 时注入（Unix 环境原生 Shell 即是，无需此条）
+        String gitBashPath = detectGitBashPathCached();
+        if (gitBashPath != null) {
+            sb.append("- Git Bash 可用: ").append(gitBashPath)
+                    .append("（当需要 Unix 风格命令/管道，或默认 Shell 中文输出乱码且 encoding 调整无效时，")
+                    .append("可显式调用该 bash 执行，如 \"").append(gitBashPath)
+                    .append("\" -c \"命令\"，其工具链统一 UTF-8 输出）\n");
+        }
 
         return sb.toString();
     }
@@ -80,6 +98,143 @@ public class EnvironmentContributor implements SystemPromptContributor {
             return projectService.getProjectBasePath(context);
         }
         return ContractFile.getGlobalDir().getAbsolutePath();
+    }
+
+    /** Git Bash 探测结果缓存（null=未初始化，空串=探测失败已确认不存在，正常值=bash.exe 绝对路径） */
+    private volatile String gitBashPathCache = null;
+
+    /**
+     * 探测 Git Bash 的 bash.exe 绝对路径（带缓存，JVM 内仅探测一次，失败也会缓存避免重复开销）。
+     * <p>
+     * 仅 Windows 环境探测，非 Windows 直接返回 null（Unix 环境原生 Shell 即 bash，无需指引）。
+     * 探测优先级：GitForWindows 注册表安装路径 → where git 推导 → 常见安装位置兜底，
+     * 覆盖官方安装器、绿色版与自定义安装目录（如 D:\Programming\Git）等各种形态。
+     * </p>
+     *
+     * @return bash.exe 绝对路径（正斜杠形式）；未安装或非 Windows 返回 null
+     */
+    private String detectGitBashPathCached() {
+        // 缓存命中：非空串直接返回（空串代表此前已探测且确认不存在）
+        String cached = gitBashPathCache;
+        if (cached != null) {
+            return cached.isEmpty() ? null : cached;
+        }
+        // 双重检查锁：探测涉及外部进程调用，仅首个并发请求执行
+        synchronized (this) {
+            if (gitBashPathCache != null) {
+                return gitBashPathCache.isEmpty() ? null : gitBashPathCache;
+            }
+            String result = detectGitBashPath();
+            // 缓存三态化：null（不存在）以空串占位，避免每次装配提示词都重复探测
+            gitBashPathCache = result != null ? result : "";
+            return result;
+        }
+    }
+
+    /**
+     * 执行实际的 Git Bash 探测：注册表 → where git 推导 → 常见位置三级策略
+     */
+    private String detectGitBashPath() {
+        if (!System.getProperty("os.name").toLowerCase().contains("win")) {
+            return null;
+        }
+        // 1. GitForWindows 注册表安装路径（官方安装器写入，最权威）
+        String registryPath = readRegistryGitInstallPath();
+        if (registryPath != null) {
+            String bash = new File(registryPath, "bin/bash.exe").getAbsolutePath();
+            if (new File(bash).isFile()) {
+                return bash.replace("\\", "/");
+            }
+        }
+        // 2. where git 推导：.../cmd/git.exe → .../bin/bash.exe（Git 官方目录布局固定）
+        String fromGit = probeBashBesideGitExecutable();
+        if (fromGit != null) {
+            return fromGit;
+        }
+        // 3. 常见安装位置兜底
+        for (String candidate : new String[]{
+                "C:/Program Files/Git", "C:/Program Files (x86)/Git", "D:/Program Files/Git"}) {
+            String bash = candidate + "/bin/bash.exe";
+            if (new File(bash).isFile()) {
+                return bash;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 读取注册表中 GitForWindows 的安装路径（查询失败或无安装信息时返回 null）
+     */
+    private String readRegistryGitInstallPath() {
+        try {
+            Process process = Runtime.getRuntime().exec(new String[]{
+                    "reg", "query", "HKLM\\SOFTWARE\\GitForWindows", "/ve"});
+            if (!process.waitFor(1, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            if (process.exitValue() != 0) {
+                return null;
+            }
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // reg query 输出形如: 安装路径    REG_SZ    D:\Programming\Git
+                    // 默认值未设置时值为"(值未设置)"（且 reg 输出为 GBK、UTF-8 读取时中文乱码），一律视为无效
+                    int idx = line.indexOf("REG_SZ");
+                    if (idx >= 0) {
+                        String value = line.substring(idx + "REG_SZ".length()).trim();
+                        if (!value.isEmpty() && !value.startsWith("(")) {
+                            return value;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Git Bash 注册表探测失败，降级下一策略: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 通过 where git 定位 git.exe 并推导同目录布局下的 bash.exe（
+     * 如 .../Git/cmd/git.exe → .../Git/bin/bash.exe）
+     */
+    private String probeBashBesideGitExecutable() {
+        try {
+            Process process = Runtime.getRuntime().exec(new String[]{"cmd.exe", "/c", "where git"});
+            if (!process.waitFor(1, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            if (process.exitValue() != 0) {
+                return null;
+            }
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String gitExe = line.trim();
+                    // 命中 .../Git/cmd/git.exe 形态才推导（.../bin/git.exe 本身已在 bin 目录，直接取同级 bash）
+                    File gitFile = new File(gitExe);
+                    File parent = gitFile.getParentFile();
+                    if (parent == null) {
+                        continue;
+                    }
+                    File bashFile = new File(parent, "bash.exe");
+                    if (!bashFile.isFile()) {
+                        bashFile = new File(parent.getParentFile(), "bin/bash.exe");
+                    }
+                    if (bashFile.isFile()) {
+                        return bashFile.getAbsolutePath().replace("\\", "/");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Git Bash 经 where git 推导失败，降级下一策略: {}", e.getMessage());
+        }
+        return null;
     }
 
     /**
