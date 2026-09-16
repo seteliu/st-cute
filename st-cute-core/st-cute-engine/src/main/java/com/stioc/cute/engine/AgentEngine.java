@@ -27,7 +27,6 @@ import com.stioc.cute.engine.support.ChatNamingHelper;
 import com.stioc.cute.engine.loop.message.LlmWindowManager;
 import com.stioc.cute.engine.loop.message.MessageDataReporter;
 import com.stioc.cute.engine.loop.message.MessageHistoryAligner;
-import com.stioc.cute.engine.prompt.DefaultEnvPromptContributor;
 import com.stioc.cute.engine.prompt.SystemPromptAssembler;
 import com.stioc.cute.engine.prompt.SystemPromptContributor;
 import com.stioc.cute.engine.store.ConversationStore;
@@ -305,9 +304,8 @@ public class AgentEngine {
         }
 
         private SystemPromptAssembler createPromptAssembler() {
-            List<SystemPromptContributor> allContributors = new ArrayList<>(promptContributors);
-            allContributors.add(new DefaultEnvPromptContributor());
-            return new SystemPromptAssembler(allContributors);
+            // 引擎零默认提示词内容：系统提示词全部由宿主经 SystemPromptContributor 注入，保持引擎纯框架
+            return new SystemPromptAssembler(new ArrayList<>(promptContributors));
         }
 
         private ToolRegistry createToolRegistry(InvokeSubagentTool invokeSubagentTool) {

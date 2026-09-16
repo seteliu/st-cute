@@ -16,12 +16,16 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Coding 环境贡献者：工作目录、Git 分支、模型名、权限模式等平台环境段。
+ * Coding 环境贡献者：操作系统、Shell、工作目录、Git 分支、模型名、日期、权限模式等环境信息段。
  * <p>（内容迁自原 SystemPromptGenerator 的环境上下文变量装配逻辑，行为等价；
- * 系统属性级环境已由引擎 DefaultEnvPromptContributor 提供）</p>
+ * 原引擎 DefaultEnvPromptContributor 的系统属性级环境（os/日期）已并入本段）</p>
+ * <p>order=300 置于技能（100）与规约（200）之后：本段含 cid 等会话变量，
+ * 是跨会话提示词前缀缓存的分叉点，后置可最大化稳定前缀的缓存命中范围。</p>
  */
 @Slf4j
 @Component
@@ -34,50 +38,30 @@ public class EnvironmentContributor implements SystemPromptContributor {
 
     @Override
     public int order() {
-        return 60;
+        return 300;
     }
 
     @Override
     public String contribute(AgentContext context) {
         StringBuilder sb = new StringBuilder();
 
-        // 1. 默认活动 Shell
+        // 0. 段落标题：环境信息统一收敛于本段（引擎已零默认内容）
+        sb.append("【环境信息】\n");
+
+        // 条目排序原则：越容易因会话变化的越靠后（机器级 → 配置级 → 会话级 → 日变级 → 必变 cid）。
+        // 提示词前缀缓存按 token 严格匹配，分叉点越靠后，跨会话可命中的稳定前缀越长
+
+        // 1. 操作系统平台（机器级，跨会话不变；自原引擎 DefaultEnvPromptContributor 并入）
+        sb.append("- 操作系统平台: ").append(System.getProperty("os.name"))
+                .append(" (").append(System.getProperty("os.arch")).append(")\n");
+
+        // 2. 默认活动 Shell（机器级，跨会话不变）
         String shell = System.getProperty("os.name").toLowerCase().contains("win")
                 ? System.getenv("COMSPEC") : System.getenv("SHELL");
         sb.append("- 默认活动 Shell: ").append(shell != null ? shell.replace("\\", "/") : "N/A").append("\n");
 
-        // 2. 运行大模型
-        try {
-            Provider config = providerResolver.getProviderConfigForContext(context);
-            sb.append("- 运行大模型: ").append(config != null ? config.getModelName() : "unknown").append("\n");
-        } catch (Exception e) {
-            sb.append("- 运行大模型: unknown\n");
-        }
-
-        // 3. 工作目录（项目根 / worktree 优先）
-        String basePath = resolveProjectBasePath(context);
-        sb.append("- 当前工作目录: ").append(basePath.replace("\\", "/")).append("\n");
-
-        // 4. Git 仓库与分支
-        boolean inGit = new File(basePath, ".git").exists();
-        sb.append("- 是否处于 Git 仓库内: ").append(inGit ? "是" : "否").append("\n");
-        if (inGit) {
-            String branch = getGitBranch(basePath);
-            sb.append("- 当前 Git 分支: ").append(branch != null ? branch : "unknown").append("\n");
-        }
-
-        // 5. 权限模式说明
-        sb.append("- 当前安全与权限模式: ").append(describePermissionMode(context.getPermissionMode())).append("\n");
-
-        // 6. 会话 ID 与用户级目录（供大模型定位附件、全局配置，并约定临时目录落点）
-        String globalDirPath = ContractFile.getGlobalDir().getAbsolutePath().replace("\\", "/");
-        sb.append("- 当前会话 ID (cid): ").append(context.getCid()).append("\n");
-        sb.append("- 本工具用户级目录: ").append(globalDirPath)
-                .append("（附件存储、全局配置、日志等均在此目录下）\n");
-        sb.append("- 临时目录约定: 需要临时文件/目录时，若用户未明确指定位置，请统一在 ")
-                .append(globalDirPath).append("/tmp/cid_").append(context.getCid()).append("/ 下创建\n");
-
-        // 7. Git Bash 可用性指引：仅 Windows 且实际探测到 bash.exe 时注入（Unix 环境原生 Shell 即是，无需此条）
+        // 3. Git Bash 可用性指引（机器级探测缓存，跨会话不变）：
+        //    仅 Windows 且实际探测到 bash.exe 时注入（Unix 环境原生 Shell 即是，无需此条）
         String gitBashPath = detectGitBashPathCached();
         if (gitBashPath != null) {
             sb.append("- Git Bash 可用: ").append(gitBashPath)
@@ -85,6 +69,44 @@ public class EnvironmentContributor implements SystemPromptContributor {
                     .append("可显式调用该 bash 执行，如 \"").append(gitBashPath)
                     .append("\" -c \"命令\"，其工具链统一 UTF-8 输出）\n");
         }
+
+        // 4. 用户级目录（用户机器级，跨会话不变；供大模型定位附件、全局配置与日志）
+        String globalDirPath = ContractFile.getGlobalDir().getAbsolutePath().replace("\\", "/");
+        sb.append("- 本工具用户级目录: ").append(globalDirPath)
+                .append("（附件存储、全局配置、日志等均在此目录下）\n");
+
+        // 5. 运行大模型（配置级，用户切换模型才变）
+        try {
+            Provider config = providerResolver.getProviderConfigForContext(context);
+            sb.append("- 运行大模型: ").append(config != null ? config.getModelName() : "unknown").append("\n");
+        } catch (Exception e) {
+            sb.append("- 运行大模型: unknown\n");
+        }
+
+        // 6. 工作目录（项目根 / worktree 优先；会话绑定 workspace，换项目才变）
+        String basePath = resolveProjectBasePath(context);
+        sb.append("- 当前工作目录: ").append(basePath.replace("\\", "/")).append("\n");
+
+        // 7. Git 仓库与分支（跟随工作目录；分支在目录内仍可被切换，比目录本身更易变）
+        boolean inGit = new File(basePath, ".git").exists();
+        sb.append("- 是否处于 Git 仓库内: ").append(inGit ? "是" : "否").append("\n");
+        if (inGit) {
+            String branch = getGitBranch(basePath);
+            sb.append("- 当前 Git 分支: ").append(branch != null ? branch : "unknown").append("\n");
+        }
+
+        // 8. 权限模式说明（会话级设置，不同会话可能不同）
+        sb.append("- 当前安全与权限模式: ").append(describePermissionMode(context.getPermissionMode())).append("\n");
+
+        // 9. 系统当前日期（日变级，跨天必变；天级粒度以提升提示词缓存命中率，自原引擎贡献者并入）
+        sb.append("- 系统当前时间: ").append(new SimpleDateFormat("yyyy-MM-dd").format(new Date())).append("\n");
+
+        // 10. 会话 ID（每个新会话必然变化——跨会话提示词前缀缓存的分叉点）
+        sb.append("- 当前会话 ID (cid): ").append(context.getCid()).append("\n");
+
+        // 11. 临时目录约定（含 cid，必然变化，置于最末）
+        sb.append("- 临时目录约定: 需要临时文件/目录时，若用户未明确指定位置，请统一在 ")
+                .append(globalDirPath).append("/tmp/cid_").append(context.getCid()).append("/ 下创建\n");
 
         return sb.toString();
     }
