@@ -8,6 +8,7 @@ export interface BasicConfig {
   password?: string
   maxViewHistoryLimit?: number
   pathSandboxEnabled?: boolean
+  minimalSkillMode?: boolean
 }
 
 export const getConfigApi = async (): Promise<BasicConfig> => {

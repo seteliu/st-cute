@@ -540,6 +540,7 @@ onMounted(async () => {
       appStore.httpLog = event.payload.httpLog || false
       appStore.httpLogDays = event.payload.httpLogDays !== undefined ? event.payload.httpLogDays : 7
       appStore.password = event.payload.password || ''
+      appStore.minimalSkillMode = event.payload.minimalSkillMode || false
     }
   })
 
