@@ -35,9 +35,10 @@ public class ProviderController {
     @PostMapping("/save")
     public Result<Provider> saveProvider(
             @RequestBody Provider config,
+            @RequestParam(required = false) String originalGroup,
             @RequestParam(required = false) String originalModelName) {
-        log.debug("收到保存 Provider 请求: {}, originalModelName: {}", config, originalModelName);
-        Provider saved = providerService.saveProvider(config, originalModelName);
+        log.debug("收到保存 Provider 请求: {}, originalGroup: {}, originalModelName: {}", config, originalGroup, originalModelName);
+        Provider saved = providerService.saveProvider(config, originalGroup, originalModelName);
         return Result.success(saved);
     }
 

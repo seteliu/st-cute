@@ -49,7 +49,7 @@ public class CuteChatFactory {
     public Provider getProviderConfigForContext(AgentContext context) {
         Provider config = providerResolver.getProviderConfigForContext(context);
         if (config == null) {
-            throw new IllegalStateException("当前没有任何大模型供应商配置可用");
+            throw new IllegalStateException("会话绑定的供应商不存在或已失效，请检查供应商配置");
         }
         return config;
     }
@@ -61,7 +61,7 @@ public class CuteChatFactory {
     public CuteChat getCuteChat(AgentContext context) {
         Provider config = providerResolver.getProviderConfigForContext(context);
         if (config == null) {
-            throw new IllegalStateException("当前没有任何大模型供应商配置可用");
+            throw new IllegalStateException("会话绑定的供应商不存在或已失效，请检查供应商配置");
         }
         String group = config.getGroup();
         String modelName = StringUtils.isNotBlank(config.getModelName()) ? config.getModelName() : "";

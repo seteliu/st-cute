@@ -212,11 +212,37 @@ export const useConversationStore = defineStore('conversation', () => {
       // 如果没有任何项目，则不能新建会话
       return
     }
-    
+
+    // 供应商列表为空时不允许创建会话（后端不自动填充，绑定完全由前端传值）
+    const providerStore = useProviderStore()
+    const list = providerStore.providerList
+    if (!list || list.length === 0) {
+      if ((window as any).$message) {
+        ;(window as any).$message.warning('暂无可用的大模型供应商，请先在“系统设置”中配置后再创建会话。')
+      } else {
+        console.warn('暂无可用的大模型供应商，无法创建会话')
+      }
+      return
+    }
+
+    // 解析默认绑定供应商：优先取当前活跃会话绑定的供应商（且在列表中仍有效），
+    // 否则取列表第一个（全新会话取下拉第一个）
+    const activeSess = activeCid.value !== null
+      ? conversationList.value.find(s => s.id === activeCid.value)
+      : null
+    const recentBound = activeSess && list.find(p => p.group === activeSess.providerGroup && p.modelName === activeSess.providerModelName)
+      ? activeSess
+      : null
+    const target = recentBound
+      ? { group: recentBound.providerGroup as string, modelName: recentBound.providerModelName as string }
+      : { group: list[0].group, modelName: list[0].modelName || '' }
+
     // workspaceId 为项目 ID 的字符串形态（Coding 宿主语义，由后端 WorkspaceResolver 解释）
     const payload: Partial<Conversation> = {
       title: '新会话',
-      workspaceId: String(pId)
+      workspaceId: String(pId),
+      providerGroup: target.group,
+      providerModelName: target.modelName
     }
 
     try {
@@ -304,7 +330,7 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   // 发送消息
-  const sendUserMsg = (attachments?: string) => {
+  const sendUserMsg = async (attachments?: string) => {
     const text = appStore.userInput.trim()
     if (!text || appStore.loopRunning) return
 
@@ -315,20 +341,48 @@ export const useConversationStore = defineStore('conversation', () => {
     const id = activeCid.value
     if (id === null) return
 
-    // 检查供应商是否为空
+    // 发送前置校验：必须保证有确定有效的供应商（后端不做兜底，匹配不上直接报错拒绝）。
+    // ① 会话绑定的供应商（group+modelName）在列表中精确命中 → 直接发送；
+    // ② 绑定失效或未绑定，但列表非空 → 先把降级目标（列表第一个）持久化绑定到会话再发送；
+    // ③ 列表为空 → 拦截发送并提示
     const sess = conversationList.value.find(s => s.id === id)
     const providerStore = useProviderStore()
-    let pGroup = sess?.providerGroup
-    if (!pGroup && providerStore.providerList.length > 0) {
-      pGroup = providerStore.providerList[0].group
-    }
-    if (!pGroup) {
+    const list = providerStore.providerList
+    if (!list || list.length === 0) {
       if ((window as any).$message) {
-        ;(window as any).$message.warning('请先在左侧“系统设置”中配置并添加大模型供应商 (Provider)，当前无法发起对话。')
+        ;(window as any).$message.warning('暂无可用的大模型供应商，请先在左侧“系统设置”中配置并添加。')
       } else {
-        console.warn('请先在左侧“系统设置”中配置并添加大模型供应商 (Provider)，当前无法发起对话。')
+        console.warn('暂无可用的大模型供应商，当前无法发起对话。')
       }
       return
+    }
+
+    let pGroup: string
+    let pModel: string
+    const bound = sess?.providerGroup
+      ? list.find(p => p.group === sess.providerGroup && p.modelName === sess.providerModelName)
+      : undefined
+    if (bound) {
+      // 绑定有效，沿用会话已绑定的供应商
+      pGroup = bound.group
+      pModel = bound.modelName
+    } else {
+      // 绑定失效或未绑定：降级取列表第一个并持久化写回（接口会联动更新子会话）
+      const eff = list[0]
+      pGroup = eff.group
+      pModel = eff.modelName || ''
+      try {
+        await updateConversationProviderApi(id, pGroup, pModel)
+      } catch (e) {
+        console.error('发送前绑定降级供应商失败:', e)
+      }
+      if (sess) {
+        sess.providerGroup = pGroup
+        sess.providerModelName = pModel
+      }
+      if ((window as any).$message) {
+        ;(window as any).$message.warning(`原供应商已失效，本次发送将使用 ${pGroup}/${pModel}`)
+      }
     }
 
     appStore.currentIteration = 0

@@ -42,4 +42,9 @@ public class BasicConfigDto {
      * 是否开启路径沙箱保护，默认开启
      */
     private Boolean pathSandboxEnabled;
+
+    /**
+     * 是否开启极简 Skill 模式——技能清单不注入系统提示词以节省 Token，仅按需触发加载，默认关闭
+     */
+    private Boolean minimalSkillMode;
 }

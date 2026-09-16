@@ -72,6 +72,11 @@ public class ContractProperty {
      */
     private boolean pathSandboxEnabled = true;
 
+    /**
+     * 是否开启极简 Skill 模式——技能清单不注入系统提示词以节省 Token，仅按需触发加载，默认关闭
+     */
+    private boolean minimalSkillMode = false;
+
 
     /**
      * 初始化方法：惰性读取物理用户目录下的全局配置文件并与内置的默认 YML 配置进行深度反射合并

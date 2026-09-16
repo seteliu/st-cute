@@ -34,6 +34,7 @@ public class ConfigController {
         dto.setPassword(contractProperty.getPassword());
         dto.setMaxViewHistoryLimit(contractProperty.getMaxViewHistoryLimit());
         dto.setPathSandboxEnabled(contractProperty.isPathSandboxEnabled());
+        dto.setMinimalSkillMode(contractProperty.isMinimalSkillMode());
         return Result.success(dto);
     }
 
@@ -49,14 +50,16 @@ public class ConfigController {
         Integer httpLogDays = body.getHttpLogDays();
         String password = body.getPassword();
         Boolean pathSandboxEnabled = body.getPathSandboxEnabled();
+        Boolean minimalSkillMode = body.getMinimalSkillMode();
 
         String finalLanguage = language != null ? language : "zh-CN";
         String finalNewlineKey = newlineKey != null ? newlineKey : "enter";
         boolean finalHttpLog = httpLog != null ? httpLog : false;
         int finalHttpLogDays = httpLogDays != null ? httpLogDays : 7;
         boolean finalPathSandboxEnabled = pathSandboxEnabled != null ? pathSandboxEnabled : true;
+        boolean finalMinimalSkillMode = minimalSkillMode != null ? minimalSkillMode : false;
 
-        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays, password, finalPathSandboxEnabled);
+        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays, password, finalPathSandboxEnabled, finalMinimalSkillMode);
         return Result.success(true);
     }
 }

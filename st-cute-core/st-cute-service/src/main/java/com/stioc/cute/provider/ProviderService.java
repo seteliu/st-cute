@@ -83,7 +83,7 @@ public class ProviderService implements ProviderResolver {
     /**
      * 保存大模型供应商配置并同步持久化写回全局 JSON 文件中
      */
-    public Provider saveProvider(Provider config, String originalModelName) {
+    public Provider saveProvider(Provider config, String originalGroup, String originalModelName) {
         List<Provider> providers = contractProperty.getProviders();
         if (providers == null) {
             providers = new ArrayList<>();
@@ -105,12 +105,14 @@ public class ProviderService implements ProviderResolver {
             throw new BusinessException("上下文窗口大小不能低于 50000 tokens");
         }
 
-        // 查找待更新的索引 (根据 originalModelName 与 group 联合匹配定位)
+        // 查找待更新的索引 (根据"原始分组 + 原始模型名"联合匹配定位，支持编辑时修改分组名称；
+        // originalGroup 未传时回退用新分组匹配，兼容旧调用行为)
         int index = -1;
         if (StringUtils.hasText(originalModelName)) {
+            String matchGroup = StringUtils.hasText(originalGroup) ? originalGroup : group;
             for (int i = 0; i < providers.size(); i++) {
                 Provider p = providers.get(i);
-                if (originalModelName.equals(p.getModelName()) && group.equals(p.getGroup())) {
+                if (originalModelName.equals(p.getModelName()) && matchGroup.equals(p.getGroup())) {
                     index = i;
                     break;
                 }
@@ -174,15 +176,16 @@ public class ProviderService implements ProviderResolver {
     }
 
     /**
-     * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数以及安全密码、路径沙箱保护）配置
+     * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数、安全密码、路径沙箱保护、极简 Skill 模式）配置
      */
-    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, String password, boolean pathSandboxEnabled) {
+    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, String password, boolean pathSandboxEnabled, boolean minimalSkillMode) {
         contractProperty.setLanguage(language);
         contractProperty.setNewlineKey(newlineKey);
         contractProperty.getLlmLog().setHttpLog(httpLog);
         contractProperty.getLlmLog().setHttpLogDays(httpLogDays);
         contractProperty.setPassword(password);
         contractProperty.setPathSandboxEnabled(pathSandboxEnabled);
+        contractProperty.setMinimalSkillMode(minimalSkillMode);
         writeBackGlobalConfig();
 
         BasicConfigDto dto = new BasicConfigDto();
@@ -192,52 +195,51 @@ public class ProviderService implements ProviderResolver {
         dto.setHttpLogDays(httpLogDays);
         dto.setPassword(password);
         dto.setPathSandboxEnabled(pathSandboxEnabled);
+        dto.setMinimalSkillMode(minimalSkillMode);
         webSocketBroadcast.broadcast(WebSocketBroadcast.EventType.CONFIG_UPDATED, dto);
     }
 
     /**
      * 获取或惰性实例化指定会话对应的大模型 CuteChat 执行客户端（已内化引擎，本类不再持有）
+     * <p>不做任何兜底：会话绑定的供应商组与模型名必须同时在配置列表中精确命中，
+     * 否则返回 null，由发送链路直接报错拒绝（供应商绑定正确性由前端保证）。</p>
      */
     public Provider getProviderConfigForContext(AgentContext context) {
         String group = getProviderGroupForContext(context);
-        if (group == null) {
+        if (!StringUtils.hasText(group)) {
+            return null;
+        }
+        String modelName = getModelNameForContext(context, group);
+        if (!StringUtils.hasText(modelName)) {
             return null;
         }
         List<Provider> providers = contractProperty.getProviders();
-        if (providers != null) {
-            String contextModel = getModelNameForContext(context, group);
-            Provider config = providers.stream()
-                    .filter(p -> group.equals(p.getGroup()) && (contextModel == null || contextModel.equals(p.getModelName())))
-                    .findFirst()
-                    .orElse(null);
-            if (config == null) {
-                config = providers.stream()
-                        .filter(p -> group.equals(p.getGroup()))
-                        .findFirst()
-                        .orElse(null);
-            }
-            if (config != null) {
-                // 返回克隆的配置，并将 modelName 覆盖为当前会话专用的 modelName
-                return Provider.builder()
+        if (providers == null) {
+            return null;
+        }
+        // 严格精确匹配：组与模型名必须命中同一条记录，任何一级匹配不上都不做回退
+        return providers.stream()
+                .filter(p -> group.equals(p.getGroup()) && modelName.equals(p.getModelName()))
+                .findFirst()
+                .map(config -> Provider.builder()
                         .group(config.getGroup())
                         .protocol(config.getProtocol())
                         .baseUrl(config.getBaseUrl())
                         .useFullUrl(config.getUseFullUrl())
                         .apiKey(config.getApiKey())
-                        .modelName(contextModel != null ? contextModel : config.getModelName())
+                        .modelName(config.getModelName())
                         .temperature(config.getTemperature())
                         .contextSize(config.getContextSize())
                         .maxTokens(config.getMaxTokens())
                         .reasoningEffort(config.getReasoningEffort())
                         .multimodal(config.getMultimodal())
-                        .build();
-            }
-        }
-        return null;
+                        .build())
+                .orElse(null);
     }
 
     /**
-     * 自动推导并解析该会话应当选用的模型供应商分组名
+     * 解析该会话绑定的供应商分组名（严格匹配，不做兜底）：
+     * 仅当会话绑定了分组且该分组在配置列表中存在时返回，否则返回 null
      */
     public String getProviderGroupForContext(AgentContext context) {
         List<Provider> providers = contractProperty.getProviders();
@@ -245,7 +247,7 @@ public class ProviderService implements ProviderResolver {
             return null;
         }
 
-        // 1. 如果指定了会话，尝试从内存获取该会话在内存中已有的供应商分组
+        // 会话绑定的供应商分组必须真实存在，不做"取列表第一个"兜底
         if (context != null) {
             String sGroup = context.getProviderGroup();
             if (StringUtils.hasText(sGroup)) {
@@ -255,37 +257,25 @@ public class ProviderService implements ProviderResolver {
                 }
             }
         }
-
-        // 2. 选用配置列表里的第一个供应商的分组
-        return providers.get(0).getGroup();
+        return null;
     }
 
     /**
-     * 自动推导并解析该会话应当选用的具体大模型名称
+     * 解析该会话绑定的具体大模型名称（严格匹配，不做兜底）：
+     * 仅返回会话内存中绑定的模型名，不再降级为组内默认模型
      */
     public String getModelNameForContext(AgentContext context, String group) {
         if (!StringUtils.hasText(group)) {
             return null;
         }
 
-        // 1. 优先读取内存中的 providerModelName
+        // 仅读取内存中绑定的 providerModelName，不做"组内取第一条"降级
         if (context != null) {
             String sModel = context.getProviderModelName();
             if (StringUtils.hasText(sModel)) {
                 return sModel;
             }
         }
-
-        // 2. 降级为该 group 在 Provider 中配置的默认 modelName
-        List<Provider> providers = contractProperty.getProviders();
-        if (providers != null) {
-            return providers.stream()
-                    .filter(p -> group.equals(p.getGroup()))
-                    .findFirst()
-                    .map(Provider::getModelName)
-                    .orElse(null);
-        }
-
         return null;
     }
 }

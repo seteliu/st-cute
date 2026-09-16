@@ -336,7 +336,7 @@
       v-model:show="showSettingsModal"
       preset="card"
       style="width: 760px; max-width: 95vw; min-height: 480px;"
-      :title="isAddingOrEditingProvider ? (providerStore.isEditing ? t('sider.editProvider') : t('sider.addProvider')) : t('settings.title')"
+      :title="isAddingOrEditingProvider ? (providerStore.isEditing ? t('sider.editProvider') : (providerStore.copySourceModelName ? t('sider.copyProviderTitle') : t('sider.addProvider'))) : t('settings.title')"
       :bordered="false"
       size="medium"
     >
@@ -359,7 +359,7 @@
             <template #label>
               <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.modelName') }}
             </template>
-            <n-input v-model:value="providerStore.form.modelName" placeholder="例如: gpt-4" maxlength="100" />
+            <n-input ref="modelNameInputRef" v-model:value="providerStore.form.modelName" placeholder="例如: gpt-4" maxlength="100" />
           </n-form-item>
           <n-form-item>
             <template #label>
@@ -571,6 +571,30 @@
                 />
               </div>
 
+              <div class="setting-item-row">
+                <div class="setting-item-label">
+                  <span>{{ t('settings.minimalSkillMode') }}</span>
+                  <n-tooltip trigger="hover" placement="top-start">
+                    <template #trigger>
+                      <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                      </span>
+                    </template>
+                    <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
+                      {{ t('settings.minimalSkillModeTooltip') }}
+                    </div>
+                  </n-tooltip>
+                </div>
+                <n-switch
+                  v-model:value="appStore.minimalSkillMode"
+                  @update:value="appStore.saveBasicConfig"
+                />
+              </div>
+
               <div class="setting-item-col">
                 <div class="setting-item-label">
                   <span>{{ t('settings.password') }}</span>
@@ -620,47 +644,63 @@
                 <div v-if="providerStore.providerList.length === 0" style="text-align: center; padding: 20px; color: #555568;">
                   {{ t('sider.noProviders') }}
                 </div>
-                <div
-                  v-else
-                  v-for="prov in providerStore.providerList"
-                  :key="prov.group + ':' + prov.modelName"
-                  class="provider-setting-item"
-                  style="background-color: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;"
-                >
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      <strong style="color: #e3e3e7;">{{ prov.group }}</strong>
-                      <span style="font-size: 0.75rem; background-color: rgba(129, 182, 229, 0.08); color: var(--primary-color); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(129, 182, 229, 0.25);">
-                        {{ prov.protocol }}
-                      </span>
-                      <span v-if="prov.multimodal" style="font-size: 0.75rem; background-color: rgba(99, 226, 183, 0.08); color: #63e2b7; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(99, 226, 183, 0.25);">
-                        {{ t('sider.multimodalBadge') }}
-                      </span>
+                <template v-else>
+                  <!-- 按分组聚合展示：分组标题行 + 组内供应商卡片 -->
+                  <div v-for="g in groupedProviderList" :key="g.group" class="provider-group-block">
+                    <div class="provider-group-header" style="display: flex; align-items: center; gap: 8px; padding: 4px 2px;">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #767680;">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                      </svg>
+                      <strong style="font-size: 0.82rem; color: #c8c8ce;">{{ g.group }}</strong>
+                      <span style="font-size: 0.72rem; color: #767680; background-color: rgba(255, 255, 255, 0.05); padding: 1px 6px; border-radius: 8px;">{{ g.items.length }}</span>
                     </div>
-                    <div style="font-size: 0.8rem; color: #a0a0a5; margin-top: 4px; display: flex; gap: 12px;">
-                      <span>{{ t('sider.model') }}: {{ prov.modelName }}</span>
-                      <span v-if="prov.contextSize">{{ t('sider.window') }}: {{ prov.contextSize.toLocaleString() }} tokens</span>
+                    <div style="display: flex; flex-direction: column; gap: 8px; padding-left: 6px;">
+                      <div
+                        v-for="prov in g.items"
+                        :key="prov.group + ':' + prov.modelName"
+                        class="provider-setting-item"
+                        style="background-color: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;"
+                      >
+                        <div>
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <!-- 模型名称作为大标题（分组名已在分组标题行展示，无需重复） -->
+                            <strong style="color: #e3e3e7;">{{ prov.modelName }}</strong>
+                            <span style="font-size: 0.75rem; background-color: rgba(129, 182, 229, 0.08); color: var(--primary-color); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(129, 182, 229, 0.25);">
+                              {{ prov.protocol }}
+                            </span>
+                            <span v-if="prov.multimodal" style="font-size: 0.75rem; background-color: rgba(99, 226, 183, 0.08); color: #63e2b7; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(99, 226, 183, 0.25);">
+                              {{ t('sider.multimodalBadge') }}
+                            </span>
+                          </div>
+                          <div style="font-size: 0.8rem; color: #a0a0a5; margin-top: 4px; display: flex; gap: 12px;">
+                            <span v-if="prov.contextSize">{{ t('sider.window') }}: {{ prov.contextSize.toLocaleString() }} tokens</span>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                          <n-button size="small" quaternary @click="openCopyProvider(prov)">
+                            {{ t('sider.copyProvider') }}
+                          </n-button>
+                          <n-button size="small" quaternary @click="openEditProvider(prov)">
+                            {{ t('common.edit') }}
+                          </n-button>
+                          <n-popconfirm
+                            @positive-click="providerStore.handleDeleteProvider(prov.group, prov.modelName)"
+                            :positive-text="t('common.confirm')"
+                            :negative-text="t('common.cancel')"
+                            placement="top-end"
+                          >
+                            <template #trigger>
+                              <n-button size="small" quaternary type="error">
+                                {{ t('common.delete') }}
+                              </n-button>
+                            </template>
+                            {{ t('sider.deleteProviderConfirm') }}
+                          </n-popconfirm>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div style="display: flex; gap: 8px;">
-                    <n-button size="small" quaternary @click="openEditProvider(prov)">
-                      {{ t('common.edit') }}
-                    </n-button>
-                    <n-popconfirm
-                      @positive-click="providerStore.handleDeleteProvider(prov.group, prov.modelName)"
-                      :positive-text="t('common.confirm')"
-                      :negative-text="t('common.cancel')"
-                      placement="top-end"
-                    >
-                      <template #trigger>
-                        <n-button size="small" quaternary type="error">
-                          {{ t('common.delete') }}
-                        </n-button>
-                      </template>
-                      {{ t('sider.deleteProviderConfirm') }}
-                    </n-popconfirm>
-                  </div>
-                </div>
+                </template>
               </div>
             </div>
           </n-tab-pane>
@@ -764,6 +804,8 @@ const expandedNames = ref<number[]>([])
 const showSettingsModal = ref(false)
 const activeTab = ref('basic')
 const isAddingOrEditingProvider = ref(false)
+// 模型名称输入框引用：复制供应商时用于自动聚焦
+const modelNameInputRef = ref<any>(null)
 
 const openSettingsModal = () => {
   showSettingsModal.value = true
@@ -780,6 +822,30 @@ const openEditProvider = (prov: any) => {
   providerStore.handleEditProvider(prov)
   isAddingOrEditingProvider.value = true
 }
+
+const openCopyProvider = (prov: any) => {
+  providerStore.handleCopyProvider(prov)
+  isAddingOrEditingProvider.value = true
+  // 复制场景强制改名：视图渲染完成后自动聚焦模型名称输入框，引导用户直接修改
+  nextTick(() => {
+    modelNameInputRef.value?.focus()
+  })
+}
+
+// 供应商列表按分组聚合：分组按首次出现顺序排列，组内条目保持原有顺序
+const groupedProviderList = computed(() => {
+  const groups: { group: string; items: any[] }[] = []
+  const groupIndexMap: Record<string, number> = {}
+  providerStore.providerList.forEach(p => {
+    const groupName = p.group || '默认供应商'
+    if (groupIndexMap[groupName] === undefined) {
+      groupIndexMap[groupName] = groups.length
+      groups.push({ group: groupName, items: [] })
+    }
+    groups[groupIndexMap[groupName]].items.push(p)
+  })
+  return groups
+})
 
 const cancelProviderEdit = () => {
   providerStore.resetForm()
@@ -803,6 +869,11 @@ const saveProviderAndReturn = async () => {
   }
   if (!baseUrl) {
     message.warning('请输入端点 (Base URL)')
+    return
+  }
+  // 校验 Base URL 格式：必须以 http:// 或 https:// 开头，防止保存无效端点后所有请求失败
+  if (!/^https?:\/\//.test(baseUrl)) {
+    message.warning('端点 (Base URL) 必须以 http:// 或 https:// 开头')
     return
   }
   if (!apiKey) {
@@ -829,6 +900,25 @@ const saveProviderAndReturn = async () => {
   const modelRegex = /^[a-zA-Z0-9_./@:-]+$/
   if (!modelRegex.test(modelName)) {
     message.warning('模型名称不能包含空格或特殊字符（仅允许字母、数字及 _ . / @ : - 等常见符号）')
+    return
+  }
+
+  // 校验推理力度：枚举语义字段（如 low/medium/high/xhigh 等），仅允许字母、数字和连字符，
+  // 防止乱填内容原样拼进大模型请求体导致接口报错
+  if (providerStore.form.reasoningEffort && !/^[a-zA-Z0-9-]+$/.test(providerStore.form.reasoningEffort)) {
+    message.warning('推理力度不能包含空格或特殊字符（仅允许字母、数字和连字符，如 low / medium / high）')
+    return
+  }
+
+  // 复制模式强制改名：模型名与源条目相同时不允许保存
+  if (providerStore.copySourceModelName && modelName.toLowerCase() === providerStore.copySourceModelName.toLowerCase()) {
+    message.warning(t('sider.copyMustRename'))
+    return
+  }
+
+  // 同组同名即时查重：编辑模式排除自身，新增/复制模式全量比对
+  if (providerStore.isModelNameDuplicated(group, modelName, providerStore.isEditing ? providerStore.originalModelName : undefined)) {
+    message.warning(`模型 '${modelName}' 在分组 '${group}' 中已存在，不允许重复添加`)
     return
   }
 

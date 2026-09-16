@@ -7,7 +7,6 @@ import com.stioc.cute.engine.store.types.ConversationQuery;
 import com.stioc.cute.engine.store.types.SortDirection;
 import com.stioc.cute.service.FileStorageService;
 import com.stioc.cute.permission.types.PermissionMode;
-import com.stioc.cute.provider.ProviderService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -32,8 +31,6 @@ public class ConversationService {
 
     @Resource
     private ConversationStore conversationStore;
-    @Resource
-    private ProviderService providerService;
     @Resource
     private FileStorageService fileStorageService;
     @Resource
@@ -88,6 +85,8 @@ public class ConversationService {
 
     /**
      * 创建并持久化新会话
+     * <p>供应商绑定（providerGroup / providerModelName）完全信任前端传值，后端不自动填充默认值；
+     * 供应商选择正确性由前端在创建前保证。</p>
      */
     public Conversation createConversation(Conversation conversation) {
         if (conversation.getCreateTime() == null) {
@@ -95,7 +94,7 @@ public class ConversationService {
         }
         conversation.setUpdateTime(LocalDateTime.now());
 
-        // 自动取最近更新会话的 permissionMode 以及 providerGroup 和 providerModelName（缺省继承）
+        // 自动取最近更新会话的 permissionMode（缺省继承；供应商字段不做继承，由前端传值）
         List<Conversation> existing = conversationStore.listByQuery(ConversationQuery.builder()
                 .sortField("updateTime")
                 .sortDirection(SortDirection.DESC)
@@ -105,26 +104,16 @@ public class ConversationService {
             if (conversation.getPermissionMode() == null) {
                 conversation.setPermissionMode(latestConv.getPermissionMode());
             }
-            if (conversation.getProviderGroup() == null) {
-                conversation.setProviderGroup(latestConv.getProviderGroup());
-            }
-            if (conversation.getProviderModelName() == null) {
-                conversation.setProviderModelName(latestConv.getProviderModelName());
-            }
         } else {
-            // 如果库里没有任何会话，默认读取第一个大模型供应商的 group 和默认模式
+            // 如果库里没有任何会话，默认读取默认权限模式（供应商字段同样不做默认填充）
             if (conversation.getPermissionMode() == null) {
                 conversation.setPermissionMode(PermissionMode.READ_ONLY.name());
-            }
-            String defaultGroup = providerService.getProviderGroupForContext(null);
-            if (conversation.getProviderGroup() == null && defaultGroup != null) {
-                conversation.setProviderGroup(defaultGroup);
-                conversation.setProviderModelName(providerService.getModelNameForContext(null, defaultGroup));
             }
         }
 
         Conversation saved = agentEngine.getConversationFacade().createConversation(conversation);
-        log.info("新建对话会话成功: {}", saved.getId());
+        log.info("新建对话会话成功: {} (供应商绑定: {}/{})",
+                saved.getId(), conversation.getProviderGroup(), conversation.getProviderModelName());
         return saved;
     }
 
