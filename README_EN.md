@@ -8,7 +8,7 @@
   <a href="./README.md">简体中文</a> | <a href="./README_EN.md">English</a>
 </p>
 
-**ST-Cute** is a decoupled front-end and back-end AI Coding Agent & Harness, shipping as both a desktop client and a web application. Built on an event-driven ReAct Loop, it is compatible with mainstream `.agents` directory configurations.
+**ST-Cute** is a lightweight, feature-complete AI Coding Agent & Harness, shipping as both a desktop client and a web application.
 
 [![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-green.svg)](https://spring.io/projects/spring-boot)
@@ -21,23 +21,20 @@
 
 **Engine & Architecture**
 
-- **Kernel highlights**: `st-cute-engine` is a pure-Java engine with zero Spring dependencies, fully decoupled from its host environment. Beyond local coding, web services and cloud SaaS can all act as hosts; the ReAct loop, event bus, context-window protection, and self-healing are built into the engine, while tools, MCP, and skill management are left to the host. It also serves as a reference for building Agents in Java.
+- **Overall**: Web UI, decoupled frontend and backend, standalone desktop shell.
+- **Backend highlights**: engine and host are separated.
+  - **Engine side**: a self-developed general-purpose Java ReAct framework. Abstract design, zero Spring dependencies, compatible with any ecosystem. Not tied to a specific host environment — it can run locally or be integrated into SaaS services. Built on a callback-driven loop, with built-in state management, SubAgent, tool invocation, permission management, event bus, context-window compaction, overflow-proof trimming, self-healing on exceptions, and other core capabilities. Provides abstractions such as prompt contributors and tool interfaces for hosts to implement.
+  - **Host side**: the actual runtime environment. It implements the abstractions defined by the engine side and enriches concrete Coding Agent features on top of them.
 
 **Usage & Experience**
 
-- **Lightweight & ready-to-run**: just right between oversimplified and bloated. Unzip and run, full-featured. Easy to handle.
-- **Multi-device sync**: deploy once, and desktop / web / mobile clients all get the full feature set, with responsive mobile-friendly UI — Vibe Coding even on the subway.
-- **Office document support**: built-in tools read PDF / Word / Excel directly, no external conversion needed.
-- **Silky messages**: ultra-smooth message list with smart folding; thinking process, tool call chains, SubAgent execution status, active subprocesses, and complete LLM HTTP request/response logs fully traceable.
+- **Lightweight & ready to use**: just right between bare-bones and bloated. Unzip and run, full-featured, easy to handle.
+- **Multi-form packages**: multiple release package forms adapted to different environments — deployable on both desktops and servers.
+- **Multi-device sync**: deploy once, and desktop / web / mobile clients all get the full feature set with responsive adaptation — Vibe Coding anywhere, even on your phone.
+- **Office support**: PDF / Word / Excel read directly via built-in tools, no external conversion needed.
+- **Great experience**: smart folding for noise reduction; ultra-smooth message list; full observability: thinking process, tool call chains, SubAgent execution status, active subprocesses, and complete LLM HTTP request/response logs — all traceable end to end.
+- **Unique feature**: minimal Skill mode (toggleable). When enabled, all Skills are triggered on demand via explicit commands, instead of injecting the entire list to the LLM. Perfect for users with many Skills — saves a ton of tokens.
 - **Pure & secure**: 100% portable, no backdoors, with path sandbox support.
-
----
-
-## 📸 Interface Preview
-
-| 📱 Mobile Adaptation (Vibe Coding on Mobile) | 💻 PC Desktop Panoramic Experience |
-| :---: | :---: |
-| ![Mobile Preview](.github/assets/mobile-preview.jpg) | ![Desktop Preview](.github/assets/desktop-preview.jpg) |
 
 ---
 
@@ -47,7 +44,7 @@
 | :--- | :--- | :--- |
 | **Backend** (`st-cute-core`) | Java 25 / Spring Boot 4.1 | Event-driven lightweight architecture |
 | **Persistence** | SQLite 3 + MyBatis-Flex | WAL mode enabled by default, no heavy database setup |
-| **Communication** | OkHttp + WebSocket | REST API + real-time bi-directional streaming, complete HTTP probe logs |
+| **Communication** | OkHttp + WebSocket | REST API + real-time bi-directional communication, complete HTTP probe logs |
 | **Frontend** (`st-cute-web`) | Vue 3 + Vite 8 + TypeScript 6 | Naive UI component library, managed via pnpm workspace |
 | **Desktop Shell** (`st-cute-desktop`) | Rust + Tauri | Native window shell, double-click to run, auto-manages backend lifecycle |
 
@@ -57,15 +54,17 @@
 
 - **Implemented**
     - ReAct Loop
-    - Tool Executions
-        - File search, read & write
-        - Command execution
-        - Git WorkTree
-    - SKILL
-    - MCP
-    - HOOK
-    - RULE (`AGENTS.md`)
     - SubAgent
+    - Tool Invocation Matrix
+        - File operations
+        - Command execution
+        - Online search
+        - Meta information
+    - Componentized Harness
+        - SKILL
+        - MCP
+        - HOOK
+        - RULE
     - Permission Control
         - Read-Only
         - Smart Approval
@@ -92,7 +91,6 @@
     - Multi-language
         - Frontend supports both Chinese and English
 - **Not yet released, planned**
-    - Online search
     - Multi-language support for backend response messages and LLM built-in prompts
     - Multiple theme colors
 

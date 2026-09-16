@@ -8,7 +8,7 @@
   <a href="./README.md">简体中文</a> | <a href="./README_EN.md">English</a>
 </p>
 
-**ST-Cute** 是一个前后端分离、同时提供桌面端与网页端的 AI Coding Agent & Harness，基于事件驱动的 ReAct Loop，兼容主流 .agents 目录配置。
+**ST-Cute** 是一个轻量好用、功能齐全、同时提供桌面端与网页端的 AI Coding Agent & Harness。
 
 [![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-green.svg)](https://spring.io/projects/spring-boot)
@@ -21,23 +21,20 @@
 
 **引擎与架构**
 
-- **内核亮点**：`st-cute-engine` 是纯 Java 零 Spring 依赖的引擎，不吃宿主环境。不仅本地Coding，对于Web 服务、云端 SaaS 皆可作宿主；ReAct 循环、事件总线、窗口防爆、循环自愈为引擎内建。工具实现、MCP实现、Skill管理由宿主自由发挥。可以作为 Java 编写 Agent 的范例。
+- **整体介绍**：WebUI、前后端分离、独立桌面壳。
+- **后端特色**：引擎与宿主分离。
+  - **引擎侧**：自研的通用 Java ReAct 框架。抽象设计，零 Spring 依赖，生态通吃。不限宿主环境，可运用于本地，可集成于SaaS服务。基于回调驱动的循环，内建状态管理、SubAgent、工具调用、权限管理、事件总线、窗口压缩、防爆裁剪、异常情况自愈等基础能力。抽象提示词贡献器，工具接口等供宿主侧实现。
+  - **宿主侧**：作为实际运行环境，实现引擎侧的抽象定义，丰富落地 Coding Agent 相关功能。
 
 **使用与体验**
 
 - **轻量即用**：在简陋与臃肿之间刚刚好。解压即跑，功能齐全，好驾驭。
-- **多端同步**：一处部署，桌面端 / 网页端 / 移动端同步访问完整功能，响应式适配，地铁上也能 Vibe Coding。
+- **多形态包**：提供多种形态的 release 包，适配多种环境，桌面与服务器都壳部署。
+- **多端同步**：一处部署，桌面端 / 网页端 / 移动端同步访问完整功能，响应式适配，手机也能随地 Vibe Coding。
 - **办公支持**：PDF / Word / Excel 内置工具直接读取，无需外挂转换。
-- **丝滑消息**：超流畅的消息列表，智能折叠降噪；思考过程、工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志全程可溯。
+- **美好体验**：智能折叠降噪，超流畅的消息列表；可观测：思考过程、工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志全程可溯。
+- **独创特色**：极简 Skill 模式：可开关，开启后所有 Skill 可通过显示命令按需触发，不会把全部清单给大模型。适用于 Skill 很多的用户，超省 Token。
 - **安全纯粹**：纯绿色、无后门、支持路径沙箱。
-
----
-
-## 📸 界面预览
-
-| 📱 移动端适配 (Vibe Coding on Mobile) | 💻 PC 桌面端全景交互 |
-| :---: | :---: |
-| ![移动端预览](.github/assets/mobile-preview.jpg) | ![桌面端预览](.github/assets/desktop-preview.jpg) |
 
 ---
 
@@ -57,15 +54,17 @@
 
 - **已实现**
     - ReAct Loop
-    - 工具调用
-        - 文件搜索与读写
-        - 命令执行
-        - Git WorkTree
-    - SKILL
-    - MCP
-    - HOOK
-    - RULE
     - SubAgent
+    - 工具调用矩阵
+        - 文件操作
+        - 命令执行
+        - 在线搜索
+        - 元信息提供
+    - 组件化 Harness
+        - SKILL
+        - MCP
+        - HOOK
+        - RULE
     - 权限管控
         - 只读
         - 智能审批
@@ -92,7 +91,6 @@
     - 多语言
         - 前端支持中英双语
 - **暂未发布，在计划中**
-    - 在线搜索
     - 后端响应msg及大模型内置提示词增加多语言支持
     - 多主题配色
 
