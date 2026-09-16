@@ -35,6 +35,8 @@ export const useAppStore = defineStore('app', () => {
   const password = ref('')
   const maxViewHistoryLimit = ref(2000)
   const pathSandboxEnabled = ref(true)
+  // 极简 Skill 模式：开启后技能清单不注入系统提示词以节省 Token，仅按需触发加载
+  const minimalSkillMode = ref(false)
   
   // 权限安全配置
   const permissionMode = ref('READ_ONLY')
@@ -196,11 +198,18 @@ export const useAppStore = defineStore('app', () => {
 
     let customArgOverride: string | undefined = undefined
     if (decision === 'ALLOW' && isEditingArgs.value) {
+      // 编辑过参数时必须提供合法 JSON：解析失败直接拦截提交并提示，
+      // 禁止把乱七八糟的原文静默透传给后端执行层
       try {
         const parsed = JSON.parse(editedArgumentsJson.value)
         customArgOverride = JSON.stringify(parsed)
       } catch (e) {
-        customArgOverride = editedArgumentsJson.value
+        if ((window as any).$message) {
+          ;(window as any).$message.error('参数不是合法的 JSON，请修正后再允许执行')
+        } else {
+          console.error('参数 JSON 解析失败，已拦截提交:', e)
+        }
+        return
       }
     }
 
@@ -289,6 +298,7 @@ export const useAppStore = defineStore('app', () => {
       password.value = data.password || ''
       maxViewHistoryLimit.value = data.maxViewHistoryLimit || 2000
       pathSandboxEnabled.value = data.pathSandboxEnabled !== undefined ? data.pathSandboxEnabled : true
+      minimalSkillMode.value = data.minimalSkillMode || false
     } catch (e) {
       console.error(t('settings.loadFailed'), e)
     }
@@ -304,7 +314,8 @@ export const useAppStore = defineStore('app', () => {
         httpLog: httpLog.value,
         httpLogDays: httpLogDays.value,
         password: password.value,
-        pathSandboxEnabled: pathSandboxEnabled.value
+        pathSandboxEnabled: pathSandboxEnabled.value,
+        minimalSkillMode: minimalSkillMode.value
       })
       if ((window as any).$message) {
         ;(window as any).$message.success(t('settings.saveSuccess'))
@@ -336,6 +347,7 @@ export const useAppStore = defineStore('app', () => {
     password,
     maxViewHistoryLimit,
     pathSandboxEnabled,
+    minimalSkillMode,
     
     permissionMode,
     currentPermissionReq,

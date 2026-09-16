@@ -189,9 +189,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { marked } from 'marked'
 import { useAppStore } from '@/stores/app'
 import { useConversationStore } from '@/stores/conversation'
+import { renderMarkdownSafe } from '@/utils/markdown'
 import { Message } from '@/types'
 import { t } from '@/i18n'
 import ToolGroupCard from './ToolGroupCard.vue'
@@ -256,8 +256,8 @@ const formattedContent = computed(() => {
   }
 
   try {
-    // 使用 marked 同步解析 markdown
-    return marked.parse(targetText, { async: false, gfm: true, breaks: true }) as string
+    // 统一走 markdown 渲染入口
+    return renderMarkdownSafe(targetText)
   } catch (e) {
     console.error('Markdown 解析错误:', e)
     return targetText

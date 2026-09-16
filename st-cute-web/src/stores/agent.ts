@@ -110,11 +110,18 @@ export const useAgentStore = defineStore('agent', () => {
 
     let customArgOverride: string | undefined = undefined
     if (decision === 'ALLOW' && subAgent.pendingPermissionReq.isEditingArgs) {
+      // 编辑过参数时必须提供合法 JSON：解析失败直接拦截提交并提示，
+      // 禁止把乱七八糟的原文静默透传给后端执行层（与主会话审批口径一致）
       try {
         const parsed = JSON.parse(subAgent.pendingPermissionReq.editedArgumentsJson || '{}')
         customArgOverride = JSON.stringify(parsed)
       } catch (e) {
-        customArgOverride = subAgent.pendingPermissionReq.editedArgumentsJson
+        if ((window as any).$message) {
+          ;(window as any).$message.error('参数不是合法的 JSON，请修正后再允许执行')
+        } else {
+          console.error('子代理审批参数 JSON 解析失败，已拦截提交:', e)
+        }
+        return
       }
     }
 

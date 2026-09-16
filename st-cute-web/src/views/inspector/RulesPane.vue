@@ -61,7 +61,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAgentStore } from '@/stores/agent'
-import { marked } from 'marked'
+import { renderMarkdownSafe } from '@/utils/markdown'
 import { AgentRule } from '@/types'
 import { t } from '@/i18n'
 
@@ -76,16 +76,8 @@ const showDetail = (rule: AgentRule) => {
 
 const renderedMarkdown = computed(() => {
   if (!selectedRule.value || !selectedRule.value.content) return t('inspector.noData')
-  try {
-    return marked.parse(selectedRule.value.content, { async: false, gfm: true, breaks: true }) as string
-  } catch (e) {
-    console.error('Markdown 渲染失败:', e)
-    return selectedRule.value.content
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>')
-  }
+  // 统一走 markdown 渲染入口
+  return renderMarkdownSafe(selectedRule.value.content)
 })
 
 const formatSize = (bytes: number) => {
