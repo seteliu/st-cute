@@ -181,6 +181,9 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                                 nextItem = chunk;
                                 return;
                             }
+                        } catch (SseErrorFrameException e) {
+                            // SSE 错误帧（上游 API 报错）不允许跳过，必须立即中断流并向上传播以激活透明重试
+                            throw e;
                         } catch (Exception e) {
                             log.error("解析 Anthropic SSE 帧失败，跳过: event={}, data={}, error={}", 
                                     eventType, data, e.getMessage(), e);
@@ -324,7 +327,8 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                     String errorType = errorDetail != null ? errorDetail.getString("type") : "unknown";
                     String errorMessage = errorDetail != null ? errorDetail.getString("message") : "unknown error";
                     log.error("Anthropic 流式 API 调用过程中返回错误: type={}, message={}", errorType, errorMessage);
-                    throw new RuntimeException("Anthropic 流式 API 报错: " + errorType + " - " + errorMessage);
+                    // 抛出 SSE 错误帧专用异常：必须穿透外层"跳过"逻辑向上传播，禁止被静默吞掉
+                    throw new SseErrorFrameException("Anthropic 流式 API 报错: " + errorType + " - " + errorMessage);
                 }
                 default -> null;
             };
@@ -355,7 +359,15 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
 
         String systemContent = extractSystemPrompt(prompt.getMessages());
         if (systemContent != null && !systemContent.isEmpty()) {
-            body.put("system", systemContent);
+            // 缓存断点 1：system 末尾（前缀顺序 tools→system，此断点连同全部工具定义一并纳入缓存）。
+            // system 必须使用块数组形式才能挂 cache_control
+            JSONArray systemBlocks = new JSONArray();
+            JSONObject systemBlock = new JSONObject();
+            systemBlock.put("type", "text");
+            systemBlock.put("text", systemContent);
+            systemBlock.put("cache_control", ephemeralCacheControl());
+            systemBlocks.add(systemBlock);
+            body.put("system", systemBlocks);
         }
 
         body.put("messages", buildAnthropicMessages(prompt.getMessages()));
@@ -598,7 +610,39 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
             }
         }
 
+        // 5. 缓存断点 2：最后一条消息的末 content block（滚动前移，缓存全部对话历史——
+        //    用户消息、assistant 输出与 tool_use/tool_result 交互整体构成追加式前缀）
+        if (!finalResult.isEmpty()) {
+            JSONObject lastMsg = finalResult.getJSONObject(finalResult.size() - 1);
+            Object contentObj = lastMsg.get("content");
+            JSONObject lastBlock = null;
+            if (contentObj instanceof JSONArray blocks && !blocks.isEmpty()) {
+                lastBlock = blocks.getJSONObject(blocks.size() - 1);
+            } else if (contentObj instanceof String) {
+                // content 为纯字符串（单文本块压缩形态）：展开为块数组以挂断点
+                JSONArray blocks = new JSONArray();
+                JSONObject textBlock = new JSONObject();
+                textBlock.put("type", "text");
+                textBlock.put("text", contentObj);
+                blocks.add(textBlock);
+                lastBlock = textBlock;
+                lastMsg.put("content", blocks);
+            }
+            if (lastBlock != null) {
+                lastBlock.put("cache_control", ephemeralCacheControl());
+            }
+        }
+
         return finalResult;
+    }
+
+    /**
+     * 构建 ephemeral 类型缓存断点对象（Anthropic 当前唯一支持的缓存类型）
+     */
+    private JSONObject ephemeralCacheControl() {
+        JSONObject cacheControl = new JSONObject();
+        cacheControl.put("type", "ephemeral");
+        return cacheControl;
     }
 
     private String extractSystemPrompt(List<CuteMessage> messages) {
