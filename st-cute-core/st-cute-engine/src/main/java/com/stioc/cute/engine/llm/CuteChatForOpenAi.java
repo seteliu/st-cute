@@ -165,6 +165,9 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
                             nextItem = chunk;
                             return;
                         }
+                    } catch (SseErrorFrameException e) {
+                        // SSE 错误帧（上游 API 报错）不允许跳过，必须立即中断流并向上传播以激活透明重试
+                        throw e;
                     } catch (Exception e) {
                         log.error("解析 OpenAI SSE 帧失败，跳过: data={}, error={}", data, e.getMessage(), e);
                     }
@@ -210,7 +213,8 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
             if (errorObj != null) {
                 String errorMessage = errorObj.getString("message");
                 log.error("OpenAI 流式 API 调用过程中返回错误: {}", errorMessage);
-                throw new RuntimeException("OpenAI 流式 API 报错: " + errorMessage);
+                // 抛出 SSE 错误帧专用异常：必须穿透外层"跳过"逻辑向上传播，禁止被静默吞掉
+                throw new SseErrorFrameException("OpenAI 流式 API 报错: " + errorMessage);
             }
 
             JSONObject usageObj = json.getJSONObject("usage");
