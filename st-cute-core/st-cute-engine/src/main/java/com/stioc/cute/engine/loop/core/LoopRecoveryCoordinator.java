@@ -1,6 +1,6 @@
 package com.stioc.cute.engine.loop.core;
 
-import com.stioc.cute.engine.common.AgentEngineLock;
+import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
 import com.stioc.cute.engine.store.types.Conversation;
@@ -39,6 +39,7 @@ public class LoopRecoveryCoordinator {
     private final LoopDataReporter loopDataReporter;
     private final AgentContextManager agentContextManager;
     private final AgentLoopCoordinator loopCoordinator;
+    private final EngineLock lockProvider;
 
     /**
      * 清理并自愈僵死消息与会话状态
@@ -109,8 +110,8 @@ public class LoopRecoveryCoordinator {
 
         Long parentCid = conv.getParentCid();
         if (parentCid != null && parentCid != 0L) {
-            Lock subDataLock = AgentEngineLock.CID_DATA_STRIPED.get(cid);
-            Lock parentDataLock = AgentEngineLock.CID_DATA_STRIPED.get(parentCid);
+            Lock subDataLock = lockProvider.getConversationDataLock(cid);
+            Lock parentDataLock = lockProvider.getConversationDataLock(parentCid);
             subDataLock.lock();
             parentDataLock.lock();
             try {
@@ -130,7 +131,7 @@ public class LoopRecoveryCoordinator {
             }
         } else {
             log.debug("[LoopRecovery] 清理顶层会话 {} 异常残留状态", cid);
-            Lock dataLock = AgentEngineLock.CID_DATA_STRIPED.get(cid);
+            Lock dataLock = lockProvider.getConversationDataLock(cid);
             dataLock.lock();
             try {
                 loopCoordinator.forceResetLoopState(cid);

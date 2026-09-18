@@ -8,12 +8,9 @@ import com.stioc.cute.engine.event.types.ListenerTier;
 import com.stioc.cute.engine.AgentEngine;
 import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.ConversationPatch;
-import com.stioc.cute.engine.store.types.MessageRole;
-import com.stioc.cute.engine.store.types.MessageStatus;
 import com.stioc.cute.message.types.MessageVo;
 import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessagePatch;
-import com.stioc.cute.engine.event.types.StreamChunkPayload;
 import com.alibaba.fastjson2.JSON;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +22,11 @@ import java.util.UUID;
 /**
  * 第三层：WebSocket 物理网络外推监听器 (Order = 3)
  * 职责：非阻塞式（静默异常），将核心业务事件/请求变动翻译映射为前端约定的 WebSocket 物理传输协议帧（S2C_xxx）推送出去。
+ * <p>
+ * 纯外推定位：流式内容的缓存维护（思考流/正文流缓冲桶）已收口至引擎内置的
+ * EngineNotificationListener（同层 priority=0，先于本监听器执行），
+ * 本监听器不再承担任何缓存读写职责。
+ * </p>
  */
 @Component
 @Slf4j
@@ -49,16 +51,13 @@ public class RuntimeEventListenerWebSocket implements AgentEventListener {
             return;
         }
 
-        // 1. 流式事件：同步维护上下文中的流式内容缓存（刷新页面回填用）
-        maintainStreamBufferCache(event);
-
-        // 2. 在最前面映射并拦截无需外推的内部控制命令
+        // 1. 映射并拦截无需外推的内部控制命令
         String wsType = mapToWsType(event.getType());
         if (wsType == null) {
             return;
         }
 
-        // 3. 会话新增与更新为虚拟广播类型，统一委托广播契约全局外推，不再走 sendWsFrame 定向处理
+        // 2. 会话新增与更新为虚拟广播类型，统一委托广播契约全局外推，不再走 sendWsFrame 定向处理
         if (BROADCAST_TYPE.equals(wsType)) {
             handleConversationBroadcast(event);
             return;
@@ -66,7 +65,7 @@ public class RuntimeEventListenerWebSocket implements AgentEventListener {
 
         Object payload = event.getPayload();
 
-        // 4. 局部微调各定向事件的 payload 载荷对象
+        // 3. 局部微调各定向事件的 payload 载荷对象
         if (event.getType() == AgentEventType.MESSAGE_UPDATE) {
             Long msgId = null;
             Message messageEntity = null;
@@ -97,49 +96,8 @@ public class RuntimeEventListenerWebSocket implements AgentEventListener {
             }
         }
 
-        // 3. 统一在最末尾进行网络帧外推
+        // 4. 统一在最末尾进行网络帧外推
         sendWsFrame(event, wsType, payload);
-    }
-
-    /**
-     * 维护流式内容缓存的生命周期（仅在通知层单线程 notify-serial 上执行，写-写天然串行）：
-     * - 思考/正文流事件：带 messageId 且有实际内容时追加缓存；归属新 messageId 时自动清空重写
-     * - ASSISTANT 消息终态更新（SUCCESS/FAILED/CANCELED）：按 messageId 清除缓存，此后由 DB 全量数据兜底
-     */
-    private void maintainStreamBufferCache(AgentEvent event) {
-        if (event == null || event.getAgentContext() == null) {
-            return;
-        }
-        AgentEventType type = event.getType();
-        if (type == AgentEventType.AGENT_THINKING_STREAM || type == AgentEventType.AGENT_CONTENT_STREAM) {
-            if (event.getPayload() instanceof StreamChunkPayload chunk) {
-                Long messageId = chunk.getMessageId();
-                String text = chunk.getText();
-                if (messageId != null && text != null && !text.isEmpty()) {
-                    boolean isReasoning = type == AgentEventType.AGENT_THINKING_STREAM;
-                    event.getAgentContext().appendStreamChunk(isReasoning, messageId, text);
-                }
-            }
-        } else if (type == AgentEventType.MESSAGE_UPDATE) {
-            Long messageId = null;
-            MessageRole role = null;
-            MessageStatus status = null;
-
-            if (event.getPayload() instanceof MessagePatch patch) {
-                messageId = patch.getId();
-                role = patch.get(Message::getRole);
-                status = patch.get(Message::getStatus);
-            } else if (event.getPayload() instanceof Message messageEntity) {
-                messageId = messageEntity.getId();
-                role = messageEntity.getRole();
-                status = messageEntity.getStatus();
-            }
-
-            if (messageId != null && MessageRole.ASSISTANT == role
-                    && (MessageStatus.SUCCESS == status || MessageStatus.FAILED == status || MessageStatus.CANCELED == status)) {
-                event.getAgentContext().clearStreamBuffers(messageId);
-            }
-        }
     }
 
     /**

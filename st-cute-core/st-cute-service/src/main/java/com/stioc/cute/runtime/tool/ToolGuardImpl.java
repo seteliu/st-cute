@@ -1,6 +1,7 @@
 package com.stioc.cute.runtime.tool;
 
 import com.stioc.cute.engine.loop.core.AgentContext;
+import com.stioc.cute.engine.tool.CuteTool;
 import com.stioc.cute.engine.tool.ToolGuard;
 import com.stioc.cute.engine.tool.types.ToolPermissionVerdict;
 import com.stioc.cute.permission.PermissionService;
@@ -19,7 +20,7 @@ public class ToolGuardImpl implements ToolGuard {
     private PermissionService permissionService;
 
     @Override
-    public ToolPermissionVerdict evaluate(String toolName, Map<String, Object> args, AgentContext context) {
-        return permissionService.evaluateVerdict(toolName, args, context);
+    public ToolPermissionVerdict evaluate(CuteTool tool, Map<String, Object> args, AgentContext context) {
+        return permissionService.evaluateVerdict(tool, args, context);
     }
 }

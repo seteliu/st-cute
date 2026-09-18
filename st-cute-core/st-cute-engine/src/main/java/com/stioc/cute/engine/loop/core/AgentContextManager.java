@@ -29,6 +29,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@link AgentContextInitializer} 扩展点由宿主回调装载，引擎不感知文件系统约定。
  * 字段使用 {@link Optional} 显式声明初始化器清单为可选扩展配置。
  * </p>
+ * <p>
+ * <b>部署约束（SaaS 多实例）</b>：上下文缓存（{@code contexts}）与活跃线程中断能力
+ * 均为进程内状态，同一会话的请求必须经粘性路由（按 cid 哈希至固定实例）落在同一实例上，
+ * 否则内存上下文不共享、取消信号无法触达目标线程；上下文外置（如 Redis）另立方案解决，
+ * 当前实现不做多实例内存同步。
+ * </p>
  */
 @Slf4j
 @RequiredArgsConstructor

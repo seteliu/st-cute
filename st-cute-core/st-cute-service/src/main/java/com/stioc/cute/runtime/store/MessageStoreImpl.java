@@ -334,6 +334,12 @@ public class MessageStoreImpl implements MessageStore {
         if (query.getStatuses() != null && !query.getStatuses().isEmpty()) {
             wrapper.and(MessageEntity::getStatus).in(query.getStatuses());
         }
+        if (query.getExcludedRoles() != null && !query.getExcludedRoles().isEmpty()) {
+            wrapper.and(MessageEntity::getRole).notIn(query.getExcludedRoles());
+        }
+        if (query.getExcludedStatuses() != null && !query.getExcludedStatuses().isEmpty()) {
+            wrapper.and(MessageEntity::getStatus).notIn(query.getExcludedStatuses());
+        }
 
         // ── 4. 排序控制 ──
         if (query.getSortDirection() != null) {

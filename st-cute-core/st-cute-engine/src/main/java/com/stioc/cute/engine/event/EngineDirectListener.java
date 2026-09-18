@@ -51,6 +51,11 @@ public class EngineDirectListener implements AgentEventListener {
     }
 
     @Override
+    public int getPriority() {
+        return 0;
+    }
+
+    @Override
     public void onEvent(AgentEvent event) {
         if (event == null || event.getType() == null) {
             return;

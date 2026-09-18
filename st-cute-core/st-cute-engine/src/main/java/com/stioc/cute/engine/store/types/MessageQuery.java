@@ -119,6 +119,16 @@ public class MessageQuery {
      */
     private Collection<MessageStatus> statuses;
 
+    /**
+     * 多角色排除集合 (role NOT IN (...))
+     */
+    private Collection<MessageRole> excludedRoles;
+
+    /**
+     * 多状态排除集合 (status NOT IN (...))
+     */
+    private Collection<MessageStatus> excludedStatuses;
+
     // ── 3. 排序、分页与轻量投影控制 ──
 
     /**

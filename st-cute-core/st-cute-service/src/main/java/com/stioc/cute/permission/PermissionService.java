@@ -7,7 +7,6 @@ import com.stioc.cute.engine.tool.types.ToolPermissionVerdict;
 import com.stioc.cute.service.FileHashSupport;
 import com.stioc.cute.permission.types.PermissionMode;
 import com.stioc.cute.permission.types.PermissionRule;
-import com.stioc.cute.engine.AgentEngine;
 import com.stioc.cute.engine.tool.CuteTool;
 import com.stioc.cute.tool.ToolNames;
 
@@ -20,7 +19,6 @@ import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import com.stioc.cute.project.ProjectService;
@@ -38,8 +36,8 @@ import jakarta.annotation.Resource;
 /**
  * 权限服务：执行多层级安全规则流水线，作出 Allow / Deny / Ask 裁决。
  * <p>
- * 对外契约：{@link #evaluateVerdict(String, Map, AgentContext)} 评估工具权限返回强类型裁决，
- * {@link #evaluate(String, Map, AgentContext)} 为兼容命名别名；
+ * 对外契约：{@link #evaluateVerdict(CuteTool, Map, AgentContext)} 评估工具权限返回强类型裁决，
+ * {@link #evaluate(CuteTool, Map, AgentContext)} 为兼容命名别名；
  * {@link #writeLocalRule(PermissionRule)} 与 {@link #writeLocalRule(PermissionRule, String)}
  * 向全局/项目工作区本地配置写入持久化权限授信规则。
  * </p>
@@ -48,12 +46,6 @@ import jakarta.annotation.Resource;
 @Service
 public class PermissionService {
 
-    // 破环供血：本类位于 ToolGuardImpl 的依赖链上（ToolGuardImpl → 本类 → AgentEngine），
-    // AgentEngine 由装配配置 Bean 工厂方法产出，创建期反向依赖本类，
-    // @Lazy 延迟解析打断「供血 Bean → 引擎 Bean → 供血 Bean」容器环（仅运行期经门面调用）
-    @Resource
-    @Lazy
-    private AgentEngine agentEngine;
     @Resource
     private ProjectService projectService;
     @Resource
@@ -85,8 +77,13 @@ public class PermissionService {
 
     /**
      * 评估单次工具调用的安全性，返回强类型裁决结果 ToolPermissionVerdict
+     *
+     * @param tool 待评估的工具实例（工具名等标识由本方法经 getName() 自取）
      */
-    public ToolPermissionVerdict evaluateVerdict(String toolName, Map<String, Object> arguments, AgentContext context) {
+    public ToolPermissionVerdict evaluateVerdict(CuteTool tool, Map<String, Object> arguments, AgentContext context) {
+        // 工具名自取：引擎传入的工具实例恒非 null（未知工具在引擎侧已早失败拦截），
+        // 与模型的原始调用名最多存在大小写差异，后续所有比较均为 equalsIgnoreCase，行为一致
+        String toolName = tool.getName();
         log.debug("权限评估开始: toolName={}", toolName);
 
         // 宽松参数访问：模型传参类型偏差（如数字形态路径）不致权限评估期 ClassCastException，
@@ -102,9 +99,6 @@ public class PermissionService {
         String commandVal = permArgs.getString("command");
         String patternVal = permArgs.getString("pattern");
         String queryVal = permArgs.getString("query");
-        // 移动工具的源/目标路径参数（不在通用 path/filepath/file 提取范围内）
-        String sourceVal = permArgs.getString("source");
-        String targetVal = permArgs.getString("target");
 
         // 提取主要特征内容
         String targetContent = "";
@@ -117,9 +111,10 @@ public class PermissionService {
         } else if (StringUtils.hasText(queryVal)) {
             targetContent = queryVal;
         }
-        // 移动工具无 path/command/pattern/query 特征，取源路径（为空则目标）作为规则匹配特征
-        if (!StringUtils.hasText(targetContent) && ToolNames.MOVE_FILE.equalsIgnoreCase(toolName)) {
-            targetContent = StringUtils.hasText(sourceVal) ? sourceVal : targetVal;
+        // 工具自声明资源优先：引擎传入的工具实例已自述目标资源（如文件路径、查询关键词），
+        // 优先消费该声明消除参数名猜测耦合；声明缺失（null）时保持上面的旧猜测链结果，行为完全兼容
+        if (!StringUtils.hasText(targetContent)) {
+            targetContent = extractDeclaredResource(tool, arguments);
         }
 
         // 层级 1: 计划模式已移除，豁免检查跳过
@@ -190,7 +185,8 @@ public class PermissionService {
         }
 
         // 层级 4: 路径沙箱强拦截（只限文件读写类工具及终端命令参数中的物理路径访问）
-        CuteTool toolInstance = resolveTool(toolName, context);
+        // 工具实例由引擎直接传入（原先经 resolveTool 反查注册中心，现随评估调用一并下发，权限层不再反向依赖引擎）
+        CuteTool toolInstance = tool;
         boolean isFileTool = toolInstance != null && toolInstance.getAccessLevel() != ToolAccessLevel.SENSITIVE;
         boolean isWriteOrModify = toolInstance != null && toolInstance.getAccessLevel() == ToolAccessLevel.WRITE;
         boolean isSensitiveTool = toolInstance != null && toolInstance.getAccessLevel() == ToolAccessLevel.SENSITIVE;
@@ -204,17 +200,6 @@ public class PermissionService {
             // a. 文件工具的路径安检
             if (isFileTool && StringUtils.hasText(pathVal)) {
                 pathsToCheck.add(pathVal);
-            }
-
-            // a2. 移动工具的源/目标双路径安检：source/target 参数不在通用 path 提取范围内，
-            // 若不显式纳入，目标路径可指向沙箱外造成逃逸（如把文件移动到系统目录）
-            if (ToolNames.MOVE_FILE.equalsIgnoreCase(toolName)) {
-                if (StringUtils.hasText(sourceVal)) {
-                    pathsToCheck.add(sourceVal);
-                }
-                if (StringUtils.hasText(targetVal)) {
-                    pathsToCheck.add(targetVal);
-                }
             }
 
             // b. 命令行工具的参数路径提取与安检
@@ -266,7 +251,7 @@ public class PermissionService {
         if (isWriteOrModify && !isSensitiveTool && StringUtils.hasText(pathVal)) {
             try {
                 // 与 ReadFileTool/ModifyFileTool 统一走 ProjectService 解析，
-                // 保证相对路径以项目根/worktree 为基准，而非 JVM 工作目录，避免白名单路径基准不一致
+                // 保证相对路径以项目根目录为基准，而非 JVM 工作目录，避免白名单路径基准不一致
                 String absPath = projectService.resolvePath(pathVal, context).toAbsolutePath().normalize().toString();
                 // 读取哈希门禁记录已迁运行时伴生上下文
                 RuntimeContext runtimeCtx = context.extra(RuntimeContext.class);
@@ -318,20 +303,30 @@ public class PermissionService {
     /**
      * 评估单次工具调用的安全性，直接透传强类型裁决结果
      */
-    public ToolPermissionVerdict evaluate(String toolName, Map<String, Object> arguments, AgentContext context) {
-        return evaluateVerdict(toolName, arguments, context);
+    public ToolPermissionVerdict evaluate(CuteTool tool, Map<String, Object> arguments, AgentContext context) {
+        return evaluateVerdict(tool, arguments, context);
     }
 
     /**
-     * 查找工具实例，用于基于接口方法判断工具类型，避免字符串猜测。
-     * 经引擎门面访问工具注册中心（外部只注入 AgentEngine 的调用铁律），
-     * 若 context 为 null 或 registry 不可用，则退化到 null（调用方做兜底判断）。
+     * 提取工具自声明的目标资源：优先作为规则匹配特征。
+     * <p>
+     * 工具的 {@link CuteTool#getTargetResource(Map)} 由工具自身定义语义（如文件路径、搜索关键词），
+     * 相比按 path/command 等固定参数名猜测更可靠；自声明资源为多路径拼接形态（含 " -> "）
+     * 时不参与特征匹配（可读性差且无规则匹配价值），跳过由上层兜底逻辑处理。
+     * 提取期异常按无声明处理（评估不因资源提取崩溃）。
+     * </p>
      */
-    private CuteTool resolveTool(String toolName, AgentContext context) {
-        if (agentEngine == null || toolName == null) {
-            return null;
+    private String extractDeclaredResource(CuteTool tool, Map<String, Object> arguments) {
+        try {
+            String resource = tool.getTargetResource(arguments);
+            // 拼接形态（含 " -> "）与单路径语义不适配规则匹配特征，跳过
+            if (resource != null && !resource.isBlank() && !resource.contains(" -> ")) {
+                return resource;
+            }
+        } catch (Exception e) {
+            log.debug("提取工具自声明资源失败，按无声明处理: {}", tool.getName(), e);
         }
-        return agentEngine.getToolFacade().getToolRegistry().getTool(toolName, context);
+        return null;
     }
 
     /**

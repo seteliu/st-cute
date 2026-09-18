@@ -3,7 +3,7 @@ package com.stioc.cute.runtime.store;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.util.UpdateEntity;
 import com.stioc.cute.conversation.ConversationEntity;
-import com.stioc.cute.engine.common.AgentEngineLock;
+import com.stioc.cute.engine.AgentEngine;
 import com.stioc.cute.engine.common.LambdaFieldResolver;
 import com.stioc.cute.engine.common.SFunction;
 import com.stioc.cute.engine.store.ConversationStore;
@@ -15,6 +15,7 @@ import com.stioc.cute.repository.ConversationMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -40,6 +41,14 @@ public class ConversationStoreImpl implements ConversationStore {
 
     @Resource
     private ConversationMapper conversationMapper;
+
+    /**
+     * 引擎根对象：仅用于经 {@link AgentEngine#getEngineLock()} 获取与引擎同源的锁供血，
+     * 差量原子更新的「读最新 → 变换 → 写回」临界区必须与引擎事件链共用同一物理锁源
+     */
+    @Resource
+    @Lazy
+    private AgentEngine agentEngine;
 
     // ── 1. 单实体查询 ──
 
@@ -236,7 +245,7 @@ public class ConversationStoreImpl implements ConversationStore {
         }
 
         log.debug("updateByDelta[{}] 开始处理: cid={}, delta={}", fieldName, cid, delta);
-        Lock lock = AgentEngineLock.CID_DATA_STRIPED.get(cid);
+        Lock lock = agentEngine.getEngineLock().getConversationDataLock(cid);
         lock.lock();
         try {
             ConversationEntity conv = conversationMapper.selectOneById(cid);

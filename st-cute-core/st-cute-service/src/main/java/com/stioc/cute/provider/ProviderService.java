@@ -176,9 +176,9 @@ public class ProviderService implements ProviderResolver {
     }
 
     /**
-     * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数、安全密码、路径沙箱保护、极简 Skill 模式）配置
+     * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数、安全密码、路径沙箱保护、极简 Skill 模式、全量用户附件装载）配置
      */
-    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, String password, boolean pathSandboxEnabled, boolean minimalSkillMode) {
+    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, String password, boolean pathSandboxEnabled, boolean minimalSkillMode, boolean loadAllUserAttachments) {
         contractProperty.setLanguage(language);
         contractProperty.setNewlineKey(newlineKey);
         contractProperty.getLlmLog().setHttpLog(httpLog);
@@ -186,6 +186,7 @@ public class ProviderService implements ProviderResolver {
         contractProperty.setPassword(password);
         contractProperty.setPathSandboxEnabled(pathSandboxEnabled);
         contractProperty.setMinimalSkillMode(minimalSkillMode);
+        contractProperty.setLoadAllUserAttachments(loadAllUserAttachments);
         writeBackGlobalConfig();
 
         BasicConfigDto dto = new BasicConfigDto();
@@ -196,6 +197,7 @@ public class ProviderService implements ProviderResolver {
         dto.setPassword(password);
         dto.setPathSandboxEnabled(pathSandboxEnabled);
         dto.setMinimalSkillMode(minimalSkillMode);
+        dto.setLoadAllUserAttachments(loadAllUserAttachments);
         webSocketBroadcast.broadcast(WebSocketBroadcast.EventType.CONFIG_UPDATED, dto);
     }
 

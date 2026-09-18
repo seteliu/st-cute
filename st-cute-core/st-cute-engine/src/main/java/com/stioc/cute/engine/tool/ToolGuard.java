@@ -17,10 +17,13 @@ public interface ToolGuard {
     /**
      * 工具执行前的权限评估。
      *
-     * @param toolName 工具名
-     * @param args     大模型传递的参数 Map
-     * @param context  当前会话上下文
+     * @param tool    待评估的工具实例（引擎解析所得，恒非 null：未知工具在进入本守卫前已早失败拦截），
+     *                工具名等标识信息由 {@link CuteTool#getName()} 自取，
+     *                并含工具自声明的审计资源 {@link CuteTool#getTargetResource(Map)} 等元数据，
+     *                宿主无需再按参数名猜测资源特征或反向反查注册中心
+     * @param args    大模型传递的参数 Map
+     * @param context 当前会话上下文
      * @return 强类型决策结果：ALLOW（放行）/ ASK（人在回路审批）/ DENY:原因（拒绝）
      */
-    ToolPermissionVerdict evaluate(String toolName, Map<String, Object> args, AgentContext context);
+    ToolPermissionVerdict evaluate(CuteTool tool, Map<String, Object> args, AgentContext context);
 }

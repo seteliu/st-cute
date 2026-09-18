@@ -3,7 +3,7 @@ package com.stioc.cute.hook;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.conversation.ConversationService;
-import com.stioc.cute.engine.common.AgentEngineCommonThread;
+import com.stioc.cute.runtime.common.HostExecutorProvider;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.hook.types.HookContext;
 import com.stioc.cute.hook.types.HookEventType;
@@ -137,7 +137,7 @@ public class HookService {
                 runHookProcess(rule, context);
             } else {
                 log.debug("触发非阻断异步生命周期挂钩 [{}], 事件: {}", rule.getName(), event);
-                AgentEngineCommonThread.submit(() -> {
+                HostExecutorProvider.submit(() -> {
                     try {
                         runHookProcess(rule, context);
                     } catch (Exception e) {

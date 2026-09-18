@@ -47,4 +47,10 @@ public class BasicConfigDto {
      * 是否开启极简 Skill 模式——技能清单不注入系统提示词以节省 Token，仅按需触发加载，默认关闭
      */
     private Boolean minimalSkillMode;
+
+    /**
+     * 是否加载全部用户消息的附件：开启后历史重建时所有用户消息的附件均完整装载物理数据，
+     * 关闭时仅最后一条用户消息完整装载、其余以轻量占位符替代，默认开启
+     */
+    private Boolean loadAllUserAttachments;
 }

@@ -1,7 +1,7 @@
 package com.stioc.cute.engine.loop.core;
 
-import com.stioc.cute.engine.common.AgentEngineCommonThread;
-import com.stioc.cute.engine.common.AgentEngineLock;
+import com.stioc.cute.engine.common.EngineExecutor;
+import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.loop.message.MessageDataReporter;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
@@ -33,6 +33,8 @@ public class AgentLoopCoordinator {
     private final LoopDataReporter loopDataReporter;
     private final MessageStore messageStore;
     private final MessageDataReporter messageDataReporter;
+    private final EngineLock lockProvider;
+    private final EngineExecutor executorProvider;
     private ChatNamingHelper chatNamingHelper;
 
     /**
@@ -46,7 +48,7 @@ public class AgentLoopCoordinator {
      * 同步执行 ReAct 推理循环，进行 cid 级互斥加锁排队
      */
     public void executeLoopSync(Long cid) {
-        Lock lock = AgentEngineLock.CID_LOOP_STRIPED.get(cid);
+        Lock lock = lockProvider.getConversationLoopLock(cid);
         lock.lock();
         try {
             log.debug("[AgentLoopCoordinator] 获得会话锁，开始执行 ReAct 循环: cid={}", cid);
@@ -119,7 +121,7 @@ public class AgentLoopCoordinator {
      * 异步提交执行推理，并于推理结束后执行回调
      */
     public void executeLoopAsync(Long cid, Runnable afterRun) {
-        AgentEngineCommonThread.submit(() -> {
+        executorProvider.getAsyncExecutor().submit(() -> {
             try {
                 executeLoopSync(cid);
             } catch (Exception e) {
@@ -210,7 +212,7 @@ public class AgentLoopCoordinator {
      * 提交用户新消息并异步启动推理循环（加锁防并发重入，清除 canceled、轮次归零、原子标记运行态、写 USER 消息并在结束时尝试命名）
      */
     public void submitUserMessage(Long cid, String text, String attachments) {
-        Lock dataLock = AgentEngineLock.CID_DATA_STRIPED.get(cid);
+        Lock dataLock = lockProvider.getConversationDataLock(cid);
         dataLock.lock();
         try {
             AgentContext context = agentContextManager.getOrCreateContext(cid);
@@ -235,7 +237,7 @@ public class AgentLoopCoordinator {
      * 重试指定消息：若为 ASSISTANT 则重置为 PENDING 并启动循环；若为 USER 则回退至该节点重新启动循环（加锁防并发重入）
      */
     public void retryMessage(Long cid, Long messageId) {
-        Lock dataLock = AgentEngineLock.CID_DATA_STRIPED.get(cid);
+        Lock dataLock = lockProvider.getConversationDataLock(cid);
         dataLock.lock();
         try {
             Message message = messageStore.getById(messageId);

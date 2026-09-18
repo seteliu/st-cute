@@ -1,6 +1,6 @@
 package com.stioc.cute.engine.loop.core;
 
-import com.stioc.cute.engine.common.AgentEngineLock;
+import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.event.AgentEventFactory;
 import com.stioc.cute.engine.llm.types.CuteUsage;
 import com.stioc.cute.engine.loop.message.MessageDataReporter;
@@ -35,6 +35,7 @@ public class LoopDataReporter {
     private final ConversationStore conversationStore;
     private final MessageStore messageStore;
     private final MessageDataReporter messageDataReporter;
+    private final EngineLock lockProvider;
 
     /**
      * 登记本轮等待工具清单（内存计数 + waitingToolIds 落库，经事件上报）。
@@ -68,7 +69,7 @@ public class LoopDataReporter {
         // 为同一把可重入锁（同 key 同源），此处外层加锁后事件链内重入无死锁。
         // 并行批多个完成回调交错执行时，多线程都可能读到"屏障已空"而重复拉起下一轮（双触发竞态）。
         // 锁内临界区串行保证只有真实扣掉最后一项的线程能看到空集合，天然唯一触发。
-        Lock cidLock = AgentEngineLock.CID_DATA_STRIPED.get(cid);
+        Lock cidLock = lockProvider.getConversationDataLock(cid);
         cidLock.lock();
         try {
             // 1. 入口验证：回调对应的 id 必须仍在等待集合中。
@@ -121,7 +122,7 @@ public class LoopDataReporter {
 
         // 会话级排他锁：与 updateWaitingToolToCompleted 对称的子 Agent 完成判定路径，
         // 防止多子 Agent 完成回调交错时重复拉起父会话下一轮
-        Lock cidLock = AgentEngineLock.CID_DATA_STRIPED.get(parentCid);
+        Lock cidLock = lockProvider.getConversationDataLock(parentCid);
         cidLock.lock();
         try {
             // 2. 入口验证：子会话 id 必须仍在等待集合中（对称触发守卫）。

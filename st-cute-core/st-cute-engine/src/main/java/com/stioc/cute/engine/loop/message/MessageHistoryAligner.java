@@ -1,12 +1,11 @@
 package com.stioc.cute.engine.loop.message;
 
-import com.alibaba.fastjson2.JSON;
-import com.stioc.cute.engine.llm.AttachmentContentLoader;
 import com.stioc.cute.engine.llm.CuteChatFactory;
-import com.stioc.cute.engine.llm.types.CuteAttachment;
 import com.stioc.cute.engine.llm.types.CuteMessage;
 import com.stioc.cute.engine.llm.types.CuteMessageRole;
 import com.stioc.cute.engine.llm.types.CuteToolCall;
+import com.stioc.cute.engine.loop.types.MessageIndexInfo;
+import com.stioc.cute.engine.loop.types.MessagePayload;
 import com.stioc.cute.engine.llm.types.Provider;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.prompt.SystemPromptAssembler;
@@ -22,9 +21,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -33,17 +32,40 @@ import java.util.stream.Collectors;
  * 专门负责两项关键对齐工作：
  * 1. 【运行输入对齐】：将数据库末尾消息对齐到下一次模型推理步骤，消费挂起输入，创建/激活当前活跃 ASSISTANT 占位符；
  * 2. 【历史数据还原】：从数据库还原大模型可见的全部历史消息，处理多模态附件、空结果状态感知占位符、COMPRESSED 排序与 SYSTEM 提示词装配。
+ * 还原出的每条消息（含引擎合成的 SYSTEM 首条）均经过 {@link MessageInterceptor} 拦截器链（order 升序），
+ * 正文与附件的宿主加工细节（时间戳追加、附件装载/占位等）全部下沉宿主拦截器实现。
+ * </p>
+ * <p>
+ * 两参数 {@link #rebuildHistory(AgentContext, List)} 信任调用方传入的 dbMsgs 已完成
+ * visibleToModel 过滤与 SYSTEM 角色排除（单参数入口与压缩链路均在查询条件中完成），
+ * 方法内不做二次过滤，仅做 COMPRESSED 前置排序与当前轮占位符排除。
  * </p>
  */
 @Slf4j
-@RequiredArgsConstructor
 public class MessageHistoryAligner {
 
     private final MessageStore messageStore;
     private final SystemPromptAssembler systemPromptAssembler;
     private final CuteChatFactory chatClientFactory;
-    private final Optional<AttachmentContentLoader> attachmentContentLoader;
+    private final List<MessageInterceptor> messageInterceptors;
     private final MessageDataReporter messageDataReporter;
+
+    public MessageHistoryAligner(MessageStore messageStore,
+                                 SystemPromptAssembler systemPromptAssembler,
+                                 CuteChatFactory chatClientFactory,
+                                 List<MessageInterceptor> messageInterceptors,
+                                 MessageDataReporter messageDataReporter) {
+        this.messageStore = messageStore;
+        this.systemPromptAssembler = systemPromptAssembler;
+        this.chatClientFactory = chatClientFactory;
+        // 构造时按 order 升序排定一次，历史重建每次直接复用，避免重复排序
+        this.messageInterceptors = messageInterceptors == null || messageInterceptors.isEmpty()
+                ? List.of()
+                : messageInterceptors.stream()
+                        .sorted(Comparator.comparingInt(MessageInterceptor::order))
+                        .collect(Collectors.toList());
+        this.messageDataReporter = messageDataReporter;
+    }
 
     // ==================== 下一轮输入对齐 ====================
 
@@ -94,13 +116,15 @@ public class MessageHistoryAligner {
     // ==================== 大模型历史还原与转换 ====================
 
     /**
-     * 对话历史还原与同步（从数据库拉取大模型可见的全部历史消息）
+     * 对话历史还原与同步（从数据库拉取大模型可见的全部历史消息）。
+     * 数据库残留的 SYSTEM 角色消息与还原渲染互斥，直接在查询条件中排除。
      */
     public List<CuteMessage> rebuildHistory(AgentContext context) {
         Long cid = context.getCid();
         List<Message> allMsgs = messageStore.listByQuery(MessageQuery.builder()
                 .cid(cid)
                 .visibleToModel(true)
+                .excludedRoles(List.of(MessageRole.SYSTEM))
                 .sortField("id")
                 .sortDirection(SortDirection.ASC)
                 .build());
@@ -108,23 +132,19 @@ public class MessageHistoryAligner {
     }
 
     /**
-     * 基于指定消息集合还原大模型历史会话
+     * 基于指定消息集合还原大模型历史会话。
+     * 信任入参 dbMsgs 已完成 visibleToModel 过滤与 SYSTEM 角色排除，方法内不再二次过滤。
      */
     public List<CuteMessage> rebuildHistory(AgentContext context, List<Message> allMsgs) {
-        Long cid = context.getCid();
         Long excludeAssistantMsgId = context.getActiveAssistantMsgId();
         List<CuteMessage> history = new ArrayList<>();
-        String systemPrompt = systemPromptAssembler.assemble(context);
+        List<MessageInterceptor> interceptors = messageInterceptors;
 
-        // 1. 无条件把最新的系统提示词作为历史消息列表的第一条（大模型上下文的第一条）
-        history.add(CuteMessage.builder().role(CuteMessageRole.SYSTEM).content(systemPrompt).build());
+        Provider activeConfig = chatClientFactory.getProviderConfigForContext(context);
+        boolean isMultimodal = activeConfig != null && Boolean.TRUE.equals(activeConfig.getMultimodal());
 
-        // 2. 过滤出 visibleToModel == true 的消息，同时排除 SYSTEM 角色消息（屏蔽数据库残留的系统消息）
-        List<Message> dbMsgs = allMsgs.stream()
-                .filter(m -> Boolean.TRUE.equals(m.getVisibleToModel()) && MessageRole.SYSTEM != m.getRole())
-                .collect(Collectors.toList());
-
-        // 3. 对 dbMsgs 进行重新排序以确保 MessageRole.COMPRESSED 消息排在最前面，其他普通消息紧随其后
+        // COMPRESSED 压缩摘要消息前置，其他消息按 ID 升序紧随其后
+        List<Message> dbMsgs = new ArrayList<>(allMsgs);
         dbMsgs.sort((m1, m2) -> {
             boolean isComp1 = MessageRole.COMPRESSED == m1.getRole();
             boolean isComp2 = MessageRole.COMPRESSED == m2.getRole();
@@ -137,76 +157,75 @@ public class MessageHistoryAligner {
             }
         });
 
-        Provider activeConfig = chatClientFactory.getProviderConfigForContext(context);
-        boolean isMultimodal = activeConfig != null && Boolean.TRUE.equals(activeConfig.getMultimodal());
+        // 角色索引信息：一次性构建，供拦截器感知各角色首/末条消息序位
+        MessageIndexInfo indexInfo = MessageIndexInfo.buildFrom(dbMsgs, excludeAssistantMsgId);
 
-        // 寻找最后一条有效的用户消息 ID，仅对该消息挂载多模态附件
-        Long lastUserMsgId = null;
-        for (int i = dbMsgs.size() - 1; i >= 0; i--) {
-            Message m = dbMsgs.get(i);
-            if (excludeAssistantMsgId != null && m.getId().equals(excludeAssistantMsgId)) {
-                continue;
-            }
-            if (MessageRole.USER == m.getRole() && MessageStatus.CANCELED != m.getStatus()) {
-                lastUserMsgId = m.getId();
-                break;
-            }
-        }
+        // 无条件把最新的系统提示词作为历史消息列表的第一条（大模型上下文的第一条），
+        // 单独构建载体（无 thisMsg/allMsgs/indexInfo，引擎合成消息不参与序位索引），同样经过拦截器链
+        MessagePayload systemPayload = MessagePayload.builder()
+                .multimodal(isMultimodal)
+                .context(context)
+                .content(systemPromptAssembler.assemble(context))
+                .build();
+        applyInterceptors(interceptors, systemPayload);
+        history.add(CuteMessage.builder().role(CuteMessageRole.SYSTEM).content(systemPayload.getContent()).build());
 
-        for (Message dbMsg : dbMsgs) {
+        for (Message msg : dbMsgs) {
             // 排除当前轮占位符
-            if (excludeAssistantMsgId != null && dbMsg.getId().equals(excludeAssistantMsgId)) {
+            if (excludeAssistantMsgId != null && msg.getId().equals(excludeAssistantMsgId)) {
                 continue;
             }
 
-            MessageStatus mStatus = dbMsg.getStatus();
+            MessageStatus mStatus = msg.getStatus();
             if (mStatus == null) {
                 mStatus = MessageStatus.SUCCESS;
             }
 
-            if (MessageRole.USER == dbMsg.getRole()) {
+            // 通用骨架：thisMsg 与兜底 content 逐条必设，allMsgs/indexInfo/multimodal/context 本次重建恒定；
+            // 各角色分支仅需覆写自身差异字段（如 TOOL 的状态感知结果、BRANCH 的来源前缀）
+            Supplier<MessagePayload.MessagePayloadBuilder> payloadBase = () -> MessagePayload.builder()
+                    .thisMsg(msg)
+                    .content(msg.getContent() != null ? msg.getContent() : "")
+                    .allMsgs(dbMsgs)
+                    .indexInfo(indexInfo)
+                    .multimodal(isMultimodal)
+                    .context(context);
+
+            if (MessageRole.USER == msg.getRole()) {
                 if (MessageStatus.CANCELED == mStatus) {
                     continue;
                 }
-                List<CuteAttachment> cuteAttachments = null;
-                String userContent = dbMsg.getContent() != null ? dbMsg.getContent() : "";
 
-                if (StringUtils.isNotBlank(dbMsg.getAttachments())) {
-                    if (dbMsg.getId().equals(lastUserMsgId)) {
-                        // 最后一轮有效用户消息：完整加载附件 Payload
-                        cuteAttachments = loadAttachments(dbMsg.getAttachments(), context, isMultimodal);
-                    } else {
-                        // 历史用户消息：生成轻量 Markdown 占位符追加在文本末尾
-                        String placeholder = buildAttachmentPlaceholder(dbMsg.getAttachments());
-                        if (StringUtils.isNotBlank(placeholder)) {
-                            userContent = userContent + "\n\n" + placeholder;
-                        }
-                    }
-                }
+                MessagePayload payload = payloadBase.get().build();
+                applyInterceptors(interceptors, payload);
 
                 history.add(CuteMessage.builder()
                         .role(CuteMessageRole.USER)
-                        .content(userContent)
-                        .attachments(cuteAttachments)
+                        .content(payload.getContent())
+                        .attachments(payload.getAttachments())
                         .build());
-            } else if (MessageRole.ASSISTANT == dbMsg.getRole()) {
+            } else if (MessageRole.ASSISTANT == msg.getRole()) {
                 if (MessageStatus.FAILED == mStatus || MessageStatus.CANCELED == mStatus) {
                     continue;
                 }
                 List<CuteToolCall> toolCallsList = new ArrayList<>();
-                if (StringUtils.isNotBlank(dbMsg.getToolCalls())) {
-                    toolCallsList = new ArrayList<>(ToolCallCodec.parseList(dbMsg.getToolCalls()));
+                if (StringUtils.isNotBlank(msg.getToolCalls())) {
+                    toolCallsList = new ArrayList<>(ToolCallCodec.parseList(msg.getToolCalls()));
                 }
+
+                MessagePayload payload = payloadBase.get().build();
+                applyInterceptors(interceptors, payload);
+
                 history.add(CuteMessage.builder()
                         .role(CuteMessageRole.ASSISTANT)
-                        .content(dbMsg.getContent())
-                        .reasoningContent(dbMsg.getReasoningContent())
+                        .content(payload.getContent())
+                        .reasoningContent(msg.getReasoningContent())
                         .toolCalls(toolCallsList)
                         .build());
 
-            } else if (MessageRole.TOOL == dbMsg.getRole()) {
-                String rawResult = dbMsg.getContent();
-                MessageStatus toolStatus = dbMsg.getStatus() != null ? dbMsg.getStatus() : MessageStatus.SUCCESS;
+            } else if (MessageRole.TOOL == msg.getRole()) {
+                String rawResult = msg.getContent();
+                MessageStatus toolStatus = msg.getStatus() != null ? msg.getStatus() : MessageStatus.SUCCESS;
                 if (MessageStatus.REJECTED == toolStatus) {
                     rawResult = "{\"error\": \"Permission denied by user.\"}";
                 } else if (MessageStatus.CANCELED == toolStatus) {
@@ -217,48 +236,66 @@ public class MessageHistoryAligner {
 
                 String toolCallId = null;
                 String toolName = null;
-                if (StringUtils.isNotBlank(dbMsg.getToolCalls())) {
-                    CuteToolCall call = ToolCallCodec.parseSingle(dbMsg.getToolCalls());
+                if (StringUtils.isNotBlank(msg.getToolCalls())) {
+                    CuteToolCall call = ToolCallCodec.parseSingle(msg.getToolCalls());
                     toolCallId = StringUtils.isNotBlank(call.getId()) ? call.getId() : null;
                     toolName = StringUtils.isNotBlank(call.getName()) ? call.getName() : null;
                 }
 
                 if (StringUtils.isBlank(rawResult)) {
-                    rawResult = buildEmptyToolResultPlaceholder(dbMsg.getStatus(), toolName);
+                    rawResult = buildEmptyToolResultPlaceholder(msg.getStatus(), toolName);
                 }
 
-                List<CuteAttachment> cuteAttachments = null;
-                if (StringUtils.isNotBlank(dbMsg.getAttachments())) {
-                    cuteAttachments = loadAttachments(dbMsg.getAttachments(), context, isMultimodal);
-                }
+                // TOOL 分支覆写 content：状态感知结果（拒批/取消/待审批占位与空结果兜底）优先于原文
+                MessagePayload payload = payloadBase.get()
+                        .content(rawResult)
+                        .build();
+                applyInterceptors(interceptors, payload);
 
                 history.add(CuteMessage.builder()
                         .role(CuteMessageRole.TOOL)
                         .toolCallId(toolCallId)
                         .toolName(toolName)
-                        .content(rawResult)
-                        .attachments(cuteAttachments)
+                        .content(payload.getContent())
+                        .attachments(payload.getAttachments())
                         .build());
-            } else if (MessageRole.BRANCH == dbMsg.getRole()) {
+            } else if (MessageRole.BRANCH == msg.getRole()) {
                 // 子 Agent 汇报消息：以 USER 角色发给大模型，内容前拼接来源前缀
                 if (MessageStatus.CANCELED != mStatus) {
-                    String branchContent = "来自其他Agent：\n" + dbMsg.getContent();
+                    // BRANCH 分支覆写 content：拼接来源前缀
+                    MessagePayload payload = payloadBase.get()
+                            .content("来自其他Agent：\n" + msg.getContent())
+                            .build();
+                    applyInterceptors(interceptors, payload);
+
                     history.add(CuteMessage.builder()
                             .role(CuteMessageRole.USER)
-                            .content(branchContent)
+                            .content(payload.getContent())
                             .build());
                 }
-            } else if (MessageRole.COMPRESSED == dbMsg.getRole()) {
+            } else if (MessageRole.COMPRESSED == msg.getRole()) {
                 if (MessageStatus.SUCCESS == mStatus) {
+                    MessagePayload payload = payloadBase.get().build();
+                    applyInterceptors(interceptors, payload);
+
                     history.add(CuteMessage.builder()
                             .role(CuteMessageRole.USER)
-                            .content(dbMsg.getContent())
+                            .content(payload.getContent())
                             .build());
                 }
             }
         }
 
         return history;
+    }
+
+    /**
+     * 将消息载体依次交由拦截器链加工（order 已在链构建时排好序）
+     */
+    private void applyInterceptors(List<MessageInterceptor> interceptors, MessagePayload payload) {
+        for (MessageInterceptor interceptor : interceptors) {
+            interceptor.intercept(payload);
+        }
     }
 
     /**
@@ -285,25 +322,5 @@ public class MessageHistoryAligner {
             default -> String.format(
                     "{\"status\": \"UNKNOWN\", \"error\": \"工具 %s 的结果与状态均缺失，请勿采信本条记录。\"}", name);
         };
-    }
-
-    /**
-     * 解析并加载消息关联的多模态附件物理数据
-     */
-    private List<CuteAttachment> loadAttachments(String rawAttachments, AgentContext context, boolean isMultimodal) {
-        if (StringUtils.isBlank(rawAttachments) || attachmentContentLoader.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return attachmentContentLoader.get().loadAttachments(rawAttachments, context, isMultimodal);
-    }
-
-    /**
-     * 为历史用户消息中的附件构建轻量 Markdown 占位符
-     */
-    private String buildAttachmentPlaceholder(String rawAttachments) {
-        if (StringUtils.isBlank(rawAttachments) || attachmentContentLoader.isEmpty()) {
-            return null;
-        }
-        return attachmentContentLoader.get().buildAttachmentPlaceholder(rawAttachments);
     }
 }

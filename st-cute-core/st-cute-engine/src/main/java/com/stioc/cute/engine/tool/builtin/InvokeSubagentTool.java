@@ -16,7 +16,7 @@ import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessageRole;
 import com.stioc.cute.engine.store.types.MessageStatus;
-import com.stioc.cute.engine.common.AgentEngineCommonThread;
+import com.stioc.cute.engine.common.EngineExecutor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,6 +33,7 @@ public class InvokeSubagentTool implements CuteTool {
     public static final String NAME = "invoke_subagent";
 
     private final AgentContextManager agentContextManager;
+    private final EngineExecutor executorProvider;
 
     private AgentLoopCoordinator agentLoopCoordinator;
 
@@ -47,7 +48,7 @@ public class InvokeSubagentTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "【子智能体并行委派核心工具】针对可以完全解耦的独立复杂子任务（如阅读另一处无关的源码、分析特定子功能包等），拉起一个独立且能并发运行的子智能体。它会在后台执行 ReAct 流程直到结束，并自动将汇总结论以 USER 消息投递回父智能体。请不要在主流程受阻必须等待该结论时，滥用此工具产生死锁。";
+        return "针对可以完全解耦的独立复杂子任务（如阅读另一处无关的源码、分析特定子功能包等），拉起一个独立且能并发运行的子智能体。它会在后台执行 ReAct 流程直到结束，并自动将汇总结论以 USER 消息投递回父智能体。请不要在主流程受阻必须等待该结论时，滥用此工具产生死锁。";
     }
 
     @Override
@@ -144,7 +145,7 @@ public class InvokeSubagentTool implements CuteTool {
         subContext.setParentCid(agentContext.getCid());
         subContext.publishEvent(AgentEventFactory.createMessageCreate(subContext, subUserMsg));
 
-        AgentEngineCommonThread.submit(() -> {
+        executorProvider.getAsyncExecutor().submit(() -> {
             // 异步拉起子智能体 ReAct Loop 状态机
             agentLoopCoordinator.executeLoopAsync(finalSubCid);
         });

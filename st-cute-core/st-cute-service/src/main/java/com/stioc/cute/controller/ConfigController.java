@@ -35,6 +35,7 @@ public class ConfigController {
         dto.setMaxViewHistoryLimit(contractProperty.getMaxViewHistoryLimit());
         dto.setPathSandboxEnabled(contractProperty.isPathSandboxEnabled());
         dto.setMinimalSkillMode(contractProperty.isMinimalSkillMode());
+        dto.setLoadAllUserAttachments(contractProperty.isLoadAllUserAttachments());
         return Result.success(dto);
     }
 
@@ -51,6 +52,7 @@ public class ConfigController {
         String password = body.getPassword();
         Boolean pathSandboxEnabled = body.getPathSandboxEnabled();
         Boolean minimalSkillMode = body.getMinimalSkillMode();
+        Boolean loadAllUserAttachments = body.getLoadAllUserAttachments();
 
         String finalLanguage = language != null ? language : "zh-CN";
         String finalNewlineKey = newlineKey != null ? newlineKey : "enter";
@@ -58,8 +60,9 @@ public class ConfigController {
         int finalHttpLogDays = httpLogDays != null ? httpLogDays : 7;
         boolean finalPathSandboxEnabled = pathSandboxEnabled != null ? pathSandboxEnabled : true;
         boolean finalMinimalSkillMode = minimalSkillMode != null ? minimalSkillMode : false;
+        boolean finalLoadAllUserAttachments = loadAllUserAttachments != null ? loadAllUserAttachments : true;
 
-        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays, password, finalPathSandboxEnabled, finalMinimalSkillMode);
+        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays, password, finalPathSandboxEnabled, finalMinimalSkillMode, finalLoadAllUserAttachments);
         return Result.success(true);
     }
 }

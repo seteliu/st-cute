@@ -1,7 +1,7 @@
 package com.stioc.cute.engine.hook;
 
 import com.stioc.cute.engine.loop.core.AgentContext;
-import com.stioc.cute.engine.common.AgentEngineLock;
+import com.stioc.cute.engine.common.EngineLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,6 +22,7 @@ import java.util.concurrent.locks.Lock;
 public class AgentHookDispatcher {
 
     private final Optional<List<HookListener>> hookListeners;
+    private final EngineLock lockProvider;
 
     /**
      * 触发生命周期挂点（AgentContext.triggerHook 的薄委托落点）：
@@ -42,7 +43,7 @@ public class AgentHookDispatcher {
             return;
         }
 
-        Lock cidLock = AgentEngineLock.CID_DATA_STRIPED.get(context.getCid());
+        Lock cidLock = lockProvider.getConversationDataLock(context.getCid());
         cidLock.lock();
         try {
             for (HookListener hookListener : hookListeners.get()) {

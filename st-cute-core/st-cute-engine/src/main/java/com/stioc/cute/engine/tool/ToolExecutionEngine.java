@@ -2,8 +2,8 @@ package com.stioc.cute.engine.tool;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.stioc.cute.engine.common.AgentEngineCommonThread;
-import com.stioc.cute.engine.common.AgentEngineLock;
+import com.stioc.cute.engine.common.EngineExecutor;
+import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.event.AgentEventFactory;
 import com.stioc.cute.engine.hook.HookPayload;
 import com.stioc.cute.engine.hook.HookType;
@@ -52,6 +52,8 @@ public class ToolExecutionEngine {
     private final AgentContextManager agentContextManager;
     private final MessageStore messageStore;
     private final Optional<ApprovalRuleWriter> approvalRuleWriter;
+    private final EngineLock lockProvider;
+    private final EngineExecutor executorProvider;
 
     private AgentLoopCoordinator agentLoopCoordinator;
 
@@ -117,7 +119,7 @@ public class ToolExecutionEngine {
         List<CompletableFuture<Void>> futures = calls.stream()
                 .map(call -> CompletableFuture.runAsync(
                         () -> executeSingleToolSafely(call, context, false),
-                        AgentEngineCommonThread.getVirtualThreadExecutor()))
+                        executorProvider.getAsyncExecutor()))
                 .toList();
 
         try {
@@ -173,7 +175,7 @@ public class ToolExecutionEngine {
     public void executeToolsBatchAsync(
             List<CuteToolCall> calls,
             AgentContext context) {
-        AgentEngineCommonThread.submit(() -> {
+        executorProvider.getAsyncExecutor().submit(() -> {
             try {
                 executeToolsBatch(calls, context);
             } catch (InterruptedException e) {
@@ -280,7 +282,7 @@ public class ToolExecutionEngine {
     }
 
     private void resumeApprovedToolAsync(CuteToolCall call, AgentContext context) {
-        AgentEngineCommonThread.submit(() -> {
+        executorProvider.getAsyncExecutor().submit(() -> {
             executeSingleToolSafely(call, context, true);
         });
     }
@@ -392,7 +394,8 @@ public class ToolExecutionEngine {
         if (permissionAlreadyApproved || tool.isApprovalExempt()) {
             verdict = ToolPermissionVerdict.allow();
         } else {
-            verdict = toolGuard.evaluate(name, args, context);
+            // 传入工具实例（工具名等标识由守卫经 getName() 自取）：宿主权限评估可直接消费工具自声明的资源/等级元数据，无需按参数名猜测或反查注册中心
+            verdict = toolGuard.evaluate(tool, args, context);
         }
 
         if (verdict == null) {
@@ -433,7 +436,7 @@ public class ToolExecutionEngine {
         String lockKey = needsWriteLock ? tool.getLockKey(args) : null;
         Lock writeLock = null;
         if (lockKey != null && !lockKey.isBlank()) {
-            writeLock = AgentEngineLock.WRITE_TOOL_STRIPED.get(lockKey);
+            writeLock = lockProvider.getWriteToolLock(lockKey);
             writeLock.lock();
         }
 

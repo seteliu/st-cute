@@ -4,11 +4,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 引擎公共线程工具类，提供全局共享的虚拟线程执行器。
- * <p>自 platform/common/CommonThread 随行迁入引擎，逻辑等价，旧引用统一改指本类。</p>
+ * 引擎公共线程工具类：仅保留通知层全局串行队列。
+ * <p>
+ * 通用异步任务执行器已下放宿主（经 {@link EngineExecutor} 注入），
+ * 引擎不再自建线程，线程模型（虚拟/平台线程）由宿主按部署形态决定；
+ * 通知层串行队列是引擎自身顺序语义的一部分（保证会话流事件严格有序），故保留在引擎内固定实现。
+ * </p>
  */
 public class AgentEngineCommonThread {
-    private static final ExecutorService VIRTUAL_THREAD_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
      * 通知层事件串行推送执行器：全局单线程，入队顺序即执行顺序。
@@ -19,20 +22,6 @@ public class AgentEngineCommonThread {
         thread.setDaemon(true);
         return thread;
     });
-
-    /**
-     * 获取全局共享的虚拟线程执行器
-     */
-    public static ExecutorService getVirtualThreadExecutor() {
-        return VIRTUAL_THREAD_EXECUTOR;
-    }
-
-    /**
-     * 提交异步任务到虚拟线程执行器中执行
-     */
-    public static void submit(Runnable task) {
-        VIRTUAL_THREAD_EXECUTOR.submit(task);
-    }
 
     /**
      * 提交顺序敏感的异步任务到通知层串行执行器中执行

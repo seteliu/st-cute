@@ -77,6 +77,12 @@ public class ContractProperty {
      */
     private boolean minimalSkillMode = false;
 
+    /**
+     * 是否加载全部用户消息的附件：开启后历史重建时所有用户消息的附件均完整装载物理数据，
+     * 关闭时仅最后一条用户消息完整装载、其余以轻量占位符替代，默认开启
+     */
+    private boolean loadAllUserAttachments = true;
+
 
     /**
      * 初始化方法：惰性读取物理用户目录下的全局配置文件并与内置的默认 YML 配置进行深度反射合并

@@ -19,7 +19,7 @@ import com.stioc.cute.engine.store.types.MessageQuery;
 import com.stioc.cute.engine.store.MessageStore;
 import com.stioc.cute.engine.store.types.ConversationPatch;
 import com.stioc.cute.engine.store.types.SortDirection;
-import com.stioc.cute.engine.common.AgentEngineLock;
+import com.stioc.cute.engine.common.EngineLock;
 import java.util.concurrent.locks.Lock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +42,7 @@ public class ChatNamingHelper {
     private final CuteChatFactory chatClientFactory;
     private final AgentContextManager agentContextManager;
     private final ChatOptionsFactory chatOptionsFactory;
+    private final EngineLock lockProvider;
     private final String defaultConversationTitle;
 
     /**
@@ -50,7 +51,7 @@ public class ChatNamingHelper {
      * @param cid 会话 ID
      */
     public void autoRenameChatIfNew(Long cid) {
-        Lock lock = AgentEngineLock.CID_NAMING_STRIPED.get(cid);
+        Lock lock = lockProvider.getConversationNamingLock(cid);
         if (!lock.tryLock()) {
             log.debug("[ChatNamingHelper] 未能获取会话自动命名锁，直接退出: cid={}", cid);
             return;

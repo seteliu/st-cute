@@ -3,7 +3,6 @@ package com.stioc.cute.runtime.loop;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.stioc.cute.engine.llm.AttachmentContentLoader;
 import com.stioc.cute.engine.llm.types.CuteAttachment;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.service.types.DecodeParam;
@@ -20,11 +19,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 引擎附件内容加载供血实现：包装宿主既有文件存储、解码服务与工作区路径解析。
+ * 附件内容装载服务：包装宿主文件存储、解码服务与工作区路径解析，
+ * 供用户/工具消息附件拦截器完成附件物理数据解码与历史占位符渲染。
  */
 @Slf4j
 @Component
-public class AttachmentContentLoaderImpl implements AttachmentContentLoader {
+public class AttachmentContentLoader {
 
     @Resource
     private FileStorageService fileStorageService;
@@ -33,7 +33,6 @@ public class AttachmentContentLoaderImpl implements AttachmentContentLoader {
     @Resource
     private ProjectService projectService;
 
-    @Override
     public List<CuteAttachment> loadAttachments(String rawAttachments, AgentContext context, boolean allowImage) {
         List<CuteAttachment> list = new ArrayList<>();
         if (!StringUtils.hasText(rawAttachments)) {
@@ -59,7 +58,7 @@ public class AttachmentContentLoaderImpl implements AttachmentContentLoader {
                     continue;
                 }
                 try {
-                    // 多形态路径解析：$user/ 前缀 / 项目相对路径 / 绝对路径（经宿主文件服务）
+                    // 路径解析：绝对路径或项目相对路径（经宿主文件服务）
                     File file = resolveFlexiblePath(path, baseDir);
                     if (file == null) {
                         // 文件已被删除或路径非法：不静默跳过，生成占位附件让模型明确感知该附件当前不可用。
@@ -92,7 +91,6 @@ public class AttachmentContentLoaderImpl implements AttachmentContentLoader {
         return list;
     }
 
-    @Override
     public String buildAttachmentPlaceholder(String rawAttachments) {
         if (!StringUtils.hasText(rawAttachments)) {
             return null;

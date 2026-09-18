@@ -1,16 +1,18 @@
 package com.stioc.cute.engine;
 
+import com.stioc.cute.engine.common.EngineExecutor;
+import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.event.AgentEventDispatcher;
 import com.stioc.cute.engine.event.AgentEventListener;
 import com.stioc.cute.engine.event.EngineCacheSyncListener;
 import com.stioc.cute.engine.event.EngineDirectListener;
+import com.stioc.cute.engine.event.EngineNotificationListener;
 import com.stioc.cute.engine.facade.ContextFacade;
 import com.stioc.cute.engine.facade.ConversationFacade;
 import com.stioc.cute.engine.facade.LoopFacade;
 import com.stioc.cute.engine.facade.ToolFacade;
 import com.stioc.cute.engine.hook.AgentHookDispatcher;
 import com.stioc.cute.engine.hook.HookListener;
-import com.stioc.cute.engine.llm.AttachmentContentLoader;
 import com.stioc.cute.engine.llm.ChatOptionsFactory;
 import com.stioc.cute.engine.llm.CuteChatFactory;
 import com.stioc.cute.engine.llm.LlmHttpLogger;
@@ -27,6 +29,7 @@ import com.stioc.cute.engine.support.ChatNamingHelper;
 import com.stioc.cute.engine.loop.message.LlmWindowManager;
 import com.stioc.cute.engine.loop.message.MessageDataReporter;
 import com.stioc.cute.engine.loop.message.MessageHistoryAligner;
+import com.stioc.cute.engine.loop.message.MessageInterceptor;
 import com.stioc.cute.engine.prompt.SystemPromptAssembler;
 import com.stioc.cute.engine.prompt.SystemPromptContributor;
 import com.stioc.cute.engine.store.ConversationStore;
@@ -58,6 +61,8 @@ import java.util.Optional;
  * </ul>
  * 另暴露两个存储供血契约直取出口（{@link #getConversationStore()} / {@link #getMessageStore()}），
  * 宿主业务统一经引擎获取存储，无特殊情况不要自行注入 Mapper 裸写存储路径。
+ * 以及引擎锁供血契约直取出口（{@link #getEngineLock()}）：宿主存储层等需要与引擎
+ * 共享同源锁的场合，统一经引擎取锁，禁止绕过引擎直接持有锁实现的静态引用。
  * </p>
  */
 @Getter
@@ -70,6 +75,7 @@ public class AgentEngine {
     private final ToolFacade toolFacade;
     private final ConversationStore conversationStore;
     private final MessageStore messageStore;
+    private final EngineLock engineLock;
 
     public static Builder builder() {
         return new Builder();
@@ -85,6 +91,8 @@ public class AgentEngine {
         private MessageStore messageStore;
         private ProviderResolver providerResolver;
         private ToolGuard toolGuard;
+        private EngineLock lockProvider;
+        private EngineExecutor executorProvider;
 
         // 可选供血接口 / 插件扩展（支持多值或可选单个）
         private final List<AgentEventListener> eventListeners = new ArrayList<>();
@@ -93,10 +101,10 @@ public class AgentEngine {
         private final List<SystemPromptContributor> promptContributors = new ArrayList<>();
         private final List<CuteTool> staticTools = new ArrayList<>();
         private final List<DynamicToolProvider> globalToolProviders = new ArrayList<>();
+        private final List<MessageInterceptor> messageInterceptors = new ArrayList<>();
 
         private LlmHttpLogger llmHttpLogger;
         private RetryPolicyProvider retryPolicyProvider;
-        private AttachmentContentLoader attachmentContentLoader;
         private ApprovalRuleWriter approvalRuleWriter;
         private String defaultConversationTitle = "新对话";
 
@@ -119,6 +127,16 @@ public class AgentEngine {
 
         public Builder toolGuard(ToolGuard guard) {
             this.toolGuard = guard;
+            return this;
+        }
+
+        public Builder lockProvider(EngineLock provider) {
+            this.lockProvider = provider;
+            return this;
+        }
+
+        public Builder executorProvider(EngineExecutor provider) {
+            this.executorProvider = provider;
             return this;
         }
 
@@ -206,6 +224,20 @@ public class AgentEngine {
             return this;
         }
 
+        public Builder addMessageInterceptor(MessageInterceptor interceptor) {
+            if (interceptor != null) {
+                this.messageInterceptors.add(interceptor);
+            }
+            return this;
+        }
+
+        public Builder messageInterceptors(List<MessageInterceptor> interceptors) {
+            if (interceptors != null) {
+                this.messageInterceptors.addAll(interceptors);
+            }
+            return this;
+        }
+
         public Builder llmHttpLogger(LlmHttpLogger logger) {
             this.llmHttpLogger = logger;
             return this;
@@ -213,11 +245,6 @@ public class AgentEngine {
 
         public Builder retryPolicyProvider(RetryPolicyProvider provider) {
             this.retryPolicyProvider = provider;
-            return this;
-        }
-
-        public Builder attachmentContentLoader(AttachmentContentLoader loader) {
-            this.attachmentContentLoader = loader;
             return this;
         }
 
@@ -247,6 +274,12 @@ public class AgentEngine {
             if (toolGuard == null) {
                 missing.add("toolGuard");
             }
+            if (lockProvider == null) {
+                missing.add("lockProvider");
+            }
+            if (executorProvider == null) {
+                missing.add("executorProvider");
+            }
             if (!missing.isEmpty()) {
                 throw new IllegalStateException("AgentEngine 缺少必要供血接口: " + String.join(", ", missing));
             }
@@ -256,13 +289,12 @@ public class AgentEngine {
             validate();
 
             // 1. 基础设施与基础分发器
-            EngineDirectListener directListener =
-                    new EngineDirectListener(conversationStore, messageStore);
+            EngineDirectListener directListener = new EngineDirectListener(conversationStore, messageStore);
             AgentEventDispatcher eventDispatcher = createEventDispatcher(directListener);
-            AgentHookDispatcher hookDispatcher = new AgentHookDispatcher(opt(hookListeners));
+            AgentHookDispatcher hookDispatcher = new AgentHookDispatcher(opt(hookListeners), lockProvider);
             CuteChatFactory chatFactory = createChatFactory();
             MessageDataReporter messageDataReporter = new MessageDataReporter(messageStore);
-            LoopDataReporter loopDataReporter = new LoopDataReporter(conversationStore, messageStore, messageDataReporter);
+            LoopDataReporter loopDataReporter = new LoopDataReporter(conversationStore, messageStore, messageDataReporter, lockProvider);
             ChatOptionsFactory chatOptionsFactory = new ChatOptionsFactory();
             AgentContextManager contextManager = new AgentContextManager(eventDispatcher, hookDispatcher,
                     conversationStore, messageStore, opt(contextInitializers));
@@ -270,7 +302,7 @@ public class AgentEngine {
             SystemPromptAssembler promptAssembler = createPromptAssembler();
 
             // 2. 工具注册中心与内置工具
-            InvokeSubagentTool invokeSubagentTool = new InvokeSubagentTool(contextManager);
+            InvokeSubagentTool invokeSubagentTool = new InvokeSubagentTool(contextManager, executorProvider);
             ToolRegistry toolRegistry = createToolRegistry(invokeSubagentTool);
 
             // 3. 核心循环编排（中游组件、执行引擎、协调器与真环回填）
@@ -282,7 +314,7 @@ public class AgentEngine {
 
             // 5. 门面收口与 AgentEngine 返回
             return assembleFacades(contextManager, loopPipeline.coordinator(), loopPipeline.toolExecutionEngine(),
-                    chatFactory, chatOptionsFactory, loopDataReporter, toolRegistry);
+                    chatFactory, chatOptionsFactory, loopDataReporter, toolRegistry, lockProvider);
         }
 
         private static <T> Optional<T> opt(T value) {
@@ -290,13 +322,14 @@ public class AgentEngine {
         }
 
         private AgentEventDispatcher createEventDispatcher(EngineDirectListener directListener) {
-            EngineCacheSyncListener cacheSyncListener =
-                    new EngineCacheSyncListener(conversationStore);
+            EngineCacheSyncListener cacheSyncListener = new EngineCacheSyncListener(conversationStore);
+            EngineNotificationListener notificationListener = new EngineNotificationListener();
             List<AgentEventListener> allEventListeners = new ArrayList<>();
             allEventListeners.add(directListener);
             allEventListeners.add(cacheSyncListener);
+            allEventListeners.add(notificationListener);
             allEventListeners.addAll(eventListeners);
-            return new AgentEventDispatcher(allEventListeners);
+            return new AgentEventDispatcher(allEventListeners, lockProvider);
         }
 
         private CuteChatFactory createChatFactory() {
@@ -327,20 +360,20 @@ public class AgentEngine {
                 InvokeSubagentTool invokeSubagentTool) {
             MessageHistoryAligner messageHistoryAligner = new MessageHistoryAligner(
                     messageStore, promptAssembler, chatFactory,
-                    opt(attachmentContentLoader), messageDataReporter);
+                    messageInterceptors, messageDataReporter);
             LlmWindowManager llmWindowManager = new LlmWindowManager(messageStore, chatFactory,
                     chatOptionsFactory, messageHistoryAligner,
                     messageDataReporter, loopDataReporter);
 
             ToolExecutionEngine toolExecutionEngine =
                     new ToolExecutionEngine(toolRegistry, toolGuard, messageDataReporter,
-                            contextManager, messageStore, opt(approvalRuleWriter));
+                            contextManager, messageStore, opt(approvalRuleWriter), lockProvider, executorProvider);
             AgentLoopProcessor agentLoopProcessor = new AgentLoopProcessor(chatFactory, toolRegistry,
                     loopDataReporter, llmWindowManager, chatOptionsFactory,
                     toolExecutionEngine, messageDataReporter, messageHistoryAligner);
             AgentLoopCoordinator agentLoopCoordinator = new AgentLoopCoordinator(agentLoopProcessor,
                     contextManager, conversationStore, loopDataReporter, messageStore,
-                    messageDataReporter);
+                    messageDataReporter, lockProvider, executorProvider);
 
             // 两段式回填两处真环边
             toolExecutionEngine.bindAgentLoopCoordinator(agentLoopCoordinator);
@@ -356,12 +389,13 @@ public class AgentEngine {
                 CuteChatFactory chatFactory,
                 ChatOptionsFactory chatOptionsFactory,
                 LoopDataReporter loopDataReporter,
-                ToolRegistry toolRegistry) {
+                ToolRegistry toolRegistry,
+                EngineLock lockProvider) {
             ChatNamingHelper chatNamingHelper = new ChatNamingHelper(conversationStore, messageStore,
-                    chatFactory, contextManager, chatOptionsFactory, defaultConversationTitle);
+                    chatFactory, contextManager, chatOptionsFactory, lockProvider, defaultConversationTitle);
             loopCoordinator.bindChatNamingHelper(chatNamingHelper);
             LoopRecoveryCoordinator loopRecoveryCoordinator = new LoopRecoveryCoordinator(conversationStore,
-                    messageStore, loopDataReporter, contextManager, loopCoordinator);
+                    messageStore, loopDataReporter, contextManager, loopCoordinator, lockProvider);
 
             ContextFacade contextFacade = new ContextFacade(contextManager);
             ConversationFacade conversationFacade = new ConversationFacade(loopDataReporter, contextManager,
@@ -370,7 +404,7 @@ public class AgentEngine {
             ToolFacade toolFacade = new ToolFacade(toolRegistry, toolExecutionEngine);
 
             return new AgentEngine(contextFacade, loopFacade, conversationFacade, toolFacade,
-                    conversationStore, messageStore);
+                    conversationStore, messageStore, lockProvider);
         }
     }
 }

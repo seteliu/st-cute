@@ -141,6 +141,7 @@ public class LlmWindowManager {
         List<Message> originalVisibleMsgs = messageStore.listByQuery(MessageQuery.builder()
                 .cid(cid)
                 .visibleToModel(true)
+                .excludedRoles(List.of(MessageRole.SYSTEM))
                 .sortField("id")
                 .sortDirection(SortDirection.ASC)
                 .build());

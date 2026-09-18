@@ -1,14 +1,16 @@
 package com.stioc.cute.runtime;
 
 import com.stioc.cute.engine.AgentEngine;
+import com.stioc.cute.engine.common.EngineExecutor;
+import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.event.AgentEventListener;
 import com.stioc.cute.engine.hook.HookListener;
-import com.stioc.cute.engine.llm.AttachmentContentLoader;
 import com.stioc.cute.engine.llm.LlmHttpLogger;
 import com.stioc.cute.engine.llm.ProviderResolver;
 import com.stioc.cute.engine.llm.RetryPolicyProvider;
 import com.stioc.cute.engine.loop.AgentContextInitializer;
 import com.stioc.cute.engine.loop.ApprovalRuleWriter;
+import com.stioc.cute.engine.loop.message.MessageInterceptor;
 import com.stioc.cute.engine.prompt.SystemPromptContributor;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
@@ -49,10 +51,12 @@ public class AgentRuntimeConfiguration {
     private ProviderResolver providerResolver;
     @Resource
     private ToolGuard toolGuard;
+    @Resource
+    private EngineLock lockProvider;
+    @Resource
+    private EngineExecutor executorProvider;
 
     // ── 可选供血 ──
-    @Resource
-    private AttachmentContentLoader attachmentContentLoader;
     @Resource
     private LlmHttpLogger llmHttpLogger;
     @Resource
@@ -74,6 +78,8 @@ public class AgentRuntimeConfiguration {
     private List<SystemPromptContributor> promptContributors;
     @Resource
     private List<AgentContextInitializer> contextInitializers;
+    @Resource
+    private List<MessageInterceptor> messageInterceptors;
 
     /**
      * 引擎装配入口：字段收集的宿主供血 → Builder → build() 产出 AgentEngine 交容器。
@@ -86,7 +92,8 @@ public class AgentRuntimeConfiguration {
                 .messageStore(messageStore)
                 .providerResolver(providerResolver)
                 .toolGuard(toolGuard)
-                .attachmentContentLoader(attachmentContentLoader)
+                .lockProvider(lockProvider)
+                .executorProvider(executorProvider)
                 .llmHttpLogger(llmHttpLogger)
                 .retryPolicyProvider(retryPolicyProvider)
                 .approvalRuleWriter(approvalRuleWriter)
@@ -96,14 +103,15 @@ public class AgentRuntimeConfiguration {
                 .hookListeners(hookListeners)
                 .promptContributors(promptContributors)
                 .contextInitializers(contextInitializers)
+                .messageInterceptors(messageInterceptors)
                 .defaultConversationTitle("新会话")
                 .build();
 
         log.info("AgentEngine 装配完成：宿主静态工具 {} 个（另含引擎内置 invoke_subagent），全局动态工具源 {} 个，"
-                        + "宿主事件监听器 {} 个（另含引擎内置持久化/缓存回填两层并前置），Hook 监听器 {} 个，"
-                        + "宿主提示词贡献者 {} 个（另含引擎内置默认环境段），装载扩展点 {} 个",
+                        + "宿主事件监听器 {} 个，Hook 监听器 {} 个，"
+                        + "宿主提示词贡献者 {} 个（另含引擎内置默认环境段），消息拦截器 {} 个，装载扩展点 {} 个",
                 staticTools.size(), globalToolProviders.stream().count(), eventListeners.size(),
-                hookListeners.size(), promptContributors.size(), contextInitializers.size());
+                hookListeners.size(), promptContributors.size(), messageInterceptors.size(), contextInitializers.size());
 
         return engine;
     }
