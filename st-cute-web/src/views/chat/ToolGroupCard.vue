@@ -12,15 +12,8 @@
         <!-- 2. 工具名称 -->
         <span class="tool-name">{{ formatToolName(tc.toolName) }}</span>
 
-        <!-- 3. 工具参数精简提示 -->
-        <n-tooltip trigger="hover" placement="top-start">
-          <template #trigger>
-            <span class="tool-args" style="cursor: help;">{{ formatToolArgs(tc.toolArguments) }}</span>
-          </template>
-          <div style="font-family: monospace; white-space: pre-wrap; word-break: break-all; max-width: 400px; font-size: 0.75rem;">
-            {{ getFullArgsText(tc.toolArguments) }}
-          </div>
-        </n-tooltip>
+        <!-- 3. 工具参数精简提示（完整参数不做悬浮展示，需要查看详情时点击右侧"查看原始日志"） -->
+        <span class="tool-args">{{ formatToolArgs(tc.toolArguments) }}</span>
 
         <!-- 4. 状态标签 -->
         <span v-if="tc.status === 'WAITING_APPROVAL'" class="status-label waiting-approval">[{{ t('chat.permissionRequestTitle') }}]</span>
@@ -154,16 +147,6 @@ const formatToolArgs = (argsStr: string | undefined) => {
   }
 }
 
-const getFullArgsText = (argsStr: string | undefined) => {
-  if (!argsStr) return '{}'
-  try {
-    const parsed = JSON.parse(argsStr)
-    return JSON.stringify(parsed, null, 2)
-  } catch (e) {
-    return argsStr
-  }
-}
-
 const getResultSummary = (content: string | undefined) => {
   if (!content) return ''
   const clean = content.trim().replace(/\n/g, ' ')
@@ -201,7 +184,7 @@ const getAlwaysAllowOptions = (tc: any) => {
   }
 
   const isCmd = tc.toolName === 'execute_command' || tc.toolName === 'RunCommandTool'
-  const isFile = tc.toolName === 'write_to_file' || tc.toolName === 'replace_file_content' || tc.toolName === 'WriteFileTool' || tc.toolName === 'ModifyFileTool'
+  const isFile = tc.toolName === 'write_file' || tc.toolName === 'edit_file' || tc.toolName === 'WriteFileTool' || tc.toolName === 'EditFileTool'
 
   if (isCmd) {
     if (command) {

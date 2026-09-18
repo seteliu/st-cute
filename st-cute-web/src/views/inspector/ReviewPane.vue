@@ -5,7 +5,7 @@
   >
     <!-- 1. 加载中状态 -->
     <div
-      v-if="worktreeStore.loadingWorktrees && worktreeStore.activeWorktrees.length === 0"
+      v-if="gitStore.loadingBranches && gitStore.branches.length === 0"
       style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; color: #888;"
     >
       <n-spin size="medium" :description="t('common.loading')" />
@@ -13,11 +13,11 @@
 
     <!-- 2. 没有活跃的工作区列表 -->
     <div
-      v-else-if="worktreeStore.activeWorktrees.length === 0"
+      v-else-if="gitStore.branches.length === 0"
       class="empty-state"
       style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; color: #888;"
     >
-      <span style="font-size: 1.0rem; font-weight: bold; margin-bottom: 6px; color: #ccc;">{{ t('inspector.noWorktrees') }}</span>
+      <span style="font-size: 1.0rem; font-weight: bold; margin-bottom: 6px; color: #ccc;">      {{ t('inspector.noBranches') }}</span>
       <span style="font-size: 0.85rem; max-width: 280px; line-height: 1.5; color: #666;"
         >{{ t('review.noChanges') }}</span
       >
@@ -27,52 +27,50 @@
     <template v-else>
       <!-- 头部工具栏 -->
       <div
-        class="worktree-toolbar"
+        class="branch-toolbar"
         style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2d2d30; padding-bottom: 12px;"
       >
         <n-select
-          :value="worktreeStore.selectedWorktree?.branch"
-          :options="worktreeStore.activeWorktrees.map(w => ({ label: `${t('review.branch')} ${w.branch}`, value: w.branch }))"
-          @update:value="worktreeStore.onSelectWorktreeBranch"
+          :value="gitStore.selectedBranch?.branch"
+          :options="gitStore.branches.map(w => ({
+            label: `${t('review.branch')} ${w.branch}`,
+            value: w.branch,
+            disabled: !w.current,
+            // 当前分支高亮、其余置灰：下拉仅作分支清单展示，暂不提供切换
+            class: w.current ? 'branch-option-current' : 'branch-option-muted'
+          }))"
+          :consistent-menu-width="false"
           style="flex: 1;"
         />
-        <n-button size="tiny" type="primary" secondary style="margin-left: 8px;" @click="worktreeStore.fetchWorktrees">
+        <n-button size="tiny" type="primary" secondary style="margin-left: 8px;" :loading="gitStore.loadingBranches" @click="gitStore.fetchBranches()">
           {{ t('review.refresh') }}
         </n-button>
       </div>
 
       <!-- 变动文件列表区 (单栏宽敞展示) -->
       <div
-        class="worktree-content"
+        class="branch-content"
         style="display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 8px; height: calc(100vh - 240px);"
       >
         <div style="display: flex; align-items: center; margin-bottom: 4px;">
           <span style="font-size: 0.8rem; font-weight: bold; color: #888;">
-            {{ t('review.modifiedFiles') }} ({{ worktreeStore.worktreeDiffs.length }})
+            {{ t('review.modifiedFiles') }} ({{ gitStore.branchDiffs.length }})
           </span>
         </div>
 
         <div
-          v-if="worktreeStore.loadingDiff"
-          style="display: flex; justify-content: center; align-items: center; padding: 24px 0;"
+          v-if="gitStore.branchDiffs.length === 0"
+          style="color: #666; font-size: 0.85rem; padding: 12px 0; text-align: center;"
         >
-          <n-spin size="small" :description="t('common.loading')" />
+          {{ t('review.noChanges') }}
         </div>
-
-        <template v-else>
-          <div
-            v-if="worktreeStore.worktreeDiffs.length === 0"
-            style="color: #666; font-size: 0.85rem; padding: 12px 0; text-align: center;"
-          >
-            {{ t('review.noChanges') }}
-          </div>
-          <div
-            v-else
-            class="file-list"
-            style="flex: 1; display: flex; flex-direction: column; gap: 4px; overflow-y: auto;"
-          >
+        <div
+          v-else
+          class="file-list"
+          style="flex: 1; display: flex; flex-direction: column; gap: 4px; overflow-y: auto;"
+        >
             <div
-              v-for="fd in worktreeStore.worktreeDiffs"
+              v-for="fd in gitStore.branchDiffs"
               :key="fd.filename"
               class="file-item"
               @click="handleFileClick(fd)"
@@ -94,7 +92,6 @@
               </span>
             </div>
           </div>
-        </template>
       </div>
     </template>
 
@@ -108,10 +105,10 @@
     >
       <div style="display: flex; flex-direction: column; height: calc(80vh - 120px); gap: 12px;">
         <div style="font-size: 0.95rem; font-weight: bold; word-break: break-all; color: var(--text-color-bright);">
-          File: <span style="color: var(--primary-color);">{{ worktreeStore.selectedFileDiff?.filename }}</span>
+          File: <span style="color: var(--primary-color);">{{ gitStore.selectedFileDiff?.filename }}</span>
         </div>
         <div style="flex: 1; min-height: 0; overflow: auto; background: #0c0c0e; border-radius: 6px; border: 1px solid var(--border-color);">
-          <div v-if="showDiffModal && worktreeStore.selectedFileDiff" class="diff-table">
+          <div v-if="showDiffModal && gitStore.selectedFileDiff" class="diff-table">
             <div
               v-for="(line, idx) in formattedDiff"
               :key="idx"
@@ -130,21 +127,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useWorktreeStore } from '@/stores/worktree'
+import { ref, computed } from 'vue'
+import { useGitStore } from '@/stores/git'
 import { t } from '@/i18n'
 
-const worktreeStore = useWorktreeStore()
+const gitStore = useGitStore()
 const showDiffModal = ref(false)
 
 const handleFileClick = (fd: any) => {
-  worktreeStore.selectFileDiff(fd)
+  gitStore.selectFileDiff(fd)
   showDiffModal.value = true
 }
 
-onMounted(() => {
-  worktreeStore.fetchWorktrees()
-})
+// 进入面板不主动拉取：分支与变动列表由 Home 的常驻轮询静默维护，store 中始终有较新数据，
+// 此处立即刷新会让已有列表凭空转圈重载；仅保留工具栏「刷新」按钮作为用户手动强刷入口
 
 const getChangeBadgeText = (type?: string) => {
   if (type === 'ADD') return 'N'
@@ -153,7 +149,7 @@ const getChangeBadgeText = (type?: string) => {
 }
 
 const formattedDiff = computed(() => {
-  const diff = worktreeStore.selectedFileDiff?.diffContent
+  const diff = gitStore.selectedFileDiff?.diffContent
   if (!diff) return []
   
   const lines = diff.split('\n')
@@ -358,5 +354,17 @@ const formattedDiff = computed(() => {
 }
 .diff-row.normal:hover {
   background-color: rgba(255, 255, 255, 0.015);
+}
+
+/* 分支下拉清单：当前分支高亮、其余置灰（仅展示不可切换） */
+:deep(.branch-option-current.n-base-select-option .n-base-select-option__content) {
+  color: var(--primary-color);
+  font-weight: bold;
+}
+:deep(.branch-option-muted.n-base-select-option .n-base-select-option__content) {
+  color: var(--text-color-muted);
+}
+:deep(.branch-option-muted.n-base-select-option.n-base-select-option--disabled .n-base-select-option__content) {
+  color: var(--text-color-disabled, #5a5a62);
 }
 </style>

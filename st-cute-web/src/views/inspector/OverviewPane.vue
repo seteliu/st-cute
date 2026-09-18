@@ -40,12 +40,12 @@
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.gitBranch') }}</span>
             <n-button
-              v-if="worktreeStore.selectedWorktree?.branch"
+              v-if="gitStore.selectedBranch?.branch"
               quaternary
               circle
               size="tiny"
               :title="t('overview.copyBranch')"
-              @click="handleCopyBranch(worktreeStore.selectedWorktree.branch)"
+              @click="handleCopyBranch(gitStore.selectedBranch.branch)"
             >
               <template #icon>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -56,7 +56,7 @@
             </n-button>
           </div>
           <span style="word-break: break-all; font-family: monospace; font-size: 0.75rem; color: #a0a0a5; background: rgba(0,0,0,0.15); padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.03);">
-            {{ worktreeStore.selectedWorktree?.branch || t('inspector.none') }}
+            {{ gitStore.selectedBranch?.branch || t('inspector.none') }}
           </span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
@@ -265,7 +265,7 @@ import { t } from '@/i18n'
 import { useAgentStore } from '@/stores/agent'
 import { useProjectStore } from '@/stores/project'
 import { useConversationStore } from '@/stores/conversation'
-import { useWorktreeStore } from '@/stores/worktree'
+import { useGitStore } from '@/stores/git'
 import TokenMetricsTooltip from '@/components/TokenMetricsTooltip.vue'
 import SubAgentStatusTag from '@/components/SubAgentStatusTag.vue'
 import { getConversationProcessesApi, killConversationProcessApi, ActiveProcessInfo, getConversationLlmCallsApi, ActiveLlmCallInfo } from '@/api/conversation'
@@ -273,7 +273,7 @@ import { getConversationProcessesApi, killConversationProcessApi, ActiveProcessI
 const agentStore = useAgentStore()
 const projectStore = useProjectStore()
 const conversationStore = useConversationStore()
-const worktreeStore = useWorktreeStore()
+const gitStore = useGitStore()
 const message = useMessage()
 
 // 活动子进程监控与强杀状态

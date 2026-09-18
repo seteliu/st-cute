@@ -45,7 +45,7 @@ import {
 import { useAppStore } from '@/stores/app'
 import { useConversationStore } from '@/stores/conversation'
 import { useProviderStore } from '@/stores/provider'
-import { useWorktreeStore } from '@/stores/worktree'
+import { useGitStore } from '@/stores/git'
 import { useAgentStore } from '@/stores/agent'
 import { useProjectStore } from '@/stores/project'
 
@@ -64,7 +64,7 @@ import { t } from '@/i18n'
 const appStore = useAppStore()
 const conversationStore = useConversationStore()
 const providerStore = useProviderStore()
-const worktreeStore = useWorktreeStore()
+const gitStore = useGitStore()
 const agentStore = useAgentStore()
 const projectStore = useProjectStore()
 
@@ -86,7 +86,7 @@ watch(isMobile, (newVal) => {
   }
 }, { immediate: true })
 
-let worktreeTimer: any = null
+let gitTimer: any = null
 
 onMounted(async () => {
   // 0. 初始化移动端响应式检测
@@ -95,10 +95,10 @@ onMounted(async () => {
   // 防御性清空先前残留的 WS 回调监听器，彻底解决 HMR 或重复 mount 导致的流式内容叠加 Bug
   wsService.clearAllCallbacks()
 
-  // 1. 初始化轮询（首次不主动拉取：此刻 activeCid 尚未就绪，fetchWorktrees 只会空转清态；
+  // 1. 初始化轮询（首次不主动拉取：此刻 activeCid 尚未就绪，fetchBranches 只会空转清态；
   //    真正的首次拉取由后续 selectConversation 的 loadEnvAssets 链触发）
-  worktreeTimer = window.setInterval(() => {
-    worktreeStore.fetchWorktrees(true)
+  gitTimer = window.setInterval(() => {
+    gitStore.fetchBranches(true)
   }, 10000)
 
   try {
@@ -623,8 +623,8 @@ onMounted(async () => {
 onUnmounted(() => {
   wsService.close()
   wsService.clearAllCallbacks()
-  if (worktreeTimer) {
-    clearInterval(worktreeTimer)
+  if (gitTimer) {
+    clearInterval(gitTimer)
   }
 })
 </script>

@@ -21,13 +21,13 @@ const TOOL_NAME_MAP: Record<string, string> = {
   // 文件与检索类
   'read_file': '读取文件',
   'ReadFileTool': '读取文件',
-  'list_dir': '遍历目录',
-  'FindFilesTool': '遍历目录',
+  'find_files': '查找文件',
+  'FindFilesTool': '查找文件',
   'grep_search': '全文检索',
-  'write_to_file': '写入文件',
+  'write_file': '写入文件',
   'WriteFileTool': '写入文件',
-  'replace_file_content': '修改文件',
-  'ModifyFileTool': '修改文件',
+  'edit_file': '修改文件',
+  'EditFileTool': '修改文件',
   'load_attachment': '加载附件',
   'LoadAttachmentTool': '加载附件',
 
@@ -42,8 +42,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
   // 智能体扩展类
   'invoke_subagent': '调用子智能体',
   'load_skill': '加载技能',
-  'get_doc': '获取规约文档',
-  'get_time': '获取时间'
+  'get_doc': '获取规约文档'
 }
 
 /**

@@ -30,18 +30,6 @@
             <bdi>{{ skill.path }}</bdi>
           </span>
         </div>
-        <div v-if="skill.tools && skill.tools.length > 0" style="margin-top: 8px; border-top: 1px dashed #2d2d30; padding-top: 8px;">
-          <div style="font-size: 0.75rem; color: var(--status-warning); font-weight: bold;">Tools:</div>
-          <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
-            <span
-              v-for="t in skill.tools"
-              :key="t"
-              style="background: #242428; border: 1px solid #3d3d40; border-radius: 3px; padding: 1px 4px; font-size: 0.7rem; font-family: monospace; color: var(--status-warning);"
-            >
-              {{ t }}
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   </div>
