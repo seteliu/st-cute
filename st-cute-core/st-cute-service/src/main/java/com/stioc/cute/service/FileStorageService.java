@@ -25,10 +25,12 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * 文件存储与管理核心服务。
  * <p>
- * 对外契约：虚拟路径前缀 {@code USER_HOME_PREFIX}（$user/ = 当前操作系统用户主目录）、
- * 上传 {@link #uploadFile(Long, MultipartFile, Boolean)}、沙箱安全取文件
- * {@link #getSafeFile(String)}、多形态路径统一解析 {@link #resolveFlexiblePath(String, String)}、
+ * 对外契约：上传 {@link #uploadFile(Long, MultipartFile, Boolean)}、
+ * 多形态路径统一解析 {@link #resolveFlexiblePath(String, String)}、
  * 缩略图与 Base64 读取、文件与会话附件级联删除，另附文件扩展名 / MIME 推导静态工具。
+ * </p>
+ * <p>
+ * 路径语义：上传返回附件文件的绝对路径；读取侧统一接受项目相对路径或绝对路径。
  * </p>
  */
 @Slf4j
@@ -55,11 +57,6 @@ public class FileStorageService {
     );
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
-
-    /**
-     * 虚拟路径前缀：表示当前操作系统用户主目录（如 $user/.st-cute/...）
-     */
-    public static final String USER_HOME_PREFIX = "$user/";
 
     public File getFilesRootDir() {
         File userHome = new File(System.getProperty("user.home"));
@@ -146,7 +143,9 @@ public class FileStorageService {
             }
 
             long actualSize = targetFile.length();
-            String relativePath = USER_HOME_PREFIX + ".st-cute/files/cid_" + cid + "/" + newFilename;
+            // 存储路径统一对外暴露为绝对路径（保留正斜杠，与平台其他路径展示口径一致），
+            // 前端回显与模型侧读取均按绝对路径直达，不再引入虚拟前缀寻址
+            String absolutePath = targetFile.getAbsolutePath().replace("\\", "/");
             // 后缀随压缩转码同步后，MIME 以落盘文件的真实后缀为准；后缀未变时优先保留原始 Content-Type
             String mimeType;
             if (compressed && StringUtils.hasText(file.getContentType())
@@ -157,10 +156,10 @@ public class FileStorageService {
             }
 
             log.info("文件上传成功: cid={}, 原始名={}, 存储路径={}, 大小={} bytes, 压缩={}",
-                    cid, originalFilename, relativePath, actualSize, compressed);
+                    cid, originalFilename, absolutePath, actualSize, compressed);
 
             return FileUploadVo.builder()
-                    .path(relativePath)
+                    .path(absolutePath)
                     .name(originalFilename)
                     .size(actualSize)
                     .mimeType(mimeType)
@@ -172,51 +171,11 @@ public class FileStorageService {
             throw new BusinessException("文件上传处理失败: " + e.getMessage());
         }
     }
-    public File getSafeFile(String relativePath) {
-        if (!StringUtils.hasText(relativePath)) {
-            throw new BusinessException("文件路径不能为空");
-        }
-
-        // 统一斜杠并清理首尾空格
-        String cleanPath = relativePath.trim().replace('\\', '/');
-        if (cleanPath.contains("..")) {
-            throw new BusinessException("非法的文件访问路径");
-        }
-
-        File userHome = new File(System.getProperty("user.home"));
-        File targetFile = new File(userHome, cleanPath);
-
-        // 路径沙箱保护：确保目标物理文件绝对路径必须以 files 根目录开头
-        File rootDir = getFilesRootDir();
-        Path rootPath = rootDir.toPath().toAbsolutePath().normalize();
-        Path targetPath = targetFile.toPath().toAbsolutePath().normalize();
-
-        if (!targetPath.startsWith(rootPath)) {
-            throw new BusinessException("拒绝访问：目标文件超出沙箱工作区范围");
-        }
-
-        if (!targetFile.exists() || !targetFile.isFile()) {
-            throw new BusinessException("未找到指定的文件: " + relativePath);
-        }
-
-        return targetFile;
-    }
     public File resolveFlexiblePath(String pathVal, String baseDir) {
         if (!StringUtils.hasText(pathVal)) {
             return null;
         }
         String cleanPath = pathVal.trim().replace('\\', '/');
-
-        // $user/ 前缀：映射到用户主目录
-        if (cleanPath.startsWith(USER_HOME_PREFIX)) {
-            String rest = cleanPath.substring(USER_HOME_PREFIX.length());
-            if (rest.isBlank() || rest.contains("..")) {
-                return null;
-            }
-            Path userHome = Paths.get(System.getProperty("user.home"));
-            Path target = userHome.resolve(rest).toAbsolutePath().normalize();
-            return target.toFile().isFile() ? target.toFile() : null;
-        }
 
         // Windows 绝对路径（盘符）与 Unix 绝对路径（/ 开头）
         Path path = Paths.get(cleanPath);
@@ -225,18 +184,17 @@ public class FileStorageService {
             return target.toFile().isFile() ? target.toFile() : null;
         }
 
-        // 相对路径：以项目根/worktree 为基准
+        // 相对路径：以项目根目录为基准
         if (!StringUtils.hasText(baseDir)) {
             return null;
         }
         Path target = Paths.get(baseDir).resolve(cleanPath).toAbsolutePath().normalize();
         return target.toFile().isFile() ? target.toFile() : null;
     }
-    public byte[] getThumbnailBytes(String relativePath) {
-        File file = getSafeFile(relativePath);
-        return getThumbnailBytesFlexible(file);
-    }
-    public byte[] getThumbnailBytesFlexible(File file) {
+    /**
+     * 生成指定文件的缩略图字节（缩略图生成失败时降级返回原文件字节）
+     */
+    public byte[] getThumbnailBytes(File file) {
         String ext = FileStorageService.getFileExtension(file.getName());
         byte[] thumbnail = ImageProcessUtils.generateThumbnail(file, ext);
         if (thumbnail == null) {
@@ -248,11 +206,10 @@ public class FileStorageService {
         }
         return thumbnail;
     }
-    public FileBase64Vo getFileBase64Vo(String relativePath) {
-        File file = getSafeFile(relativePath);
-        return getFileBase64VoFlexible(file);
-    }
-    public FileBase64Vo getFileBase64VoFlexible(File file) {
+    /**
+     * 读取指定文件的 Base64 编码与元数据
+     */
+    public FileBase64Vo getFileBase64Vo(File file) {
         try {
             byte[] bytes = Files.readAllBytes(file.toPath());
             String base64Str = Base64.getEncoder().encodeToString(bytes);
@@ -269,22 +226,6 @@ public class FileStorageService {
             log.error("读取文件转 Base64 异常: {}", e.getMessage(), e);
             throw new BusinessException("读取文件 Base64 失败: " + e.getMessage());
         }
-    }
-    public boolean deleteFile(String relativePath) {
-        if (!StringUtils.hasText(relativePath)) {
-            return false;
-        }
-        try {
-            File file = getSafeFile(relativePath);
-            if (file.exists() && file.isFile()) {
-                boolean deleted = file.delete();
-                log.info("物理文件删除: path={}, success={}", relativePath, deleted);
-                return deleted;
-            }
-        } catch (Exception e) {
-            log.warn("物理文件删除失败或文件不存在: path={}, error={}", relativePath, e.getMessage());
-        }
-        return false;
     }
     public void deleteConversationFiles(Long cid) {
         if (cid == null || cid <= 0) {

@@ -53,7 +53,7 @@ public class FileController {
     /**
      * 文件查看与下载接口 (支持原始文件流 raw、缩略图 thumbnail)
      *
-     * @param path     相对路径，如 .st-cute/files/cid_1/20260828_173852_000_3217.png
+     * @param path     文件路径（绝对路径，或项目相对路径）
      * @param mode     模式：raw (原文件) 或 thumbnail (缩略图)
      * @param download 是否强制下载
      * @param response HTTP 响应对象
@@ -65,7 +65,7 @@ public class FileController {
             @RequestParam(value = "download", required = false, defaultValue = "false") Boolean download,
             HttpServletResponse response) {
         try {
-            // 多形态路径解析：$user/ 前缀 / 相对路径（后端工作目录基准）/ 绝对路径
+            // 路径解析：绝对路径或项目相对路径
             File file = fileStorageService.resolveFlexiblePath(path, null);
             if (file == null) {
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -73,7 +73,7 @@ public class FileController {
             }
 
             if ("thumbnail".equalsIgnoreCase(mode)) {
-                byte[] thumbBytes = fileStorageService.getThumbnailBytesFlexible(file);
+                byte[] thumbBytes = fileStorageService.getThumbnailBytes(file);
                 response.setContentType("image/jpeg");
                 response.setContentLength(thumbBytes.length);
                 try (OutputStream os = response.getOutputStream()) {
@@ -113,7 +113,7 @@ public class FileController {
     /**
      * 获取指定文件的 Base64 编码数据
      *
-     * @param path 多形态路径（$user/ 前缀、相对、绝对）
+     * @param path 文件路径（绝对路径，或项目相对路径）
      */
     @GetMapping("/base64")
     public Result<FileBase64Vo> getBase64(@RequestParam("path") String path) {
@@ -121,7 +121,7 @@ public class FileController {
         if (file == null) {
             throw new BusinessException("未找到指定的文件: " + path);
         }
-        FileBase64Vo vo = fileStorageService.getFileBase64VoFlexible(file);
+        FileBase64Vo vo = fileStorageService.getFileBase64Vo(file);
         return Result.success(vo);
     }
 }

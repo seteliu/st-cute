@@ -34,7 +34,8 @@ public class LoadSkillTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "【安全核心工具】加载并激活特定技能包（Skill）的完整详细操作规范、系统指令及知识库正文。如果你被要求调用或使用某项技能，或认为任务与之密切相关，你必须通过该工具加载并获取具体指令。";
+        return "加载并激活特定技能包（Skill）的完整详细操作规范、系统指令及知识库正文。"
+                + "如果你被要求调用或使用某项技能，或认为任务与之密切相关，你必须通过该工具加载并获取具体指令。";
     }
 
     @Override
@@ -45,7 +46,7 @@ public class LoadSkillTool implements CuteTool {
           "properties": {
             "skillName": {
               "type": "string",
-              "description": "要加载并激活的技能名称，例如 'writer'"
+              "description": "要加载并激活的技能名称，需与技能包目录名完全一致（如项目 .agents/skills 或全局 ~/.st-cute/skills 下的目录名）"
             }
           },
           "required": ["skillName"]

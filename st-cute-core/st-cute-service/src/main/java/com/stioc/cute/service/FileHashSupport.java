@@ -10,7 +10,7 @@ import java.security.MessageDigest;
 
 /**
  * 文件内容哈希工具：为"read_file 读取门禁"提供内容一致性校验能力。
- * read_file / write_to_file / replace_file_content 写入或读取文件时记录 SHA-256 摘要，
+ * read_file / write_file / edit_file 写入或读取文件时记录 SHA-256 摘要，
  * 修改前校验摘要与磁盘当前内容一致才放行（防幻觉 + 防过时修改双保险）
  */
 @Slf4j

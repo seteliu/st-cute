@@ -44,7 +44,7 @@ public class GetDocTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "【安全核心工具】获取 st-cute 平台的规约文档（skill、rule、mcp、hook、convention 等配置的存放位置、格式说明与使用约定）。当用户询问各类配置文件应放在哪、格式怎么写时，调用此工具获取权威说明。";
+        return "获取 st-cute 平台的规约文档（skill、rule、mcp、hook、convention 等配置的存放位置、格式说明与使用约定）。当用户询问各类配置文件应放在哪、格式怎么写时，调用此工具获取权威说明。";
     }
 
     @Override

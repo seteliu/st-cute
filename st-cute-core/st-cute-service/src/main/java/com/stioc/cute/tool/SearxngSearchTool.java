@@ -66,7 +66,7 @@ public class SearxngSearchTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "【联网搜索工具】基于 SearXNG 的多引擎聚合联网搜索（google/bing 等），返回标题、链接与摘要等精简结果，并附搜索联想词与无响应引擎说明。"
+        return "基于 SearXNG 的多引擎聚合联网搜索（google/bing 等），返回标题、链接与摘要等精简结果，并附搜索联想词与无响应引擎说明。"
                 + "适用于查询时效性信息、外部公开资料等本地代码之外的内容；"
                 + "支持 pageno 翻页；当 resultCount 为 0 或结果与查询明显无关时，建议更换关键词重搜。";
     }

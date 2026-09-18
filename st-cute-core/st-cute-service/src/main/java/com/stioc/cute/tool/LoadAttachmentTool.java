@@ -26,7 +26,7 @@ import java.util.Map;
 
 /**
  * 通用文件加载工具（多模态视觉与文档内容提取入口）。
- * 支持多形态路径：$user/ 前缀（用户全局目录）、项目相对路径、绝对路径。
+ * 支持项目相对路径与绝对路径两种形态。
  * 图片/PDF/Word 等文件经解码服务处理后以多模态附件形式投喂给大模型（需模型支持视觉能力），
  * 文档内嵌图片与扫描页会自动衍生为独立图片附件。
  */
@@ -47,13 +47,12 @@ public class LoadAttachmentTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "【安全核心工具】加载并查看文件内容（支持图片、PDF、Word、Excel、PPT、代码、文本、数据文件等）。"
+        return "加载并查看文件内容（支持图片、PDF、Word、Excel、PPT、代码、文本、数据文件等）。"
                 + "文件将以多模态附件形式注入你的上下文：图片直接以视觉内容呈现（需当前模型支持视觉），"
                 + "PDF/Word 提取全文文本且内嵌图片/扫描页自动衍生为图片附件，Excel/PPT 转结构化文本。"
                 + "【重要使用准则】"
-                + "1. 路径形态详见 path 参数说明；"
-                + "2. 历史消息中 [📎 历史附件] 列出的路径可随时按路径重新加载查看；"
-                + "3. 当前最新一轮用户消息直接附带的附件已注入上下文，无需重复调用本工具。";
+                + "1. 历史消息中 [📎 历史附件] 列出的路径可随时按路径重新加载查看；"
+                + "2. 当前最新一轮用户消息直接附带的附件已注入上下文，无需重复调用本工具。";
     }
 
     @Override
@@ -64,11 +63,7 @@ public class LoadAttachmentTool implements CuteTool {
           "properties": {
             "path": {
               "type": "string",
-              "description": "目标文件路径，支持三种形态：$user/xxx（用户全局目录）、相对路径（项目根基准）、绝对路径。也可来自历史消息 [📎 历史附件] 列出的路径。"
-            },
-            "reason": {
-              "type": "string",
-              "description": "需要加载该文件的具体原因说明，可选"
+              "description": "目标文件路径，支持项目相对路径（以项目根目录为基准）或绝对路径。也可来自历史消息 [📎 历史附件] 列出的路径。目标必须真实存在且为文件"
             }
           },
           "required": ["path"]
@@ -92,7 +87,7 @@ public class LoadAttachmentTool implements CuteTool {
 
         AgentContext agentContext = context.agentContext();
         try {
-            // 多形态路径解析：$user/ 前缀 / 项目相对路径 / 绝对路径（基准复用工作区解析器：worktree > 项目根）
+            // 路径解析：绝对路径或项目相对路径（基准复用工作区解析器：会话绑定项目根）
             String baseDir = projectService.getProjectBasePath(agentContext);
             File file = fileStorageService.resolveFlexiblePath(path, baseDir);
             if (file == null) {

@@ -12,6 +12,7 @@ import com.stioc.cute.runtime.loop.RuntimeContext;
 import com.stioc.cute.tool.types.ActiveProcess;
 import com.stioc.cute.tool.types.RepeatCommandTracker;
 import com.stioc.cute.engine.event.AgentEventFactory;
+import com.stioc.cute.git.GitBashLocator;
 import com.stioc.cute.platform.common.LineMixedCharsetReader;
 import com.stioc.cute.platform.common.NativeCharsetKit;
 import jakarta.annotation.Resource;
@@ -41,10 +42,13 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 @Component
-public class RunCommandTool implements CuteTool {
+public class ExecuteCommandTool implements CuteTool {
 
     @Resource
     private ProjectService projectService;
+
+    @Resource
+    private GitBashLocator gitBashLocator;
 
     /**
      * 同一命令输出完全相同的容忍次数：连续第 N 次相同即判定为无效死循环重复。
@@ -93,6 +97,17 @@ public class RunCommandTool implements CuteTool {
      */
     private static final int OUTPUT_TAIL_KEEP = 32_000;
 
+    /**
+     * shell 参数的 schema 片段（含前导逗号，动态拼在 encoding 属性之后）。
+     * 仅在支持 Git Bash 的机器上经 {@link #isBashSupported()} 判定后拼入，
+     * 否则该参数完全不出现，避免模型调用到必然报错的参数
+     */
+    private static final String SHELL_ARG_JSON = ",\n            \"shell\": {\n"
+            + "              \"type\": \"string\",\n"
+            + "              \"description\": \"可选，接受 \\\"bash\\\"（默认）或 \\\"cmd\\\"。默认经本机 Git Bash（bash.exe）以纯 bash 语法执行：Unix 风格工具链与管道、统一 UTF-8 输出，路径建议用正斜杠；仅 Windows 特定操作（dir/where/reg query 等 cmd 内建命令与语法、执行 .bat/.cmd 脚本）传 \\\"cmd\\\" 经 cmd.exe 执行\",\n"
+            + "              \"default\": \"bash\"\n"
+            + "            }";
+
     @Override
     public String getRawName() {
         return ToolNames.EXECUTE_COMMAND;
@@ -100,50 +115,69 @@ public class RunCommandTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "【安全通用工具】在指定的运行目录下执行终端命令。读取、查找或搜索文件内容时应优先使用 read_file / list_dir / grep_search 专用工具，它们更快且带安全防护；仅当专用工具无法解决（如工具报错、glob 语义不满足需求、需管道组合处理）时，才使用命令兜底。"
+        return "在指定的运行目录下执行终端命令。读取、查找或搜索文件内容时应优先使用 read_file / find_files / grep_search 专用工具，它们更快且带安全防护；仅当专用工具无法解决（如工具报错、glob 语义不满足需求、需管道组合处理）时，才使用命令兜底。"
                 + "验证类命令（编译/构建/测试等需依据退出码判断成败）必须单命令执行，禁止用 &、&&、|| 同行拼接多条命令（返回的 exitCode 仅代表最后一条命令，前序失败会被掩盖）。";
     }
 
-    @Override
-    public ToolAccessLevel getAccessLevel() {
-        // 敏感级：执行终端命令为高危操作，智能审批模式同样需要人工确认
-        return ToolAccessLevel.SENSITIVE;
+    /**
+     * 本机是否支持 shell=bash 参数：Windows 且已探测到 Git Bash。
+     * <p>
+     * Linux/mac 默认 shell 即 sh/bash 系（Unix 工具链原生齐备），无需该参数，判定自然为 false；
+     * 探测结果由 {@link GitBashLocator} 做 JVM 级缓存，schema/描述装配时高频调用无额外开销。
+     * </p>
+     */
+    private boolean isBashSupported() {
+        return System.getProperty("os.name").toLowerCase().contains("win")
+                && gitBashLocator.detectPath() != null;
     }
 
     @Override
     public String getArgumentSchema() {
+        // shell 参数动态放出：仅 Windows 且已探测到 Git Bash 的机器呈现（isBashSupported 判定）。
+        // Linux/mac 默认 shell 即 sh/bash 系无需该参数；不支持时不放出，避免模型调用到必然报错的参数
+        String shellBlock = isBashSupported() ? SHELL_ARG_JSON : "";
         return """
         {
           "type": "object",
           "properties": {
             "command": {
               "type": "string",
-              "description": "待运行的 shell 命令行语句"
+              "description": "待运行的 shell 命令行语句。需按单条命令组织的场景请勿用 && / || 拼接（见工具描述）；命令中路径含空格或特殊字符时请用引号包裹"
             },
             "cwd": {
               "type": "string",
-              "description": "命令运行的指定工作目录路径（可选，默认为当前项目根目录或 worktree 隔离路径）。实际生效的工作目录会在返回结果的 cwd 字段中回显"
+              "description": "命令运行的工作目录（可选，默认为当前项目根目录）。支持项目相对路径（以项目根目录为基准）或绝对路径。实际生效的工作目录会在返回结果的 cwd 字段中回显"
             },
             "encoding": {
               "type": "string",
-              "description": "子进程输出解码字符集（默认 auto 自动探测）。中文乱码或编码混排时可显式指定，如 utf-8、gbk"
-            },
+              "description": "解码子进程输出所用的字符集（默认 auto 自动探测）。中文乱码或编码混排时可显式指定，如 utf-8、gbk。仅影响命令输出的解码，不改变任何文件落盘编码",
+              "default": "auto"
+            }%s,
             "idleTimeoutMs": {
               "type": "integer",
-              "description": "无输出超时（毫秒，默认 30000）。命令持续无新输出超过此值即判卡死强制中止；构建类命令（mvn/gradle/npm 等）未指定时自动放宽至 90000。总时长上限另见 maxTimeoutMs"
+              "description": "空闲超时（毫秒）。命令持续无新输出超过该时长即判定卡死并强制中止，默认 30000；若首 token 为 mvn/gradle/npm/pnpm 等构建类命令且未显式指定，自动放宽至 90000",
+              "default": 30000
             },
             "maxTimeoutMs": {
               "type": "integer",
-              "description": "总运行时长上限（毫秒，默认 600000）。命令累计运行超过此值强制中止，如 mvn install 等长命令可加大。无输出超时另见 idleTimeoutMs"
+              "description": "总运行时长上限（毫秒，默认 600000）。命令累计运行超过该时长即强制中止；如 mvn install 等长命令可适当加大",
+              "default": 600000
             },
             "runInBackground": {
               "type": "boolean",
-              "description": "是否在后台持续运行。当需要拉起前端服务器、后端微服务等不会主动退出的持久后台进程时，必须传入 true 以防卡死智能体工具调用流（默认 false）"
+              "description": "是否在后台持续运行。当需要拉起前端服务器、后端微服务等不会主动退出的持久后台进程时，必须传入 true 以防卡死智能体工具调用流（默认 false）",
+              "default": false
             }
           },
           "required": ["command"]
         }
-        """;
+        """.formatted(shellBlock);
+    }
+
+    @Override
+    public ToolAccessLevel getAccessLevel() {
+        // 敏感级：执行终端命令为高危操作，智能审批模式同样需要人工确认
+        return ToolAccessLevel.SENSITIVE;
     }
 
     @Override
@@ -212,10 +246,45 @@ public class RunCommandTool implements CuteTool {
         // 同一命令在不同仓库/目录下执行属于不同语义，严禁仅凭命令文本误判为重复
         String os = System.getProperty("os.name").toLowerCase();
         ProcessBuilder pb;
-        if (os.contains("win")) {
+        // 实际生效的 shell 是否为 bash 系入口：供失败提示按 shell 形态选取示例命令（grep / findstr）
+        boolean bashEntry;
+        String shellVal = args.getStringTrimmed("shell");
+        // Windows 默认入口反转：探测到 Git Bash 即以 bash 为默认（Unix 工具链/管道/UTF-8 输出），
+        // Windows 特定操作由模型显式传 shell="cmd" 走 cmd.exe；未探测到 Git Bash 时退回 cmd.exe。
+        // 探测结果 JVM 级缓存（GitBashLocator），此处调用无额外开销；非 Windows 恒为 null
+        String winDefaultBash = os.contains("win") ? gitBashLocator.detectPath() : null;
+        if (StringUtils.hasText(shellVal) && "bash".equalsIgnoreCase(shellVal)) {
+            // 显式 shell=bash：经 Git Bash 单层解析执行（Unix 风格命令/管道、统一 UTF-8 输出场景）。
+            // 引擎直接以 bash.exe 为入口进程，命令串不经过 cmd 转手，根治双层引号嵌套与编码转换问题；
+            // Unix 平台默认 shell 即 bash 系，该参数等同默认行为，无需特判
+            String bashPath = os.contains("win") ? winDefaultBash : "bash";
+            if (bashPath == null) {
+                return ToolResult.error("参数 'shell=\"bash\"' 不可用：未在本机探测到 Git Bash（bash.exe）。"
+                        + "请安装 Git for Windows 后重试，或改传 shell=\"cmd\" 经 cmd.exe 执行。");
+            }
+            log.info("execute_command 指定 shell=bash，经 Git Bash 执行: {}", bashPath);
+            pb = new ProcessBuilder(bashPath, "-c", finalCommand);
+            bashEntry = true;
+        } else if (StringUtils.hasText(shellVal) && "cmd".equalsIgnoreCase(shellVal)) {
+            // 显式 shell=cmd：Windows 特定操作出口（dir/where/reg query 等内建命令与语法、.bat/.cmd 脚本）
+            log.info("execute_command 指定 shell=cmd，经 cmd.exe 执行");
             pb = new ProcessBuilder("cmd.exe", "/c", finalCommand);
+            bashEntry = false;
+        } else if (StringUtils.hasText(shellVal)) {
+            return ToolResult.error("参数 'shell' 的值 '" + shellVal + "' 不受支持，当前仅支持 shell=\"bash\""
+                    + "（经 Git Bash 执行）与 shell=\"cmd\"（经 cmd.exe 执行）。不传该参数时优先经 Git Bash 执行，未探测到时使用 cmd.exe。");
+        } else if (winDefaultBash != null) {
+            // 未传 shell 且探测到 Git Bash：默认经 Git Bash 执行（Windows 默认入口反转后的新默认）
+            log.info("execute_command 未指定 shell，默认经 Git Bash 执行: {}", winDefaultBash);
+            pb = new ProcessBuilder(winDefaultBash, "-c", finalCommand);
+            bashEntry = true;
+        } else if (os.contains("win")) {
+            // Windows 但未探测到 Git Bash：退回 cmd.exe
+            pb = new ProcessBuilder("cmd.exe", "/c", finalCommand);
+            bashEntry = false;
         } else {
             pb = new ProcessBuilder("sh", "-c", finalCommand);
+            bashEntry = true;
         }
         File dir = null;
         if (StringUtils.hasText(customCwd)) {
@@ -528,7 +597,7 @@ public class RunCommandTool implements CuteTool {
             finalOutput = compactOutputIfNeeded(finalOutput);
             if (exitCode != 0) {
                 // 失败场景附加已知误判模式提示（方案3/5）：帮助模型当场纠偏，而非反复盲试
-                finalOutput = appendFailureHints(finalOutput);
+                finalOutput = appendFailureHints(finalOutput, bashEntry);
             }
         }
 
@@ -630,16 +699,19 @@ public class RunCommandTool implements CuteTool {
     /**
      * 失败场景附加已知误判模式提示段（方案3/5）。
      * 仅在 exitCode != 0 时调用，提示内容只在真的失败时出现，不占常态上下文
+     *
+     * @param output    命令原始输出
+     * @param bashEntry 本次实际生效的 shell 是否为 bash 系入口
      */
-    private String appendFailureHints(String output) {
+    private String appendFailureHints(String output, boolean bashEntry) {
         String hints = "";
         String trimmed = output != null ? output.trim() : "";
 
         // 模式1：管道末端命令无匹配导致退出码非 0 且无/极少输出。
-        // 前置命令可能并未失败，模型易误判为命令失败而反复重试（过滤命令按平台区分示例）
+        // 前置命令可能并未失败，模型易误判为命令失败而反复重试
+        // （示例命令按实际生效的 shell 入口选取：bash 入口给 grep，cmd 入口给 findstr）
         if (trimmed.isEmpty() || trimmed.length() < 50) {
-            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-            String filterExample = isWindows ? "findstr \"关键字\"" : "grep \"关键字\"";
+            String filterExample = bashEntry ? "grep \"关键字\"" : "findstr \"关键字\"";
             hints += "\n\n[提示] 命令退出码非 0 且几乎无输出。若命令使用了管道（如 mvn xxx | " + filterExample + "），"
                     + "末端过滤命令无匹配时退出码即为 1，这并不代表前置命令失败。"
                     + "建议：去掉管道过滤直接执行查看完整输出，或将输出重定向到文件（command > out.txt）后用 read_file 查看。";
@@ -676,7 +748,7 @@ public class RunCommandTool implements CuteTool {
         log.warn("[PS写文件拦截] 命令使用 PowerShell cmdlet 写文件，已拒绝: {}", command);
         return "拒绝执行。检测到使用 PowerShell 写入文件（Set-Content/Out-File/Add-Content）。"
                 + "Windows 下这些 cmdlet 极易产生编码问题（UTF-8 BOM 会导致 javac 报\"非法字符 \\ufeff\"，中文内容可能被写成 GBK 乱码）。"
-                + "请改用 write_to_file（整文件写入）或 replace_file_content（局部替换）完成文件写入；"
+                + "请改用 write_file（整文件写入）或 edit_file（局部替换）完成文件写入；"
                 + "批量替换场景可分多次调用替换工具，或改用命令原生的重定向（>）配合 read_file 读取。";
     }
 

@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,7 +35,7 @@ public class WriteFileTool implements CuteTool {
 
     @Override
     public String getRawName() {
-        return ToolNames.WRITE_TO_FILE;
+        return ToolNames.WRITE_FILE;
     }
 
     @Override
@@ -51,7 +52,7 @@ public class WriteFileTool implements CuteTool {
           "properties": {
             "path": {
               "type": "string",
-              "description": "目标文件路径，支持绝对路径或项目相对路径"
+              "description": "目标文件路径，支持项目相对路径（以项目根目录为基准）或绝对路径"
             },
             "content": {
               "type": "string",
@@ -59,7 +60,7 @@ public class WriteFileTool implements CuteTool {
             },
             "encoding": {
               "type": "string",
-              "description": "落盘编码（默认 utf-8）。需转换文件编码（如 UTF-8 转 GBK）时显式指定，如 gbk；也支持其他 Java 合法字符集名",
+              "description": "写出该文件时所用的落盘编码（默认 utf-8）。需把现有文件转换为其他编码（如 UTF-8 转 GBK）时显式指定，如 gbk，也支持其他 Java 合法字符集名。仅决定写入编码，与读取时的解码编码无关",
               "default": "utf-8"
             }
           },
@@ -131,7 +132,7 @@ public class WriteFileTool implements CuteTool {
             }
 
             // 覆写已有文件时的文本元数据保真：EOL 与 UTF-8 BOM 跟随原文件（新建文件按模型内容原样写入），
-            // 防止 write_to_file 整文件覆写把 CRLF 老文件转成 LF、或丢失原 BOM
+            // 防止 write_file 整文件覆写把 CRLF 老文件转成 LF、或丢失原 BOM
             String encodingNotice = "";
             if (file.exists()) {
                 NativeCharsetKit.FileTextMeta meta = NativeCharsetKit.detectFileMeta(file.toPath());
@@ -159,7 +160,7 @@ public class WriteFileTool implements CuteTool {
 
             Files.writeString(file.toPath(), contentVal, writeCharset);
 
-            // 写入成功后记录内容哈希：write_to_file 产物天然是最新上下文，后续 replace 修改无需重复 read_file
+            // 写入成功后记录内容哈希：write_file 产物天然是最新上下文，后续 edit 修改无需重复 read_file
             // （读取哈希门禁记录已迁运行时伴生上下文）
             if (agentContext != null) {
                 RuntimeContext runtimeCtx = agentContext.extra(RuntimeContext.class);

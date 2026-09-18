@@ -22,30 +22,34 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 遍历文件与匹配过滤本地核心工具
+ * 按 Glob 表达式查找文件与目录的本地核心工具
  */
 @Slf4j
 @Component
 public class FindFilesTool implements CuteTool {
 
     /**
-     * 结果数量上限：达到即停止收集并标记截断
+     * 单次返回条目数的默认上限（与 schema 声明的 default 保持一致）
      */
-    private static final int MAX_RESULTS = 500;
+    private static final int DEFAULT_MAX_RESULTS = 500;
+
+    /**
+     * 单次返回条目数的硬上限：钳制模型传入值（1-2000），防超大值撑爆上下文
+     */
+    private static final int MAX_RESULTS_LIMIT = 2000;
 
     @Resource
     private ProjectService projectService;
 
     @Override
     public String getRawName() {
-        return ToolNames.LIST_DIR;
+        return ToolNames.FIND_FILES;
     }
 
     @Override
     public String getDescription() {
-        return "在指定目录下按 Glob 表达式查找匹配的条目列表。"
-                + "匹配模式按 pattern 形态自动区分：不含 / 时为浅层模式（仅匹配 rootDir 直接子项，目录条目以 / 结尾返回，可用来仅列目录）；含 / 或 ** 时为递归模式（按 glob 全路径匹配）。"
-                + "已自动忽略 .git 等版本库内部目录与 target, node_modules 等产物依赖目录（includeExcludedDirs=true 可放行产物类），显式列入 pattern 首段或 rootDir 的目录除外，其余目录（含点开头目录）正常搜索。";
+        return "在指定目录下按 Glob 表达式查找文件与目录条目，用于定位文件路径或列出目录结构（pattern 用 '*' 即可仅列一层目录）。"
+                + "默认跳过版本库内部与产物依赖缓存目录（详见 includeExcludedDirs 参数）。";
     }
 
     @Override
@@ -56,21 +60,26 @@ public class FindFilesTool implements CuteTool {
           "properties": {
             "pattern": {
               "type": "string",
-              "description": "文件名匹配的 glob 表达式：不含 / 时（如 '*.java'、'*config*'）为浅层模式仅匹配直接子项；含 / 或 ** 时（如 '**/*.vue'、'src/main/**/*.java'）为递归模式。pattern 首段（或 {a,b} 首分支首段）显式点名的目录不走排除过滤"
+              "description": "文件名匹配的 glob 表达式。不含 / 时（如 '*.java'、'*'）仅匹配 rootDir 的直接子项（浅层模式，目录条目带 / 后缀返回）；含 / 或 ** 时（如 'src/**/*.java'）递归匹配全路径。若首段为具体目录名（如 'node_modules/**'），该目录即使默认被排除也会被搜索"
             },
             "rootDir": {
               "type": "string",
-              "description": "查找的根目录相对或绝对路径，可选，默认当前工作目录。rootDir 自身不走排除过滤"
+              "description": "查找的根目录，可选，默认为当前项目根目录。支持项目相对路径（以项目根目录为基准）或绝对路径"
             },
             "includeExcludedDirs": {
               "type": "boolean",
-              "description": "是否放行常规排除清单（target, node_modules, .idea 等产物依赖缓存目录）。可选，默认 false（默认跳过）。.git 等版本库内部目录任何情况都排除",
+              "description": "%s",
               "default": false
+            },
+            "maxResults": {
+              "type": "integer",
+              "description": "单次返回的最大条目数（可选，默认 500，上限 2000，达到即截断）",
+              "default": 500
             }
           },
           "required": ["pattern"]
         }
-        """;
+        """.formatted(FileSearchConstants.EXCLUDE_DIRS_DESC);
     }
 
     @Override
@@ -91,6 +100,14 @@ public class FindFilesTool implements CuteTool {
         String rootDirVal = args.getStringTrimmed("rootDir");
         // 解析放行开关：是否放行常规排除清单中的产物依赖目录
         boolean includeExcludedDirs = Boolean.TRUE.equals(args.getBoolean("includeExcludedDirs"));
+        // 解析单次返回上限（钳制 1-2000，防超大值撑爆上下文；与 grep_search 同款机制）
+        Integer maxResultsVal = args.getInt("maxResults");
+        int maxResults = DEFAULT_MAX_RESULTS;
+        if (maxResultsVal != null) {
+            maxResults = Math.max(1, Math.min(MAX_RESULTS_LIMIT, maxResultsVal));
+        }
+        // 用于在 lambda 中引用的 effectively final 副本
+        final int resultLimit = maxResults;
         // 解析匹配模式：pattern 不含 / 时为浅层模式（仅直接子项），含 / 或 ** 时为递归模式
         boolean shallowMode = !patternVal.contains("/");
         Path rootPath;
@@ -108,15 +125,20 @@ public class FindFilesTool implements CuteTool {
         try {
             if (shallowMode) {
                 // 浅层模式：仅遍历 rootDir 直接子项，glob 对条目名称做匹配，目录条目输出时带 / 后缀。
-                // 不套排除过滤：浅层只看一层，用户列目录时理应看到全部直接子项
+                // 排除口径与递归模式的「永久排除」对齐：.git 等版本库内部目录任何情况都不列出，
+                // 产物依赖目录（target/node_modules 等）保留展示（浅层列目录属用户显式浏览意图）
                 PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + patternVal);
                 try (var stream = Files.list(rootPath)) {
                     stream.forEach(entry -> {
-                        if (matchedFiles.size() >= MAX_RESULTS) {
+                        if (matchedFiles.size() >= resultLimit) {
                             return;
                         }
                         Path fileName = entry.getFileName();
                         boolean isDir = Files.isDirectory(entry);
+                        // 永久排除目录（.git/.svn/.hg 等版本库内部）：与递归模式口径一致，任何情况都跳过
+                        if (isDir && FileSearchConstants.ALWAYS_EXCLUDE_DIRS.contains(fileName.toString())) {
+                            return;
+                        }
                         if (matcher.matches(fileName)) {
                             matchedFiles.add(isDir ? fileName + "/" : fileName.toString());
                         }
@@ -129,8 +151,8 @@ public class FindFilesTool implements CuteTool {
                 }
                 JSONArray result = new JSONArray();
                 result.addAll(matchedFiles);
-                if (matchedFiles.size() >= MAX_RESULTS) {
-                    result.add("... [匹配数量已达 " + MAX_RESULTS + " 个上限被截断] ...");
+                if (matchedFiles.size() >= resultLimit) {
+                    result.add("... [匹配数量已达 " + resultLimit + " 个上限被截断] ...");
                 }
                 return result.toJSONString();
             }
@@ -189,7 +211,7 @@ public class FindFilesTool implements CuteTool {
                     if (matcher.matches(file) || matcher.matches(finalRootPath.relativize(file))) {
                         matchedFiles.add(finalRootPath.relativize(file).toString().replace("\\", "/"));
                     }
-                    if (matchedFiles.size() >= MAX_RESULTS) {
+                    if (matchedFiles.size() >= resultLimit) {
                         return FileVisitResult.TERMINATE;
                     }
                     return FileVisitResult.CONTINUE;
@@ -207,8 +229,8 @@ public class FindFilesTool implements CuteTool {
 
             JSONArray result = new JSONArray();
             result.addAll(matchedFiles);
-            if (matchedFiles.size() >= MAX_RESULTS) {
-                result.add("... [匹配数量已达 " + MAX_RESULTS + " 个上限被截断] ...");
+            if (matchedFiles.size() >= resultLimit) {
+                result.add("... [匹配数量已达 " + resultLimit + " 个上限被截断] ...");
             }
             return result.toJSONString();
 

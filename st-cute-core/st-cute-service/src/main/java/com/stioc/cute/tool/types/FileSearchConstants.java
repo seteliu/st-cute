@@ -42,4 +42,13 @@ public final class FileSearchConstants {
             // 其他常见依赖与通用缓存 (PHP/Ruby 等)
             "vendor", ".bundle", ".cache"
     );
+
+    /**
+     * 排除规则说明文案：供 FindFilesTool、GrepSearchTool 的 includeExcludedDirs 参数描述共享引用，
+     * 保证同一机制说明在模型侧全局只有单一出处（调整排除清单时只需同步此处文案，无需逐工具翻改）。
+     */
+    public static final String EXCLUDE_DIRS_DESC =
+            "是否放行常规排除清单（target, node_modules, .idea 等产物依赖与缓存目录），默认 false（即跳过）。"
+                    + "跳过按目录名精确匹配：.git 等版本库内部目录任何情况都跳过；"
+                    + "未列入清单的目录（含 .ai-work、.agents 等点开头目录）正常搜索";
 }

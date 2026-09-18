@@ -41,8 +41,8 @@ public class ReadFileTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "【安全核心工具】读取指定纯文本文件的内容。每行附带行号。修改文件前，你必须先使用此工具阅读其最新内容以防止幻觉，否则修改将被系统拒绝。"
-                + "仅支持纯文本文件（代码、Markdown、配置等）；PDF/Word/Excel/PPT/图片等二进制文件请使用 load_attachment 工具。"
+        return "读取指定纯文本文件的内容，每行附带行号。"
+                + "仅支持纯文本文件（代码、Markdown、配置等）；PDF/Word/Excel/PPT/图片等二进制文件请改用 load_attachment 工具。"
                 + "编码默认自动探测，出现乱码时可用 encoding 参数显式指定。";
     }
 
@@ -54,11 +54,12 @@ public class ReadFileTool implements CuteTool {
           "properties": {
             "path": {
               "type": "string",
-              "description": "目标文件路径，支持绝对路径或项目相对路径"
+              "description": "目标文件路径，支持项目相对路径（以项目根目录为基准）或绝对路径"
             },
             "startLine": {
               "type": "integer",
-              "description": "读取的起始行号 (1-indexed)，可选，默认为 1"
+              "description": "读取的起始行号 (1-indexed)，可选，默认为 1",
+              "default": 1
             },
             "lineCount": {
               "type": "integer",
@@ -67,7 +68,7 @@ public class ReadFileTool implements CuteTool {
             },
             "encoding": {
               "type": "string",
-              "description": "文件解码字符集（默认 auto 自动探测，UTF-8 优先）。出现乱码或明确知晓文件编码时可显式指定，如 utf-8、gbk",
+              "description": "读取该文件时所用的解码字符集（默认 auto：自动探测，优先 UTF-8）。出现乱码或已知文件编码时可显式指定，如 utf-8、gbk。仅用于读取解码，不改变文件本身",
               "default": "auto"
             }
           },
@@ -189,7 +190,7 @@ public class ReadFileTool implements CuteTool {
             // 避免空串落库后被回填层误替换为面向命令工具设计的通用占位（模型无法理解语义）
             if (content.length() == 0) {
                 if (totalLines == 0) {
-                    return "[文件为空：" + pathVal + " 共 0 字节，无可读内容。若需写入内容请使用 write_to_file]";
+                    return "[文件为空：" + pathVal + " 共 0 字节，无可读内容。若需写入内容请使用 write_file]";
                 }
                 return "[读取范围无内容：文件共 " + totalLines + " 行，起始行 " + startLine + " 超出文件末尾，请调小 startLine 重试]";
             }
@@ -203,11 +204,11 @@ public class ReadFileTool implements CuteTool {
             }
 
             // 非 UTF-8 编码显式标注：auto 探测判定为非 UTF-8（如 GBK）时在结果尾部附加编码信息，
-            // 让模型带着编码意识去构造后续修改（replace_file_content 将按同一编码写回），防止默认一切皆 UTF-8
+            // 让模型带着编码意识去构造后续修改（edit_file 将按同一编码写回），防止默认一切皆 UTF-8
             String footer = "";
             if (!StandardCharsets.UTF_8.name().equalsIgnoreCase(charset.name())) {
                 footer = "\n[系统提示：本文件以 " + charset.name() + " 编码读取。"
-                        + "replace_file_content 修改后将保持该编码写回，无需转换。]";
+                        + "edit_file 修改后将保持该编码写回，无需转换。]";
             }
             // 乱码感知提示（REPLACE 策略副作用）：无法解码的字节不会抛异常而是落为 U+FFFD 替换符（�），
             // 出现即代表模型看到了乱码而非文件真实内容，需显式提示换编码重读验证，防止基于乱码推理

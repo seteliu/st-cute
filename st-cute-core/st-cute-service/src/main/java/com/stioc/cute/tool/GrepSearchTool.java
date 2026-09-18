@@ -56,7 +56,10 @@ public class GrepSearchTool implements CuteTool {
 
     @Override
     public String getDescription() {
-        return "在指定目录或文件的代码内容中全文检索关键字，返回匹配的行号与行内容信息。rootDir 可传目录路径（递归搜索）或单个文件路径（仅搜索该文件）。默认为普通子串匹配，若 useRegex 为 true 则将 query 视为正则表达式进行匹配。已自动忽略 .git 等版本库内部目录与 target, node_modules 等产物依赖目录（includeExcludedDirs=true 可放行产物类），rootDir 显式指定的目录除外，其余目录（含点开头目录）正常搜索。";
+        return "在指定目录或文件的代码内容中全文检索关键字，返回匹配的文件路径、行号与行内容。"
+                + "rootDir 可传目录路径（递归搜索）或单个文件路径（仅搜索该文件）。"
+                + "默认为普通子串匹配，useRegex=true 时按正则表达式匹配。"
+                + "默认跳过版本库内部与产物依赖缓存目录（详见 includeExcludedDirs 参数）；超过 2MB 的文件与二进制文件会被跳过，不参与检索。";
     }
 
     @Override
@@ -71,7 +74,7 @@ public class GrepSearchTool implements CuteTool {
             },
             "rootDir": {
               "type": "string",
-              "description": "搜索起始目录或单个文件路径，可选，默认当前项目根目录。传入具体文件路径时仅在该文件内搜索。rootDir 自身不走排除过滤"
+              "description": "搜索起始目录或单个文件路径，可选，默认为当前项目根目录。传入具体文件路径时仅在该文件内搜索。支持项目相对路径（以项目根目录为基准）或绝对路径"
             },
             "useRegex": {
               "type": "boolean",
@@ -80,13 +83,18 @@ public class GrepSearchTool implements CuteTool {
             },
             "includeExcludedDirs": {
               "type": "boolean",
-              "description": "是否放行常规排除清单（target, node_modules, .idea 等产物依赖缓存目录）。可选，默认 false（默认跳过）。.git 等版本库内部目录任何情况都排除",
+              "description": "%s",
               "default": false
+            },
+            "maxResults": {
+              "type": "integer",
+              "description": "单次返回的最大匹配条数（可选，默认 50，上限 500，达到即截断）",
+              "default": 50
             }
           },
           "required": ["query"]
         }
-        """;
+        """.formatted(FileSearchConstants.EXCLUDE_DIRS_DESC);
     }
 
     @Override
@@ -109,6 +117,15 @@ public class GrepSearchTool implements CuteTool {
 
         // 解析放行开关：是否放行常规排除清单中的产物依赖目录
         boolean includeExcludedDirs = Boolean.TRUE.equals(args.getBoolean("includeExcludedDirs"));
+
+        // 解析单次返回上限（钳制 1-500，防超大值撑爆上下文）
+        Integer maxResultsVal = args.getInt("maxResults");
+        int maxResults = 50;
+        if (maxResultsVal != null) {
+            maxResults = Math.max(1, Math.min(500, maxResultsVal));
+        }
+        // 用于在匿名内部类中引用的 effectively final 副本
+        final int resultLimit = maxResults;
 
         // 预编译正则 Pattern（仅在正则模式下生效，普通子串模式为 null）
         Pattern compiled = null;
@@ -141,7 +158,7 @@ public class GrepSearchTool implements CuteTool {
             if (Files.isRegularFile(targetPath)) {
                 if (Files.size(targetPath) <= MAX_FILE_SIZE && !isBinaryFile(targetPath)) {
                     Path fileRoot = targetPath.getParent();
-                    searchInFile(targetPath, fileRoot, query, regexPattern, results);
+                    searchInFile(targetPath, fileRoot, query, regexPattern, results, resultLimit);
                 }
             } else {
                 // 目录模式：递归遍历
@@ -171,9 +188,9 @@ public class GrepSearchTool implements CuteTool {
                     public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                         // 过滤超大文件与二进制文件
                         if (attrs.size() <= MAX_FILE_SIZE && !isBinaryFile(file)) {
-                            searchInFile(file, finalRootPath, query, regexPattern, results);
+                            searchInFile(file, finalRootPath, query, regexPattern, results, resultLimit);
                         }
-                        if (results.size() >= 50) {
+                        if (results.size() >= resultLimit) {
                             return FileVisitResult.TERMINATE;
                         }
                         return FileVisitResult.CONTINUE;
@@ -191,8 +208,8 @@ public class GrepSearchTool implements CuteTool {
             for (String item : results) {
                 sb.append(item).append("\n");
             }
-            if (results.size() >= 50) {
-                sb.append("... [匹配超过 50 个被截断] ...");
+            if (results.size() >= resultLimit) {
+                sb.append("... [匹配超过 ").append(resultLimit).append(" 个被截断] ...");
             }
             return sb.toString();
 
@@ -202,7 +219,7 @@ public class GrepSearchTool implements CuteTool {
         }
     }
 
-    private void searchInFile(Path file, Path root, String query, Pattern regexPattern, List<String> results) {
+    private void searchInFile(Path file, Path root, String query, Pattern regexPattern, List<String> results, int resultLimit) {
         try (InputStream raw = new FileInputStream(file.toFile())) {
             // 编码自适应读取：缓冲全部字节后按 UTF-8 严格探测，失败回退系统原生编码（中文 Windows 为 GBK）。
             // 修复：原先强制 UTF-8 读取，GBK 编码文件的中文字节被解码为乱码，导致中文关键字静默失配
@@ -231,7 +248,7 @@ public class GrepSearchTool implements CuteTool {
                                 + "... [已截断, 原始长度: " + trimmed.length() + " 字符]";
                     }
                     results.add(String.format("[%s:%d] %s", relativePath, lineNumber, trimmed));
-                    if (results.size() >= 50) {
+                    if (results.size() >= resultLimit) {
                         break;
                     }
                 }

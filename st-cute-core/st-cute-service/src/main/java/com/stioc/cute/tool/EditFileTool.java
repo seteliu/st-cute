@@ -22,6 +22,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharacterCodingException;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -31,19 +32,22 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-public class ModifyFileTool implements CuteTool {
+public class EditFileTool implements CuteTool {
 
     @Resource
     private ProjectService projectService;
 
     @Override
     public String getRawName() {
-        return ToolNames.REPLACE_FILE_CONTENT;
+        return ToolNames.EDIT_FILE;
     }
 
     @Override
     public String getDescription() {
-        return "【安全核心工具】精确替换指定文件的局部片段。替换必须在目标文件仅有一处唯一匹配时才生效。修改文件前，你必须在之前成功调用 read_file 读出最新内容，否则修改将被系统门禁物理拦截。";
+        return "精确替换指定文件的局部片段，oldContent 必须在文件中唯一命中才会执行替换。"
+                + "匹配依次尝试三种策略：精确匹配 → CRLF 换行变体匹配 → 空白不敏感匹配（缩进与空白差异可容忍，"
+                + "命中后替换的范围可能与 oldContent 字面略有出入）。命中多处时拒绝执行，请补充上下文或指定行号范围。"
+                + "修改前必须先成功 read_file 读出该文件最新内容，否则会被门禁拦截；新建文件或整文件覆写（write_file）无此要求。";
     }
 
     @Override
@@ -54,7 +58,7 @@ public class ModifyFileTool implements CuteTool {
           "properties": {
             "path": {
               "type": "string",
-              "description": "目标文件路径，支持绝对路径或项目相对路径"
+              "description": "目标文件路径，支持项目相对路径（以项目根目录为基准）或绝对路径"
             },
             "oldContent": {
               "type": "string",
@@ -66,11 +70,11 @@ public class ModifyFileTool implements CuteTool {
             },
             "startLine": {
               "type": "integer",
-              "description": "待替换代码段的起始行号 (1-indexed)，可选，配合 oldContent 进行精准范围锁定"
+              "description": "待替换代码段的起始行号 (1-indexed)，可选，配合 oldContent 进行精准范围锁定；与 endLine 必须成对指定或成对省略"
             },
             "endLine": {
               "type": "integer",
-              "description": "待替换代码段的结束行号 (1-indexed)，可选，配合 oldContent 进行精准范围锁定"
+              "description": "待替换代码段的结束行号 (1-indexed)，可选，配合 oldContent 进行精准范围锁定；与 startLine 必须成对指定或成对省略"
             }
           },
           "required": ["path", "oldContent", "newContent"]
@@ -139,13 +143,13 @@ public class ModifyFileTool implements CuteTool {
                 RuntimeContext runtimeCtx = agentContext.extra(RuntimeContext.class);
                 String recordedHash = runtimeCtx != null ? runtimeCtx.getReadFiles().get(absPath) : null;
                 if (recordedHash == null) {
-                    log.warn("ModifyFileTool 安全防御触发：未读先改拦截 - {}", absPath);
+                    log.warn("EditFileTool 安全防御触发：未读先改拦截 - {}", absPath);
                     return ToolResult.error("拒绝执行代码修改。门禁判定规则：read_file 成功读取过的文件才允许修改。当前状态：本会话尚未读取过该文件。"
                             + "请先使用 read_file 读取目标文件 [" + file.getName() + "] 的最新内容，然后重试修改。");
                 }
                 String currentHash = FileHashSupport.computeFileHash(file);
                 if (!recordedHash.equals(currentHash)) {
-                    log.warn("ModifyFileTool 安全防御触发：文件内容已变化拦截 - {}", absPath);
+                    log.warn("EditFileTool 安全防御触发：文件内容已变化拦截 - {}", absPath);
                     return ToolResult.error("拒绝执行代码修改。目标文件 [" + file.getName() + "] 的内容自上次 read_file 后已发生变化"
                             + "（可能被外部程序、用户或其他工具修改）。请重新 read_file 读取最新内容后再重试修改，"
                             + "防止基于过时上下文产生错误替换。");
@@ -158,7 +162,7 @@ public class ModifyFileTool implements CuteTool {
             Charset charset = meta.charset();
             // UTF-16 文件不支持编辑（字节含 \x00 读侧即判 UTF-16 拒绝，编码转换亦非本工具职责），显式拒绝引导人工转码
             if (meta.utf16Bom()) {
-                return ToolResult.error("该文件为 UTF-16 编码（检测到 UTF-16 BOM 字节序标记），replace_file_content 暂不支持编辑。"
+                return ToolResult.error("该文件为 UTF-16 编码（检测到 UTF-16 BOM 字节序标记），edit_file 暂不支持编辑。"
                         + "请先人工转换为 UTF-8 编码（如 Notepad++ 转码或 iconv 命令）后重试。");
             }
             // EOL 保真（注入归一）：模型侧内容统一按 \n 换行传入，注入前按文件主导风格转换，保证注入片段
@@ -170,13 +174,13 @@ public class ModifyFileTool implements CuteTool {
             } catch (CharacterCodingException e) {
                 // 探测编码与真实编码不符（如 8KB 采样未命中深处的非法字节）导致严格解码失败，
                 // 交由统一错误处理器给出可行动提示，让模型显式指定 encoding 引导修正
-                log.warn("ModifyFileTool 修改读解码失败: {}, 探测的编码: {}", pathVal, charset.name());
+                log.warn("EditFileTool 修改读解码失败: {}, 探测的编码: {}", pathVal, charset.name());
                 return buildEncodingFailureResult(pathVal, charset);
             }
 
-            // 空文件防御，引导使用 write_to_file
+            // 空文件防御，引导使用 write_file
             if (fileContent.isEmpty()) {
-                return ToolResult.error("文件内容为空，无法使用行号定位或局部内容替换。若要写入新内容，请直接使用 write_to_file。");
+                return ToolResult.error("文件内容为空，无法使用行号定位或局部内容替换。若要写入新内容，请直接使用 write_file。");
             }
 
             Integer startLine = args.getInt("startLine");
@@ -340,7 +344,7 @@ public class ModifyFileTool implements CuteTool {
 
             // 写回守卫：updatedContent 未赋值说明控制流异常（不应发生），显式报错而非写脏数据
             if (updatedContent == null) {
-                log.error("ModifyFileTool 控制流异常: 匹配流程结束但写回内容未生成, {}", pathVal);
+                log.error("EditFileTool 控制流异常: 匹配流程结束但写回内容未生成, {}", pathVal);
                 return ToolResult.error("内部控制流异常：匹配流程已结束但未能生成替换后的内容，本次修改未执行。请检查参数后重试。");
             }
 
@@ -364,7 +368,7 @@ public class ModifyFileTool implements CuteTool {
             int matchedStartLine = offsetToLineNumber(updatedContent, matchStartOffset);
             int matchedEndLine = offsetToLineNumber(updatedContent, endPos);
 
-            log.info("ModifyFileTool 修改成功: {}", pathVal);
+            log.info("EditFileTool 修改成功: {}", pathVal);
             return new JSONObject()
                     .fluentPut("success", true)
                     .fluentPut("message", "已成功修改文件 [" + file.getName() + "] 的指定片段。")
@@ -373,7 +377,7 @@ public class ModifyFileTool implements CuteTool {
                     .toJSONString();
 
         } catch (IOException e) {
-            log.error("ModifyFileTool 修改异常", e);
+            log.error("EditFileTool 修改异常", e);
             return ToolResult.error("修改文件失败: " + e.getMessage());
         }
     }
@@ -588,7 +592,7 @@ public class ModifyFileTool implements CuteTool {
     /**
      * 构建往返校验失败的结构化错误返回。
      * 触发即代表该文件无法按当前判定编码做到字节级无损还原（编码非规范或局部损坏），
-     * 拒绝写入并引导模型改用 write_to_file 整文件重写或人工排查，而非静默产生编码损坏。
+     * 拒绝写入并引导模型改用 write_file 整文件重写或人工排查，而非静默产生编码损坏。
      *
      * @param pathVal       模型传入的原始路径参数（用于错误文案回显）
      * @param attemptedCharset 尝试使用的字符集
@@ -598,6 +602,6 @@ public class ModifyFileTool implements CuteTool {
         return ToolResult.error("EncodingRoundTripFailure", obj -> obj.fluentPut("message", "文件 [" + pathVal + "] 无法按 " + attemptedCharset.name()
                 + " 编码做到字节级无损往返还原（文件可能存在混合编码或非规范字节）。"
                 + "为防止写回时静默损坏未修改区域，本次修改已被拒绝。"
-                + "若确需修改，请使用 write_to_file 以明确编码整体重写该文件，或人工检查文件编码后处理。"));
+                + "若确需修改，请使用 write_file 以明确编码整体重写该文件，或人工检查文件编码后处理。"));
     }
 }

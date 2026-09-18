@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 public class FileUploadVo {
 
     /**
-     * 文件相对保存路径，如 .st-cute/files/cid_1/20260828_173852_000_3217.png
+     * 文件保存的绝对路径，如 C:/Users/xxx/.st-cute/files/cid_1/20260828_173852_000_3217.png
      */
     private String path;
 
