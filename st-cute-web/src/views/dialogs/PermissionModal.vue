@@ -78,9 +78,9 @@
       <div
         v-else-if="
           appStore.currentPermissionReq?.toolName === 'WriteFileTool' ||
-          appStore.currentPermissionReq?.toolName === 'ModifyFileTool' ||
-          appStore.currentPermissionReq?.toolName === 'write_to_file' ||
-          appStore.currentPermissionReq?.toolName === 'replace_file_content'
+          appStore.currentPermissionReq?.toolName === 'EditFileTool' ||
+          appStore.currentPermissionReq?.toolName === 'write_file' ||
+          appStore.currentPermissionReq?.toolName === 'edit_file'
         "
         style="margin-bottom: 15px;"
       >
