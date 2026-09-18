@@ -8,7 +8,7 @@
   <a href="./README.md">简体中文</a> | <a href="./README_EN.md">English</a>
 </p>
 
-**ST-Cute** is a lightweight, feature-complete AI Coding Agent & Harness, shipping as both a desktop client and a web application.
+**ST-Cute** is a minimalist, user-friendly, feature-complete AI Coding Agent & Harness, shipping as both a desktop client and a web application.
 
 [![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-green.svg)](https://spring.io/projects/spring-boot)
@@ -35,6 +35,7 @@
 - **Great experience**: smart folding for noise reduction; ultra-smooth message list; full observability: thinking process, tool call chains, SubAgent execution status, active subprocesses, and complete LLM HTTP request/response logs — all traceable end to end.
 - **Unique feature**: minimal Skill mode (toggleable). When enabled, all Skills are triggered on demand via explicit commands, instead of injecting the entire list to the LLM. Perfect for users with many Skills — saves a ton of tokens.
 - **Pure & secure**: 100% portable, no backdoors, with path sandbox support.
+- **Windows-friendly**: the command execution tool automatically detects encoding at line level to solve garbled-output issues as much as possible, and adaptively prefers git bash to reduce weird issues.
 
 ---
 
@@ -106,21 +107,27 @@ This document covers downloading and running pre-compiled packages, security acc
 
 You can download the archive for your system directly from the GitHub **[Releases](releases)** page and run it out of the box.
 
-| Platform / Package | Includes | Launch Method |
-|:---| :--- |:---|
-| **`st-cute-desktop-win-x64-x.x.x.zip`** | `st-cute.exe` desktop shell + `resources/` (containing `app.jar` + trimmed JRE) | Unzip and double-click **`st-cute.exe`** |
-| **`st-cute-bundle-win-x64-x.x.x.zip`** | `app.jar` + trimmed JRE + `st-cute.cmd` console script | Unzip and double-click **`st-cute.cmd`** |
-| **`st-cute-bundle-linux-x64-x.x.x.tar.gz`** | `app.jar` + trimmed JRE + `st-cute.sh` | Unzip and run **`./st-cute.sh`** in a terminal |
-| **`st-cute-bundle-mac-arm64-x.x.x.tar.gz`** | `app.jar` + trimmed JRE (Apple Silicon, M series) + `st-cute.sh` / `st-cute.command` | Unzip and double-click **`st-cute.command`** (or run `./st-cute.sh` in a terminal) |
-| **`st-cute-bundle-mac-x64-x.x.x.tar.gz`** | `app.jar` + trimmed JRE (Intel) + `st-cute.sh` / `st-cute.command` | Unzip and double-click **`st-cute.command`** (or run `./st-cute.sh` in a terminal) |
-| **`st-cute-base-x.x.x.zip`** | Only `app.jar` (no bundled JRE or launcher scripts) | Bring your own Java 25+, run **`java -jar app.jar`** |
+> [!NOTE]
+> The core of ST-Cute is a **Java backend service** that relies on a **JRE** (Java Runtime Environment): the `desktop` / `bundle` packages bundle it, while the `base` package requires your own Java.
 
-#### 🧩 How It Works?
+#### 🧭 Three Package Types
 
-The core of ST-Cute is a **Java backend service**, and Java programs rely on a **JRE** (Java Runtime Environment) to run.
-- The `base` package does not include a JRE and contains only the JAR (suitable for those who already have a Java environment)
-- The `bundle` package bundles a JRE—one-click run in terminal, access via web browser
-- The `desktop` package bundles a desktop app shell—one-click run for direct use, also accessible via web browser
+| Type | Includes | Best For |
+|:--|:--|:--|
+| **base** Minimal | Only `app.jar`, no bundled JRE or launcher scripts | Users who already have Java 25+ |
+| **bundle** All-in-One | `app.jar` + bundled JRE + launcher scripts, start in terminal, access via browser | Server deployment / running in the background |
+| **desktop** Desktop App | Desktop shell + `app.jar` + bundled JRE, double-click to use | The first choice for most users |
+
+#### 📋 Download List
+
+| Platform / Package | Type | Launch Method |
+|:--|:--|:--|
+| **`st-cute-base-x.x.x.zip`** | base | Run **`java -jar app.jar`** (bring your own Java 25+) |
+| **`st-cute-bundle-win-x64-x.x.x.zip`** | bundle | Unzip and double-click **`st-cute.cmd`** |
+| **`st-cute-bundle-linux-x64-x.x.x.tar.gz`** | bundle | Unzip and run **`./st-cute.sh`** in a terminal |
+| **`st-cute-bundle-mac-arm64-x.x.x.tar.gz`** | bundle (Apple Silicon / M series) | Unzip and double-click **`st-cute.command`** |
+| **`st-cute-bundle-mac-x64-x.x.x.tar.gz`** | bundle (Intel) | Unzip and double-click **`st-cute.command`** |
+| **`st-cute-desktop-win-x64-x.x.x.zip`** | desktop | Unzip and double-click **`st-cute.exe`** |
 
 > [!TIP]
 > **Mac first-launch prompt "Apple cannot verify / blocked" workaround (one-time setup only)**:

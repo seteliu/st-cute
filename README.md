@@ -8,7 +8,7 @@
   <a href="./README.md">简体中文</a> | <a href="./README_EN.md">English</a>
 </p>
 
-**ST-Cute** 是一个轻量好用、功能齐全、同时提供桌面端与网页端的 AI Coding Agent & Harness。
+**ST-Cute** 是一个简约好用、功能齐全、同时提供桌面端与网页端的 AI Coding Agent & Harness。
 
 [![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-green.svg)](https://spring.io/projects/spring-boot)
@@ -35,6 +35,7 @@
 - **美好体验**：智能折叠降噪，超流畅的消息列表；可观测：思考过程、工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志全程可溯。
 - **独创特色**：极简 Skill 模式：可开关，开启后所有 Skill 可通过显示命令按需触发，不会把全部清单给大模型。适用于 Skill 很多的用户，超省 Token。
 - **安全纯粹**：纯绿色、无后门、支持路径沙箱。
+- **Windows友好**：命令执行工具自动行级编码探测，最大可能解决乱码问题。且自适应优先使用 git bash，减少奇怪问题。
 
 ---
 
@@ -106,21 +107,27 @@
 
 您可以直接在 GitHub 的 **[Releases](releases)** 页面下载对应系统的压缩包开箱即用。
 
-| 平台 / 包名                                 | 包含内容 | 启动方式                                                      |
-|:--------------------------------------------| :--- |:--------------------------------------------------------------|
-| **`st-cute-desktop-win-x64-x.x.x.zip`**     | `st-cute.exe` 桌面壳 + `resources/`（内含 `app.jar` + 裁剪 JRE） | 解压后双击 **`st-cute.exe`**                                  |
-| **`st-cute-bundle-win-x64-x.x.x.zip`**      | `app.jar` + 裁剪 JRE + `st-cute.cmd` 控制台脚本 | 解压后双击 **`st-cute.cmd`**                                  |
-| **`st-cute-bundle-linux-x64-x.x.x.tar.gz`** | `app.jar` + 裁剪 JRE + `st-cute.sh` | 解压后在终端运行 **`./st-cute.sh`**                           |
-| **`st-cute-bundle-mac-arm64-x.x.x.tar.gz`** | `app.jar` + 裁剪 JRE (Apple Silicon，M系列芯片) + `st-cute.sh` / `st-cute.command` | 解压后双击 **`st-cute.command`**（或终端运行 `./st-cute.sh`） |
-| **`st-cute-bundle-mac-x64-x.x.x.tar.gz`**   | `app.jar` + 裁剪 JRE (Intel 芯片) + `st-cute.sh` / `st-cute.command` | 解压后双击 **`st-cute.command`**（或终端运行 `./st-cute.sh`） |
-| **`st-cute-base-x.x.x.zip`**                | 仅 `app.jar`（无内置 JRE 与启动脚本） | 自备 Java 25+，运行 **`java -jar app.jar`**                   |
+> [!NOTE]
+> ST-Cute 核心是一个 **Java 后端服务**，运行依赖 **JRE**（Java 运行环境）：`desktop` / `bundle` 包已内置，`base` 包需自备。
 
-#### 🧩 它是如何运行的？
+#### 🧭 三种包类型
 
-ST-Cute 的核心是一个 **Java 后端服务**，而 Java 程序的运行依赖 **JRE**（Java 运行环境）。
-- base 包不带 jre，只包含 jar包（适合已有 Java 环境的同学）
-- bundle 包自带 jre，一键终端运行、通过网页访问
-- desktop 包自带桌面程序壳，一键运行并可直接使用，也可通过网页访问
+| 类型 | 包含内容 | 适合谁 |
+|:--|:--|:--|
+| **base** 精简版 | 仅 `app.jar`，无内置 JRE 与启动脚本 | 已自备 Java 25+ 环境的用户 |
+| **bundle** 整合版 | `app.jar` + 内置 JRE + 启动脚本，终端启动、浏览器访问 | 部署到服务器 / 希望挂后台运行的用户 |
+| **desktop** 桌面版 | 桌面程序壳 + `app.jar` + 内置 JRE，双击即用 | 大多数用户的首选 |
+
+#### 📋 下载清单
+
+| 平台 / 包名 | 类型 | 启动方式 |
+|:--|:--|:--|
+| **`st-cute-base-x.x.x.zip`** | base | 运行 **`java -jar app.jar`**（需自备 Java 25+） |
+| **`st-cute-bundle-win-x64-x.x.x.zip`** | bundle | 解压后双击 **`st-cute.cmd`** |
+| **`st-cute-bundle-linux-x64-x.x.x.tar.gz`** | bundle | 解压后在终端运行 **`./st-cute.sh`** |
+| **`st-cute-bundle-mac-arm64-x.x.x.tar.gz`** | bundle（M 系列芯片） | 解压后双击 **`st-cute.command`** |
+| **`st-cute-bundle-mac-x64-x.x.x.tar.gz`** | bundle（Intel 芯片） | 解压后双击 **`st-cute.command`** |
+| **`st-cute-desktop-win-x64-x.x.x.zip`** | desktop | 解压后双击 **`st-cute.exe`** |
 
 > [!TIP]
 > **Mac 首次双击提示“Apple无法验证 / 已阻止”处理办法**（仅需设置一次）：
