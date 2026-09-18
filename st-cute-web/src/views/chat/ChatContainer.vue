@@ -141,7 +141,6 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
-import { useMessage } from 'naive-ui'
 import { useAppStore } from '@/stores/app'
 import { useConversationStore } from '@/stores/conversation'
 import { useProjectStore } from '@/stores/project'
@@ -157,15 +156,14 @@ const appStore = useAppStore()
 const conversationStore = useConversationStore()
 const projectStore = useProjectStore()
 const providerStore = useProviderStore()
-const message = useMessage()
 
 const { isMobile } = useResponsive()
-
-const isReloading = ref(false)
 
 const totalTokens = computed(() => {
   return (conversationStore.inputTokens || 0) + (conversationStore.outputTokens || 0)
 })
+
+const messageListFlowRef = ref<any>(null)
 
 // 渲染序列组装：统一走共享折叠引擎（R1 预处理 + FOLDED 虚拟块透传），折叠算法后端已按 R1~R4 生成
 const aggregatedMessages = computed<RenderItem[]>(() => {
@@ -204,25 +202,6 @@ const usagePercentage = computed(() => {
     return ((total / limit) * 100).toFixed(1)
   }
 })
-
-const handleReloadConfig = async () => {
-  if (isReloading.value) return
-  isReloading.value = true
-  try {
-    const success = await conversationStore.reloadProjectAssets()
-    if (success) {
-      message.success('项目专属 Skills、Hook 与 MCP 工具已成功热重载')
-    } else {
-      message.error('热重载失败，请检查后端日志或物理配置是否正确')
-    }
-  } catch (e) {
-    message.error('热重载过程发生异常')
-  } finally {
-    isReloading.value = false
-  }
-}
-
-const messageListFlowRef = ref<any>(null)
 
 const scrollToBottom = (smooth = true) => {
   nextTick(() => {

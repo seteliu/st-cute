@@ -105,11 +105,26 @@ const hasPendingApprovals = computed(() => {
   )
 })
 
+// 热重载按钮的最小 loading 保底时长（毫秒）：本机请求往往几十毫秒内完成，
+// 转圈一闪而过毫无感知，保底展示让用户确认「重载已生效」
+const MIN_RELOADING_MS = 400
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
 const handleUnifiedReload = async () => {
+  const start = Date.now()
   isReloading.value = true
   try {
-    await conversationStore.reloadProjectAssets()
+    const success = await conversationStore.reloadProjectAssets()
+    if (!success) {
+      // 失败必须有反馈：成功时右侧资产列表自动刷新即是反馈，失败时列表无变化会像「没点上」
+      ;(window as any).$message?.error('热重载失败，请检查后端日志或物理配置是否正确')
+    }
   } finally {
+    // 补足最小 loading 时长：请求过快时等待至保底时长再收起，保证转圈可感知
+    const elapsed = Date.now() - start
+    if (elapsed < MIN_RELOADING_MS) {
+      await sleep(MIN_RELOADING_MS - elapsed)
+    }
     isReloading.value = false
   }
 }

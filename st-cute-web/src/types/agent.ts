@@ -20,7 +20,6 @@ export interface Skill {
   command?: string
   source: 'PROJECT' | 'GLOBAL'
   path: string
-  tools?: string[]
 }
 
 export interface Hook {

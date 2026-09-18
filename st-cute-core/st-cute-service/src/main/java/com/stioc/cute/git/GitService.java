@@ -1,8 +1,8 @@
-package com.stioc.cute.worktree;
+package com.stioc.cute.git;
 
-import com.stioc.cute.worktree.types.FileDiffVo;
-import com.stioc.cute.worktree.types.ActiveWorktreeVo;
-import com.stioc.cute.worktree.types.*;
+import com.stioc.cute.git.types.FileDiffVo;
+import com.stioc.cute.git.types.GitBranchVo;
+import com.stioc.cute.git.types.*;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,15 +16,15 @@ import java.util.regex.Pattern;
 import com.stioc.cute.platform.common.CharsetAwareFileKit;
 
 /**
- * Git Worktree 状态查询服务。
+ * Git 状态查询服务。
  * <p>
- * 物理隔离副本的创建/退出/变更检测机制已删除（会话绑定 workspaceId 语义化后废弃），
- * 仅保留只读的 git 查询能力：供前端 /api/worktree/list|diff 展示分支与文件变动。
+ * 物理隔离副本的创建/退出/变更检测机制（会话绑定 workspaceId 语义化后废弃）已删除，
+ * 仅保留只读的 git 查询能力：供前端 /api/git/list|diff 展示分支与文件变动。
  * </p>
  */
 @Slf4j
 @Service
-public class WorktreeService {
+public class GitService {
 
     /**
      * 校验 40 位 Git Commit 哈希值的正则表达式
@@ -248,9 +248,9 @@ public class WorktreeService {
     }
 
     /**
-     * 获取指定隔离分支相对于基础 Commit 节点的完整物理差异
+     * 获取指定分支相对于基础 Commit 节点的完整物理差异
      */
-    public List<FileDiffVo> getWorktreeDiff(String projectBasePath, String branchName, String baseCommit) throws Exception {
+    public List<FileDiffVo> getBranchDiff(String projectBasePath, String branchName, String baseCommit) throws Exception {
         File repoRoot = null;
         if (StringUtils.hasText(projectBasePath)) {
             repoRoot = findRepoRoot(new File(projectBasePath).getAbsoluteFile());
@@ -270,27 +270,27 @@ public class WorktreeService {
             log.warn("解析 baseCommit 失败，fallback 至 HEAD: {}", e.getMessage());
         }
 
-        // 优先在对应分支的物理 worktree 目录下比对（以包含未提交的本地更改）
-        List<ActiveWorktreeVo> activeWorktrees = getActiveWorktrees(projectBasePath);
-        String targetWorktreePath = null;
-        if (activeWorktrees != null) {
-            for (ActiveWorktreeVo wt : activeWorktrees) {
-                if (branchName.equals(wt.getBranch())) {
-                    targetWorktreePath = wt.getPath();
+        // 优先在对应分支的工作区目录下比对（以包含未提交的本地更改）
+        List<GitBranchVo> branches = getBranches(projectBasePath);
+        String targetBranchPath = null;
+        if (branches != null) {
+            for (GitBranchVo b : branches) {
+                if (branchName.equals(b.getBranch())) {
+                    targetBranchPath = b.getPath();
                     break;
                 }
             }
         }
 
         String rawDiff = "";
-        if (StringUtils.hasText(targetWorktreePath)) {
-            File targetDir = new File(targetWorktreePath);
+        if (StringUtils.hasText(targetBranchPath)) {
+            File targetDir = new File(targetBranchPath);
             if (targetDir.exists() && targetDir.isDirectory()) {
                 try {
                     List<String> cmd = List.of("git", "diff", resolvedBase);
                     rawDiff = runSystemCommandWithOutput(targetDir, cmd);
                 } catch (Exception e) {
-                    log.warn("获取物理隔离工作区 diff 失败, path={}: {}", targetWorktreePath, e.getMessage());
+                    log.warn("获取分支工作区 diff 失败, path={}: {}", targetBranchPath, e.getMessage());
                 }
             }
         }
@@ -356,13 +356,13 @@ public class WorktreeService {
 
         // 自动探测并追加 Untracked 文件的虚拟 ADD Diff 记录（解决新创建的本地文件普通改时在版本中看不见的痛点）
         try {
-            File workDir = StringUtils.hasText(targetWorktreePath) ? new File(targetWorktreePath) : repoRoot;
+            File workDir = StringUtils.hasText(targetBranchPath) ? new File(targetBranchPath) : repoRoot;
             if (workDir != null && workDir.exists() && workDir.isDirectory()) {
                 List<String> cmd = List.of("git", "ls-files", "--others", "--exclude-standard");
                 String untrackedOut = runSystemCommandWithOutput(workDir, cmd);
                 if (StringUtils.hasText(untrackedOut)) {
                     String[] lines = untrackedOut.split("\\r?\\n");
-                    
+
                     // 允许解析正文的常用文本文件后缀扩展名白名单
                     Set<String> textExtensions = Set.of(
                             "java", "xml", "yml", "yaml", "properties", "json", "vue", "ts", "js", "html", "css", "md", "txt", "sql"
@@ -379,12 +379,12 @@ public class WorktreeService {
                         if (untrackedFile.exists() && untrackedFile.isFile()) {
                             processedCount++;
                             String virtualDiff;
-                            
+
                             // 熔断与防大文件保护：前 20 个文件、大小在 500KB 以内、且属于文本格式时，才读取内容拼装 Diff
-                            boolean shouldReadContent = processedCount <= 20 
+                            boolean shouldReadContent = processedCount <= 20
                                     && untrackedFile.length() <= 500 * 1024
                                     && textExtensions.contains(getFileExtension(untrackedFile.getName()));
-                            
+
                             if (shouldReadContent) {
                                 String fileContent = CharsetAwareFileKit.readString(untrackedFile.toPath());
                                 virtualDiff = buildVirtualAddDiff(line, fileContent);
@@ -486,8 +486,8 @@ public class WorktreeService {
         return output.toString();
     }
 
-    public List<ActiveWorktreeVo> getActiveWorktrees(String projectBasePath) {
-        List<ActiveWorktreeVo> list = new ArrayList<>();
+    public List<GitBranchVo> getBranches(String projectBasePath) {
+        List<GitBranchVo> list = new ArrayList<>();
         File repoRoot = null;
         if (StringUtils.hasText(projectBasePath)) {
             repoRoot = findRepoRoot(new File(projectBasePath).getAbsoluteFile());
@@ -500,29 +500,82 @@ public class WorktreeService {
         }
 
         try {
-            String out = runSystemCommandWithOutput(repoRoot, List.of("git", "worktree", "list"));
+            // 两段式查询：
+            // 1) git branch --format 拿全量本地分支（git worktree list 只输出被物理工作区占用的分支，
+            //    单工作区仓库只会输出当前分支，无法覆盖全量分支）
+            //    %(HEAD)=当前分支标记(*)、%(refname:short)=短分支名
+            // 2) git worktree list --porcelain 拿分支→物理工作区路径映射（多工作区场景下 diff 可进入
+            //    对应工作区目录执行以包含未提交改动；老版本 git 不支持 %(worktreedir) 字段，故单独查询）
+            List<String> cmd = List.of("git", "branch", "--format=%(HEAD)|%(refname:short)");
+            String out = runSystemCommandWithOutput(repoRoot, cmd);
             if (StringUtils.hasText(out)) {
+                // 先构建工作区路径映射：分支短名 → 工作区绝对路径
+                Map<String, String> worktreeDirMap = buildWorktreeDirMap(repoRoot);
+
                 String[] lines = out.split("\\r?\\n");
                 for (String line : lines) {
                     line = line.trim();
                     if (line.isEmpty()) {
                         continue;
                     }
-                    String[] tokens = line.split("\\s+");
-                    if (tokens.length >= 3) {
-                        String path = tokens[0];
-                        String branchPart = tokens[2];
-                        if (branchPart.startsWith("[") && branchPart.endsWith("]")) {
-                            String branch = branchPart.substring(1, branchPart.length() - 1);
-                            list.add(new ActiveWorktreeVo(path, branch));
-                        }
+                    String[] tokens = line.split("\\|");
+                    if (tokens.length < 2) {
+                        continue;
                     }
+                    // HEAD 标记（* 表示当前检出分支，空格表示普通分支）
+                    boolean current = tokens[0].trim().equals("*");
+                    String branch = tokens[1].trim();
+                    if (branch.isEmpty()) {
+                        continue;
+                    }
+                    // 分支工作区路径：有物理工作区取实际路径，否则回退仓库根目录（diff 命令的执行目录）
+                    String path = worktreeDirMap.getOrDefault(branch, repoRoot.getAbsolutePath());
+                    list.add(new GitBranchVo(path, branch, current));
                 }
             }
         } catch (Exception e) {
-            log.error("获取活跃 worktree 列表失败", e);
+            log.error("获取分支列表失败", e);
         }
         return list;
+    }
+
+    /**
+     * 解析 git worktree list --porcelain 输出，构建「分支短名 → 工作区绝对路径」映射。
+     * porcelain 输出形如：
+     * <pre>
+     * worktree /path/to/main
+     * HEAD abc123...
+     * branch refs/heads/master
+     * (空行分隔下一个 worktree)
+     * </pre>
+     */
+    private Map<String, String> buildWorktreeDirMap(File repoRoot) {
+        Map<String, String> map = new HashMap<>();
+        try {
+            String out = runSystemCommandWithOutput(repoRoot, List.of("git", "worktree", "list", "--porcelain"));
+            if (!StringUtils.hasText(out)) {
+                return map;
+            }
+            String currentPath = null;
+            for (String rawLine : out.split("\\r?\\n")) {
+                String line = rawLine.trim();
+                if (line.isEmpty()) {
+                    currentPath = null;
+                    continue;
+                }
+                if (line.startsWith("worktree ")) {
+                    currentPath = line.substring("worktree ".length()).trim();
+                } else if (line.startsWith("branch refs/heads/") && currentPath != null) {
+                    String branchShort = line.substring("branch refs/heads/".length()).trim();
+                    map.put(branchShort, currentPath);
+                    currentPath = null;
+                }
+            }
+        } catch (Exception e) {
+            // 工作区映射查询失败不影响分支列表主流程（getBranchDiff 有 fallback 到分支指针比对）
+            log.warn("解析 worktree 工作区映射失败（容错）: {}", e.getMessage());
+        }
+        return map;
     }
 
     private static class TimeoutException extends Exception {

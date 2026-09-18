@@ -1,8 +1,8 @@
 package com.stioc.cute.controller;
 
-import com.stioc.cute.worktree.types.FileDiffVo;
-import com.stioc.cute.worktree.WorktreeService;
-import com.stioc.cute.worktree.types.ActiveWorktreeVo;
+import com.stioc.cute.git.types.FileDiffVo;
+import com.stioc.cute.git.GitService;
+import com.stioc.cute.git.types.GitBranchVo;
 import com.stioc.cute.platform.common.Result;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -13,41 +13,41 @@ import org.springframework.util.StringUtils;
 import java.util.List;
 
 /**
- * Git Worktree 状态查询控制器（物理隔离副本创建/退出机制已删除，
+ * Git 状态查询控制器（历史物理隔离副本创建/退出机制已删除，
  * 前端仅消费 git 分支与文件变动查询能力）
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/worktree")
-public class WorktreeController {
+@RequestMapping("/api/git")
+public class GitController {
 
     @Resource
-    private WorktreeService worktreeService;
+    private GitService gitService;
     @Resource
     private ProjectService projectService;
 
     /**
-     * 获取指定项目或当前会话下的活跃 Git Worktree 列表
+     * 获取指定项目或当前会话下的活跃分支列表
      */
     @GetMapping("/list")
-    public Result<List<ActiveWorktreeVo>> getActiveWorktrees(@RequestParam(required = false) Long cid) {
-        log.debug("收到获取活跃 Worktree 列表请求, cid={}", cid);
+    public Result<List<GitBranchVo>> getBranches(@RequestParam(required = false) Long cid) {
+        log.debug("收到获取分支列表请求, cid={}", cid);
         String projectBasePath = getProjectBasePath(cid);
-        List<ActiveWorktreeVo> list = worktreeService.getActiveWorktrees(projectBasePath);
+        List<GitBranchVo> list = gitService.getBranches(projectBasePath);
         return Result.success(list);
     }
 
     /**
-     * 获取指定隔离分支相对于基础 Commit 或主干的分支差异 Diff
+     * 获取指定分支相对于基础 Commit 或主干的差异 Diff
      */
     @GetMapping("/diff")
     public Result<List<FileDiffVo>> getDiff(
             @RequestParam String branchName,
             @RequestParam(required = false) String baseCommit,
             @RequestParam(required = false) Long cid) throws Exception {
-        log.debug("收到获取 Worktree diff 请求: branchName={}, baseCommit={}, cid={}", branchName, baseCommit, cid);
+        log.debug("收到获取分支 diff 请求: branchName={}, baseCommit={}, cid={}", branchName, baseCommit, cid);
         String projectBasePath = getProjectBasePath(cid);
-        List<FileDiffVo> diffList = worktreeService.getWorktreeDiff(projectBasePath, branchName, baseCommit);
+        List<FileDiffVo> diffList = gitService.getBranchDiff(projectBasePath, branchName, baseCommit);
         return Result.success(diffList);
     }
 

@@ -20,16 +20,12 @@ export const useAgentStore = defineStore('agent', () => {
 
 
   const skillsList = ref<Skill[]>([])
-  const reloadingSkills = ref(false)
 
   const hooksList = ref<Hook[]>([])
-  const reloadingHooks = ref(false)
 
   const mcpList = ref<McpServer[]>([])
-  const reloadingServer = ref('')
 
   const rulesList = ref<AgentRule[]>([])
-  const reloadingRules = ref(false)
 
   const activeSubAgent = computed(() => {
     if (!activeSubAgentCid.value) return null
@@ -215,87 +211,6 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  const loadSkills = async () => loadContextAssets()
-  const loadHooks = async () => loadContextAssets()
-  const loadMcpStatus = async () => loadContextAssets()
-  const loadRules = async () => loadContextAssets()
-
-  const handleReloadSkills = async () => {
-    reloadingSkills.value = true
-    try {
-      const conversationStore = useConversationStore()
-      const success = await conversationStore.reloadProjectAssets()
-      if (!success) {
-        if ((window as any).$message) {
-          ;(window as any).$message.error('重载当前项目技能包失败')
-        } else {
-          console.error('重载当前项目技能包失败')
-        }
-      }
-    } catch (e) {
-      console.error('热扫描技能包失败:', e)
-    } finally {
-      reloadingSkills.value = false
-    }
-  }
-
-  const handleReloadHooks = async () => {
-    reloadingHooks.value = true
-    try {
-      const conversationStore = useConversationStore()
-      const success = await conversationStore.reloadProjectAssets()
-      if (!success) {
-        if ((window as any).$message) {
-          ;(window as any).$message.error('重载当前项目挂钩配置失败')
-        } else {
-          console.error('重载当前项目挂钩配置失败')
-        }
-      }
-    } catch (e) {
-      console.error('热重载 Hook 失败:', e)
-    } finally {
-      reloadingHooks.value = false
-    }
-  }
-
-  const handleReloadMcp = async (serverName: string) => {
-    reloadingServer.value = serverName
-    try {
-      const conversationStore = useConversationStore()
-      const success = await conversationStore.reloadProjectAssets()
-      if (!success) {
-        if ((window as any).$message) {
-          ;(window as any).$message.error('重载 MCP 失败')
-        } else {
-          console.error('重载 MCP 失败')
-        }
-      }
-    } catch (e) {
-      console.error('重载 MCP 失败:', e)
-    } finally {
-      reloadingServer.value = ''
-    }
-  }
-
-  const handleReloadRules = async () => {
-    reloadingRules.value = true
-    try {
-      const conversationStore = useConversationStore()
-      const success = await conversationStore.reloadProjectAssets()
-      if (!success) {
-        if ((window as any).$message) {
-          ;(window as any).$message.error('重载当前项目规约失败')
-        } else {
-          console.error('重载当前项目规约失败')
-        }
-      }
-    } catch (e) {
-      console.error('热重载规约失败:', e)
-    } finally {
-      reloadingRules.value = false
-    }
-  }
-
   watch(
     () => subAgents.value,
     (agents) => {
@@ -322,28 +237,16 @@ export const useAgentStore = defineStore('agent', () => {
     showSubAgentDrawer,
     activeSubAgent,
     skillsList,
-    reloadingSkills,
     hooksList,
-    reloadingHooks,
     mcpList,
-    reloadingServer,
     rulesList,
-    reloadingRules,
-    
+
     openSubAgentDrawer,
     getTargetAgent,
     handleKillMember,
     deleteSubAgent,
     handleSubPermissionDecision,
     syncSubAgents,
-    loadContextAssets,
-    loadSkills,
-    handleReloadSkills,
-    loadHooks,
-    handleReloadHooks,
-    loadMcpStatus,
-    handleReloadMcp,
-    loadRules,
-    handleReloadRules
+    loadContextAssets
   }
 })

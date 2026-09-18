@@ -1,4 +1,4 @@
-package com.stioc.cute.worktree.types;
+package com.stioc.cute.git.types;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

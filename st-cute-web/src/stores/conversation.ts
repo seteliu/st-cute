@@ -19,7 +19,7 @@ import { useAppStore } from './app'
 import { useProviderStore } from './provider'
 import { useProjectStore } from './project'
 import { useAgentStore } from './agent'
-import { useWorktreeStore } from './worktree'
+import { useGitStore } from './git'
 import { Message, Conversation } from '@/types'
 
 export const useConversationStore = defineStore('conversation', () => {
@@ -169,8 +169,8 @@ export const useConversationStore = defineStore('conversation', () => {
       }, 150)
     }
 
-    // 环境资产静默加载：消息列表就绪后执行，独立 try 且不阻塞本函数返回，全程不触发转圈。
-    // 顺序：先拉环境上下文 info（权限模式、Token 用量、技能等）；worktree 与变动列表优先级最低，info 完成后再拉。
+        // 环境资产静默加载：消息列表就绪后执行，独立 try 且不阻塞本函数返回，全程不触发转圈。
+        // 顺序：先拉环境上下文 info（权限模式、Token 用量、技能等）；git 分支与变动列表优先级最低，info 完成后再拉。
     // 守卫：回包时若已切走到其他会话则整体中止，避免旧会话慢响应污染新会话状态（新会话会自行触发加载）
     const loadEnvAssets = async () => {
       try {
@@ -195,8 +195,8 @@ export const useConversationStore = defineStore('conversation', () => {
           appStore.loopRunning = envInfo.loopRunning
         }
 
-        const worktreeStore = useWorktreeStore()
-        await worktreeStore.fetchWorktrees(true)
+        const gitStore = useGitStore()
+        await gitStore.fetchBranches(true)
       } catch (e) {
         console.error('加载会话环境上下文信息失败:', e)
         ;(window as any).$message?.error('加载会话环境上下文信息失败，请检查网络或后端连接')

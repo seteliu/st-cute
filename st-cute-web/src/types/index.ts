@@ -5,7 +5,7 @@ export interface Result<T = any> {
 }
 
 export * from './chat'
-export * from './worktree'
+export * from './git'
 export * from './provider'
 export * from './agent'
 
