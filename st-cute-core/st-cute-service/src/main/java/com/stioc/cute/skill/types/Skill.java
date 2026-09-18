@@ -24,11 +24,6 @@ public class Skill {
     private String command;
 
     /**
-     * 技能包内注册暴露的智能体可用本地工具列表
-     */
-    private List<String> tools;
-
-    /**
      * 技能包提示词主体正文内容
      */
     private String systemPrompt;

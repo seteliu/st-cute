@@ -34,9 +34,6 @@ name: code-refactor
 description: "专用于对旧版 Java/Spring 代码进行现代化重构的技能包"
 command: "refactor"
 mode: "inline"
-tools:
-  - "view_file"
-  - "replace_file_content"
 ---
 
 # 技能指导说明与 Prompt
@@ -55,7 +52,6 @@ tools:
 | **`description`** | String | 技能简短描述，帮助 Agent 判断触发时机 |
 | **`command`** | String | 对应的 Slash 命令触发词（如 `/refactor`） |
 | **`mode`** | String | 执行模式：`inline`（注入当前会话上下文执行）或 `fork`（派生独立子智能体执行） |
-| **`tools`** | List | 技能可调用的限定工具白名单（可选） |
 
 ---
 

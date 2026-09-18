@@ -147,7 +147,6 @@ public class SkillManagerService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private Skill parseSkillFile(Path path, String source) throws IOException {
         String content = CharsetAwareFileKit.readString(path);
         if (!content.startsWith("---")) {
@@ -174,20 +173,6 @@ public class SkillManagerService {
         skill.setPath(path.toAbsolutePath().normalize().toString());
         skill.setSource(source);
         skill.setMode((String) meta.getOrDefault("mode", "inline"));
-
-        if (meta.containsKey("tools")) {
-            Object toolsObj = meta.get("tools");
-            if (toolsObj instanceof List) {
-                List<?> rawList = (List<?>) toolsObj;
-                List<String> tools = new ArrayList<>();
-                for (Object o : rawList) {
-                    if (o != null) {
-                        tools.add(String.valueOf(o));
-                    }
-                }
-                skill.setTools(tools);
-            }
-        }
 
         return skill;
     }

@@ -34,9 +34,6 @@ name: code-refactor
 description: "Skill package dedicated to modernizing legacy Java/Spring codebases"
 command: "refactor"
 mode: "inline"
-tools:
-  - "view_file"
-  - "replace_file_content"
 ---
 
 # Skill Instructions & Prompts
@@ -55,7 +52,6 @@ When performing code refactoring, strictly follow these steps:
 | **`description`** | String | Short description helping the Agent decide when to trigger |
 | **`command`** | String | Slash command trigger word (e.g. `/refactor`) |
 | **`mode`** | String | Execution mode: `inline` (inject into current session context) or `fork` (spawn a dedicated subagent) |
-| **`tools`** | List | Whitelisted tools allowed for this skill (Optional) |
 
 ---
 

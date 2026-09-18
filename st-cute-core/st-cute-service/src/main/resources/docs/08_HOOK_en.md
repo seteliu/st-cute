@@ -42,7 +42,7 @@ The configuration is an array of Hook rules, each defining trigger events, filte
   {
     "name": "check-java-formatting",
     "event": "on_tool_call",
-    "toolFilter": "replace_file_content",
+    "toolFilter": "edit_file",
     "pattern": "*.java",
     "action": "execute_command",
     "blocking": true,
@@ -68,7 +68,7 @@ The configuration is an array of Hook rules, each defining trigger events, filte
 | :--- | :--- | :--- |
 | **`name`** | String | Unique name of the hook rule (Required) |
 | **`event`** | String | Trigger event point: `on_context_start` / `on_loop_start` / `on_tool_call` / `on_tool_complete` / `on_loop_end` |
-| **`toolFilter`** | String | Specific tool name to trigger (e.g. `replace_file_content`; leave empty for all tools) |
+| **`toolFilter`** | String | Specific tool name to trigger (e.g. `edit_file`; leave empty for all tools) |
 | **`pattern`** | String | File path Glob pattern matching (e.g. `*.java`, case-insensitive full-path match; leave empty for no filtering) |
 | **`action`** | String | Action type when matched, currently fixed to `execute_command` |
 | **`blocking`** | Boolean | Whether to block execution: `true` for synchronous blocking (failure interrupts related flow); `false` for async non-blocking |
@@ -126,8 +126,6 @@ The JSON file referenced by `ST_CUTE_HOOK_DATA_PATH` contains the following fiel
 | **`permissionMode`** | String | Current permission mode (e.g. `READ_ONLY` / `SMART_APPROVAL`) |
 | **`providerGroup`** | String | Current model provider group |
 | **`providerModelName`** | String | Current model name |
-| **`worktreePath`** | String | Git WorkTree isolated path (null if not enabled) |
-| **`worktreeBranch`** | String | Git WorkTree branch name (null if not enabled) |
 | **`callToolCount`** | Integer | Cumulative tool call count |
 | **`consecutiveUnknownTools`** | Integer | Consecutive unknown tool call count (meltdown protection counter) |
 

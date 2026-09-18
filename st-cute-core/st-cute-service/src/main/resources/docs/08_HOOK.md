@@ -42,7 +42,7 @@ Hook 为叠加型契约，三层规则全部生效；装载注入顺序：项目
   {
     "name": "check-java-formatting",
     "event": "on_tool_call",
-    "toolFilter": "replace_file_content",
+    "toolFilter": "edit_file",
     "pattern": "*.java",
     "action": "execute_command",
     "blocking": true,
@@ -68,7 +68,7 @@ Hook 为叠加型契约，三层规则全部生效；装载注入顺序：项目
 | :--- | :--- | :--- |
 | **`name`** | String | 钩子规则名称，唯一标识（必须） |
 | **`event`** | String | 触发事件切面节点：`on_context_start` / `on_loop_start` / `on_tool_call` / `on_tool_complete` / `on_loop_end` |
-| **`toolFilter`** | String | 限定触发的工具名称（如 `replace_file_content`，留空代表匹配所有工具） |
+| **`toolFilter`** | String | 限定触发的工具名称（如 `edit_file`，留空代表匹配所有工具） |
 | **`pattern`** | String | 文件路径 Glob 通配符匹配（如 `*.java`，对整个文件路径做不区分大小写的全匹配，留空代表不过滤） |
 | **`action`** | String | 匹配命中后的动作方式，当前固定使用 `execute_command` |
 | **`blocking`** | Boolean | 是否阻断执行：`true` 为强阻断同步等待（失败将中断相关流程）；`false` 为异步非阻断执行 |
@@ -126,8 +126,6 @@ Hook 为叠加型契约，三层规则全部生效；装载注入顺序：项目
 | **`permissionMode`** | String | 当前权限模式（如 `READ_ONLY` / `SMART_APPROVAL`） |
 | **`providerGroup`** | String | 当前使用的模型供应商分组 |
 | **`providerModelName`** | String | 当前使用的模型名称 |
-| **`worktreePath`** | String | Git WorkTree 隔离路径（未启用为 null） |
-| **`worktreeBranch`** | String | Git WorkTree 分支名（未启用为 null） |
 | **`callToolCount`** | Integer | 累计工具调用次数 |
 | **`consecutiveUnknownTools`** | Integer | 连续未知工具调用次数（熔断保护计数） |
 
