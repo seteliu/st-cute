@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.stioc</groupId>
         <artifactId>st-cute-core</artifactId>
-        <version>0.2.1</version>
+        <version>0.2.2</version>
         <!-- 聚合根 pom 位于上级目录 -->
         <relativePath>../pom.xml</relativePath>
     </parent>
@@ -56,6 +56,10 @@
         <dependency>
             <groupId>com.alibaba.fastjson2</groupId>
             <artifactId>fastjson2</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
         </dependency>
 
         <dependency>
