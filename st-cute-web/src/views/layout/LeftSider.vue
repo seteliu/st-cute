@@ -618,7 +618,7 @@
                     v-model:value="appStore.password"
                     type="password"
                     show-password-on="click"
-                    placeholder="不启用安全密码"
+                    :placeholder="appStore.passwordSet ? '已设置密码，输入新密码可更换' : '不启用安全密码'"
                     size="small"
                     class="setting-item-control password-input"
                     maxlength="64"

@@ -2,14 +2,20 @@ package com.stioc.cute.controller;
 
 import com.stioc.cute.platform.common.Result;
 import com.stioc.cute.platform.contract.ContractProperty;
+import com.stioc.cute.platform.util.PasswordDigestKit;
 import com.stioc.cute.provider.ProviderService;
 import com.stioc.cute.provider.BasicConfigDto;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 /**
  * 系统基础行为配置控制器
+ * <p>
+ * 安全约定：访问密码全链路不明文——前端提交 SHA-256(原文) 传输摘要，
+ * 服务端存储带盐摘要（{@code salt:digest}），查询接口仅回传"是否已设置"布尔标记。
+ * </p>
  */
 @Slf4j
 @RestController
@@ -22,7 +28,7 @@ public class ConfigController {
     private ProviderService providerService;
 
     /**
-     * 获取系统当前基础运行属性配置
+     * 获取系统当前基础运行属性配置（密码仅回传是否已设置的布尔标记，绝不回传明文/摘要）
      */
     @GetMapping("/list")
     public Result<BasicConfigDto> getConfig() {
@@ -31,7 +37,7 @@ public class ConfigController {
         dto.setNewlineKey(contractProperty.getNewlineKey());
         dto.setHttpLog(contractProperty.getLlmLog().isHttpLog());
         dto.setHttpLogDays(contractProperty.getLlmLog().getHttpLogDays());
-        dto.setPassword(contractProperty.getPassword());
+        dto.setPasswordSet(StringUtils.hasText(contractProperty.getPassword()));
         dto.setMaxViewHistoryLimit(contractProperty.getMaxViewHistoryLimit());
         dto.setPathSandboxEnabled(contractProperty.isPathSandboxEnabled());
         dto.setMinimalSkillMode(contractProperty.isMinimalSkillMode());
@@ -40,11 +46,14 @@ public class ConfigController {
     }
 
     /**
-     * 保存并应用新的系统基础配置
+     * 保存并应用新的系统基础配置。
+     * <p>password 字段语义：空/缺省 = 不修改；非空 = 前端已计算的 SHA-256(原文) 传输摘要，加盐后落盘。</p>
      */
     @PostMapping("/save")
     public Result<Boolean> saveConfig(@RequestBody BasicConfigDto body) {
-        log.info("请求保存基础设置: {}", body);
+        // 日志脱敏：DTO 含密码传输摘要，只打印非敏感字段的保存摘要，杜绝敏感值落日志
+        log.info("请求保存基础设置: language={}, httpLog={}, httpLogDays={}, passwordChanged={}, passwordClear={}",
+                body.getLanguage(), body.getHttpLog(), body.getHttpLogDays(), StringUtils.hasText(body.getPassword()), Boolean.TRUE.equals(body.getPasswordClear()));
         String language = body.getLanguage();
         String newlineKey = body.getNewlineKey();
         Boolean httpLog = body.getHttpLog();
@@ -62,7 +71,9 @@ public class ConfigController {
         boolean finalMinimalSkillMode = minimalSkillMode != null ? minimalSkillMode : false;
         boolean finalLoadAllUserAttachments = loadAllUserAttachments != null ? loadAllUserAttachments : true;
 
-        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays, password, finalPathSandboxEnabled, finalMinimalSkillMode, finalLoadAllUserAttachments);
+        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays, password,
+                Boolean.TRUE.equals(body.getPasswordClear()),
+                finalPathSandboxEnabled, finalMinimalSkillMode, finalLoadAllUserAttachments, body.getMaxViewHistoryLimit());
         return Result.success(true);
     }
 }

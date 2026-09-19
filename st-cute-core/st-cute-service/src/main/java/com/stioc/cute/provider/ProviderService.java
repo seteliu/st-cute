@@ -3,6 +3,7 @@ package com.stioc.cute.provider;
 import com.stioc.cute.platform.common.BusinessException;
 import com.stioc.cute.platform.contract.ContractFile;
 import com.stioc.cute.platform.contract.ContractProperty;
+import com.stioc.cute.platform.util.PasswordDigestKit;
 import com.stioc.cute.engine.llm.types.Provider;
 import com.stioc.cute.websocket.WebSocketBroadcast;
 import com.stioc.cute.platform.util.ConfigMergeUtils;
@@ -153,6 +154,11 @@ public class ProviderService implements ProviderResolver {
         webSocketBroadcast.broadcast(WebSocketBroadcast.EventType.PROVIDERS_UPDATED, getAllProviders());
     }
 
+    /**
+     * 写回全局配置文件。
+     * <p>持久化失败不再静默吞掉：向上抛出 {@link BusinessException}，由调用方决定回滚/报错，
+     * 避免内存与磁盘漂移且对用户伪成功（重启后配置静默丢失）。</p>
+     */
     private void writeBackGlobalConfig() {
         try {
             File file = ContractFile.getGlobalConfigJsonFile();
@@ -172,33 +178,76 @@ public class ProviderService implements ProviderResolver {
             log.info("已成功将最新的配置写回全局配置文件: {}", file.getAbsolutePath());
         } catch (Exception e) {
             log.error("写回全局配置文件失败", e);
+            throw new BusinessException("保存配置失败：写入全局配置文件出错，改动未持久化（" + e.getMessage() + "）");
         }
     }
 
     /**
      * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数、安全密码、路径沙箱保护、极简 Skill 模式、全量用户附件装载）配置
+     * <p>
+     * 密码安全约定：入参 password 为前端 SHA-256(原文) 传输摘要——空/缺省保持原值不变；
+     * passwordClear=true 时显式清除密码（优先级高于 password）。广播 CONFIG_UPDATED 事件同样不携带密码值（仅 passwordSet 状态标记），
+     * 且广播在写盘成功后发出，失败时本方法直接抛出异常、不广播、并回滚内存状态。
+     * maxViewHistoryLimit 为可选参数：null 表示保持原值不变（该字段另有独立读取路径）。
+     * </p>
      */
-    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, String password, boolean pathSandboxEnabled, boolean minimalSkillMode, boolean loadAllUserAttachments) {
+    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, String password, boolean passwordClear, boolean pathSandboxEnabled, boolean minimalSkillMode, boolean loadAllUserAttachments, Integer maxViewHistoryLimit) {
+        // 先改内存后落盘，写盘失败时回滚内存，保证内存与磁盘不漂移
+        String originalPassword = contractProperty.getPassword();
+        // 密码处置优先级：passwordClear 显式清除 > password 非空设置新密码 > 均缺省保持原值
+        String newPasswordToStore;
+        if (Boolean.TRUE.equals(passwordClear)) {
+            newPasswordToStore = null;
+        } else if (StringUtils.hasText(password)) {
+            newPasswordToStore = PasswordDigestKit.hash(password);
+        } else {
+            newPasswordToStore = originalPassword;
+        }
+
         contractProperty.setLanguage(language);
         contractProperty.setNewlineKey(newlineKey);
+        // llmLog 字段可能因配置合并路径未初始化（HttpLogCleanupJob 同款防御），判空兜底
+        if (contractProperty.getLlmLog() == null) {
+            contractProperty.setLlmLog(new ContractProperty.LlmLog());
+        }
         contractProperty.getLlmLog().setHttpLog(httpLog);
         contractProperty.getLlmLog().setHttpLogDays(httpLogDays);
-        contractProperty.setPassword(password);
+        contractProperty.setPassword(newPasswordToStore);
         contractProperty.setPathSandboxEnabled(pathSandboxEnabled);
         contractProperty.setMinimalSkillMode(minimalSkillMode);
         contractProperty.setLoadAllUserAttachments(loadAllUserAttachments);
-        writeBackGlobalConfig();
+        if (maxViewHistoryLimit != null && maxViewHistoryLimit > 0) {
+            contractProperty.setMaxViewHistoryLimit(maxViewHistoryLimit);
+        }
+        try {
+            writeBackGlobalConfig();
+        } catch (BusinessException e) {
+            // 写盘失败：回滚内存状态，保证内存与磁盘一致
+            contractProperty.setPassword(originalPassword);
+            throw e;
+        }
 
         BasicConfigDto dto = new BasicConfigDto();
         dto.setLanguage(language);
         dto.setNewlineKey(newlineKey);
         dto.setHttpLog(httpLog);
         dto.setHttpLogDays(httpLogDays);
-        dto.setPassword(password);
+        dto.setPasswordSet(StringUtils.hasText(newPasswordToStore));
         dto.setPathSandboxEnabled(pathSandboxEnabled);
         dto.setMinimalSkillMode(minimalSkillMode);
         dto.setLoadAllUserAttachments(loadAllUserAttachments);
         webSocketBroadcast.broadcast(WebSocketBroadcast.EventType.CONFIG_UPDATED, dto);
+    }
+
+    /**
+     * 仅迁移密码存储形态（历史明文升级为带盐摘要），其余配置字段保持不变。
+     * <p>登录成功且检测到明文存储时透明调用；不广播 CONFIG_UPDATED（密码状态未变化）。</p>
+     *
+     * @param passwordDigest 已按存储口径计算好的密码值（如带盐摘要）
+     */
+    public void saveSettingsKeepPasswordDigest(String passwordDigest) {
+        contractProperty.setPassword(passwordDigest);
+        writeBackGlobalConfig();
     }
 
     /**

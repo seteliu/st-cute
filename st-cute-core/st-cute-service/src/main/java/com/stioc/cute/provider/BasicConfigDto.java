@@ -29,9 +29,22 @@ public class BasicConfigDto {
     private Integer httpLogDays;
 
     /**
-     * 安全访问密码
+     * 安全访问密码（SHA-256(原文) 传输摘要）。
+     * <p>保存时空/缺省表示不修改密码，非空为前端计算的传输摘要（服务端加盐后落盘）；
+     * 查询接口不回传该字段，密码状态经 {@link #passwordSet} 表达。</p>
      */
     private String password;
+
+    /**
+     * 是否已设置安全访问密码（查询接口回传的密码状态标记，替代明文回显）
+     */
+    private Boolean passwordSet;
+
+    /**
+     * 显式清除密码标记：true 时清除已设置的访问密码（优先级高于 password 字段）。
+     * <p>因 password 字段"空=不修改"的语义无法表达关闭密码保护，需经本标记显式声明。</p>
+     */
+    private Boolean passwordClear;
 
     /**
      * 会话历史消息显示数量限制

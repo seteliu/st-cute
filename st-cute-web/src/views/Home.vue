@@ -539,7 +539,8 @@ onMounted(async () => {
       appStore.newlineKey = event.payload.newlineKey || 'enter'
       appStore.httpLog = event.payload.httpLog || false
       appStore.httpLogDays = event.payload.httpLogDays !== undefined ? event.payload.httpLogDays : 7
-      appStore.password = event.payload.password || ''
+      // 密码广播不再携带密码值，仅同步状态标记；本地输入态保持不动
+      appStore.passwordSet = event.payload.passwordSet || false
       appStore.minimalSkillMode = event.payload.minimalSkillMode || false
     }
   })

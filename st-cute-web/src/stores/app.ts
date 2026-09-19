@@ -32,7 +32,10 @@ export const useAppStore = defineStore('app', () => {
   const newlineKey = ref<'enter' | 'alt+enter'>('enter')
   const httpLog = ref(false)
   const httpLogDays = ref(7)
+  // 本地输入态：仅承载"本次要设置的新密码"，保存前本地转 SHA-256 摘要发送；后端不回传既有密码
   const password = ref('')
+  // 服务端密码状态：是否已设置安全访问密码（替代旧的明文回显）
+  const passwordSet = ref(false)
   const maxViewHistoryLimit = ref(2000)
   const pathSandboxEnabled = ref(true)
   // 极简 Skill 模式：开启后技能清单不注入系统提示词以节省 Token，仅按需触发加载
@@ -295,7 +298,9 @@ export const useAppStore = defineStore('app', () => {
       newlineKey.value = data.newlineKey || 'enter'
       httpLog.value = data.httpLog || false
       httpLogDays.value = data.httpLogDays !== undefined ? data.httpLogDays : 7
-      password.value = data.password || ''
+      // 密码状态标记：后端不再回传明文/摘要，本地输入框仅承载"本次要设置的新密码"
+      passwordSet.value = data.passwordSet || false
+      password.value = ''
       maxViewHistoryLimit.value = data.maxViewHistoryLimit || 2000
       pathSandboxEnabled.value = data.pathSandboxEnabled !== undefined ? data.pathSandboxEnabled : true
       minimalSkillMode.value = data.minimalSkillMode || false
@@ -314,9 +319,14 @@ export const useAppStore = defineStore('app', () => {
         httpLog: httpLog.value,
         httpLogDays: httpLogDays.value,
         password: password.value,
+        // 保持既有交互习惯：已设置过密码且本地输入框被清空时，保存即关闭密码保护；
+        // 未设置过密码时清空框就是"保持未启用"，两种情况均无需下发清除标记
+        passwordClear: passwordSet.value && !password.value,
         pathSandboxEnabled: pathSandboxEnabled.value,
         minimalSkillMode: minimalSkillMode.value
       })
+      // 保存成功后清空本地输入态，回到"仅展示 passwordSet 状态"的干净基线
+      password.value = ''
       if ((window as any).$message) {
         ;(window as any).$message.success(t('settings.saveSuccess'))
       }
@@ -345,6 +355,7 @@ export const useAppStore = defineStore('app', () => {
     httpLog,
     httpLogDays,
     password,
+    passwordSet,
     maxViewHistoryLimit,
     pathSandboxEnabled,
     minimalSkillMode,
