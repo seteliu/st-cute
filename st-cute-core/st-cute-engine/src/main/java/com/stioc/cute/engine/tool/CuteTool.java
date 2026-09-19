@@ -16,7 +16,7 @@ import java.util.Map;
  *   <li>标识与域定义：{@link #getDomain()} → {@link #getRawName()} → {@link #getName()}</li>
  *   <li>模型元数据定义：{@link #getDescription()} → {@link #getArgumentSchema()}</li>
  *   <li>生命周期与治理控制：{@link #isAvailable(AgentContext)} → {@link #isApprovalExempt()} → {@link #getAccessLevel()}</li>
- *   <li>并发锁与审计资源：{@link #getTargetResource(Map)} → {@link #getLockKey(Map)}</li>
+ *   <li>并发锁与审计资源：{@link #getTargetResource(Map, AgentContext)} → {@link #getLockKey(Map, AgentContext)}</li>
  *   <li>执行入口：{@link #execute(Map, ToolExecutionContext)}（永远放置于最底部）</li>
  * </ol>
  * 【实现方规范】：实现类应严格对齐上述顺序组织重写方法；使用默认行为的方法无须冗余覆写；私有辅助方法统一置于 execute() 之后。
@@ -98,19 +98,22 @@ public interface CuteTool {
     /**
      * 获取工具当前调用的目标资源标识（如文件路径、URI、表名与主键等）。
      * 供生命周期 Hook 规则匹配与审计使用，默认返回 null。
+     * 上下文随参传入，便于实现按会话/项目维度定制资源语义（如相对路径按项目根解析），为后续扩展预留。
      */
-    default String getTargetResource(Map<String, Object> arguments) {
+    default String getTargetResource(Map<String, Object> arguments, AgentContext context) {
         return null;
     }
 
     /**
      * 获取写工具执行时需要排他保护的锁键（Lock Key）。
      * 仅在访问等级非 READ 时参与并发控制。
-     * 默认直接使用 getTargetResource(arguments)；工具也可自行拼接命名空间（如 "file:" + path、"db:user:" + id 等）。
+     * 默认直接使用 getTargetResource(arguments, context)；工具也可自行拼接命名空间（如 "file:" + path、"db:user:" + id 等）。
      * 若返回 null 或空串，则表示不加细粒度条带锁。
+     * 上下文随参传入：锁键解析基准必须与 execute 一致（如相对路径按项目根解析），
+     * 避免「JVM 工作目录 ≠ 项目根」部署形态下同一文件以相对/绝对两种形态调用得到不同锁键、互斥失效。
      */
-    default String getLockKey(Map<String, Object> arguments) {
-        return getTargetResource(arguments);
+    default String getLockKey(Map<String, Object> arguments, AgentContext context) {
+        return getTargetResource(arguments, context);
     }
 
     // ── 5. 执行入口 ──

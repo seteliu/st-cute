@@ -10,7 +10,7 @@ import com.stioc.cute.conversation.types.UpdateConfigDto;
 import com.stioc.cute.engine.AgentEngine;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.runtime.loop.RuntimeContext;
-import com.stioc.cute.tool.types.ActiveProcess;
+import com.stioc.cute.tool.commandtool.ActiveProcess;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -201,19 +201,11 @@ public class ConversationController {
             runtimeCtx.getActiveProcesses().forEach((toolCallId, activeProcess) -> {
                 Process process = activeProcess.getProcess();
                 boolean isAlive = process.isAlive();
+
+                // 存活判定统一走 hasSurvivor：主进程 + 启动追踪名单（childPids）+ MSYS 族徽
+                // 收网名单（msysWinPids）三处任一存活即视为有活口——MSYS 孤儿不在 childPids 内，
+                // 仅按主进程/childPids 判定会让 PPID 断链孤儿在面板上失明
                 Long actualPid = process.pid();
-
-                // 若主进程已退出（可能是wrapper进程已死），检查后代子孙进程是否依然在运行
-                if (!isAlive && activeProcess.getChildPids() != null) {
-                    for (Long childPid : activeProcess.getChildPids()) {
-                        if (ProcessHandle.of(childPid).map(ProcessHandle::isAlive).orElse(false)) {
-                            isAlive = true;
-                            actualPid = childPid; // 指向依然存活的真正工作进程PID
-                            break;
-                        }
-                    }
-                }
-
                 if (isAlive) {
                     resultList.add(ActiveProcessVo.builder()
                             .cid(activeProcess.getCid())
@@ -225,6 +217,22 @@ public class ConversationController {
                             .startTime(activeProcess.getStartTime())
                             .runningTimeMs(now - activeProcess.getStartTime())
                             .build());
+                } else if (activeProcess.hasSurvivor()) {
+                    // 主进程已死但仍有后代/收网名单成员存活（wrapper 已死、真正的工作进程还在跑）：
+                    // 展示存活成员 PID，保留用户手杀通道
+                    Long survivorPid = firstAlivePid(activeProcess);
+                    if (survivorPid != null) {
+                        resultList.add(ActiveProcessVo.builder()
+                                .cid(activeProcess.getCid())
+                                .sessionTitle(title)
+                                .toolCallId(toolCallId)
+                                .pid(survivorPid)
+                                .command(activeProcess.getCommand())
+                                .cwd(activeProcess.getCwd())
+                                .startTime(activeProcess.getStartTime())
+                                .runningTimeMs(now - activeProcess.getStartTime())
+                                .build());
+                    }
                 } else {
                     // 🌟 懒清理：一旦发现主进程和所有后代子进程均已死亡，将其从活动映射中移除，防止内存累积
                     runtimeCtx.getActiveProcesses().remove(toolCallId);
@@ -233,6 +241,30 @@ public class ConversationController {
         }
 
         return Result.success(resultList);
+    }
+
+    /**
+     * 返回登记条目中第一个仍存活的进程 PID（优先级：MSYS 收网名单 > 启动追踪名单）。
+     * <p>供面板展示"真正还在跑的工作进程"用；全部消亡返回 null。</p>
+     */
+    private Long firstAlivePid(ActiveProcess activeProcess) {
+        List<Long> msysWinPids = activeProcess.getMsysWinPids();
+        if (msysWinPids != null) {
+            for (Long pid : msysWinPids) {
+                if (ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) {
+                    return pid;
+                }
+            }
+        }
+        List<Long> childPids = activeProcess.getChildPids();
+        if (childPids != null) {
+            for (Long pid : childPids) {
+                if (ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) {
+                    return pid;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -268,13 +300,15 @@ public class ConversationController {
                 ActiveProcess activeProcess = runtimeCtx.getActiveProcesses().get(toolCallId);
                 if (activeProcess != null) {
                     log.info("用户请求单杀会话 {} 的子进程树: ToolCallId={}", ctx.getCid(), toolCallId);
-                    activeProcess.destroyForcibly();
+                    // 手杀与自动超时清扫同源：destroyForciblyAndVerify 含 MSYS 族徽撒网 +
+                    // 延迟复查补杀，用户手杀同样能确定性触达 PPID 断链的 MSYS 孤儿
+                    activeProcess.destroyForciblyAndVerify();
                     runtimeCtx.getActiveProcesses().remove(toolCallId);
                 }
             } else {
                 runtimeCtx.getActiveProcesses().forEach((tcId, activeProcess) -> {
                     log.info("用户请求全杀会话 {} 的子进程树: ToolCallId={}", ctx.getCid(), tcId);
-                    activeProcess.destroyForcibly();
+                    activeProcess.destroyForciblyAndVerify();
                 });
                 runtimeCtx.getActiveProcesses().clear();
             }

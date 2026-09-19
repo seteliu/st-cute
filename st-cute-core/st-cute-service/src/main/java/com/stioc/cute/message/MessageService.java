@@ -8,7 +8,6 @@ import com.stioc.cute.engine.store.types.MessageQuery;
 import com.stioc.cute.engine.store.types.SortDirection;
 import com.stioc.cute.message.types.LimitMessageDto;
 import com.stioc.cute.platform.contract.ContractProperty;
-import com.stioc.cute.engine.llm.types.CuteToolCall;
 import com.stioc.cute.engine.tool.ToolCallCodec;
 import com.stioc.cute.engine.store.MessageStore;
 import lombok.extern.slf4j.Slf4j;

@@ -19,7 +19,7 @@ public interface ToolGuard {
      *
      * @param tool    待评估的工具实例（引擎解析所得，恒非 null：未知工具在进入本守卫前已早失败拦截），
      *                工具名等标识信息由 {@link CuteTool#getName()} 自取，
-     *                并含工具自声明的审计资源 {@link CuteTool#getTargetResource(Map)} 等元数据，
+     *                并含工具自声明的审计资源 {@link CuteTool#getTargetResource(Map, AgentContext)} 等元数据，
      *                宿主无需再按参数名猜测资源特征或反向反查注册中心
      * @param args    大模型传递的参数 Map
      * @param context 当前会话上下文

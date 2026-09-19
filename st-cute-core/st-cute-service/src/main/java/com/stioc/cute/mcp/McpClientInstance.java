@@ -4,8 +4,9 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONArray;
 import com.stioc.cute.mcp.types.McpServerConfig;
-import com.stioc.cute.tool.McpCuteTool;
+import com.stioc.cute.tool.contexttool.McpCuteTool;
 import com.stioc.cute.engine.tool.CuteTool;
+import com.stioc.cute.platform.common.VirtualThreads;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 托管单个 stdio（本地进程）或原生 SSE（远端 HTTP 服务）MCP 服务器的客户端双向通信实例
@@ -80,9 +82,9 @@ public class McpClientInstance {
     private BufferedReader stderrReader;
 
     /**
-     * 虚拟线程池执行服务
+     * 虚拟线程执行服务（任务即新建，用完即毁，带专属命名前缀）
      */
-    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+    private final ExecutorService executor = VirtualThreads.newExecutor("mcp-client-");
 
     /**
      * 挂起的请求回调 Map
@@ -90,9 +92,9 @@ public class McpClientInstance {
     private final Map<String, CompletableFuture<JSONObject>> pendingRequests = new ConcurrentHashMap<>();
 
     /**
-     * 自增消息序列号 ID
+     * 自增消息序列号 ID（原子类：实例跨会话共享，只读工具并发批下多线程取号必须原子）
      */
-    private int messageIdSequence = 1;
+    private final AtomicInteger messageIdSequence = new AtomicInteger(1);
 
     /**
      * 客户端连接状态
@@ -213,7 +215,7 @@ public class McpClientInstance {
      * 向服务器端发送 JSON-RPC 2.0 请求，并挂起等待回复
      */
     public CompletableFuture<JSONObject> sendRequest(String method, JSONObject params) {
-        String id = String.valueOf(messageIdSequence++);
+        String id = String.valueOf(messageIdSequence.getAndIncrement());
         JSONObject req = new JSONObject();
         req.put("jsonrpc", "2.0");
         req.put("id", id);
@@ -519,6 +521,13 @@ public class McpClientInstance {
             log.error("[MCP Client {}] 关闭进程发生异常", name, e);
         } finally {
             executor.shutdownNow();
+            // 唤醒所有挂起等待响应的请求（以连接关闭异常完结），避免调用方干等到自身超时
+            pendingRequests.forEach((id, future) -> {
+                try {
+                    future.completeExceptionally(new IOException("MCP 客户端已关闭，连接不可用"));
+                } catch (Exception ignored) {
+                }
+            });
             pendingRequests.clear();
             httpClient = null;
             ssePostUrl = null;

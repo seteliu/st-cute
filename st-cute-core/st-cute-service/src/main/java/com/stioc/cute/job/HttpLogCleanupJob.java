@@ -2,6 +2,7 @@ package com.stioc.cute.job;
 
 import com.stioc.cute.platform.contract.ContractFile;
 import com.stioc.cute.platform.contract.ContractProperty;
+import com.stioc.cute.platform.common.VirtualThreads;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -24,7 +25,7 @@ public class HttpLogCleanupJob {
      */
     @PostConstruct
     public void initClean() {
-        Thread.startVirtualThread(this::cleanExpiredLogs);
+        VirtualThreads.run("job-log-clean", this::cleanExpiredLogs);
     }
 
     /**

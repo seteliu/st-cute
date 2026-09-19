@@ -18,7 +18,6 @@ import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessagePatch;
 import com.stioc.cute.engine.store.types.MessageQuery;
 import com.stioc.cute.engine.store.types.MessageStatus;
-import com.stioc.cute.engine.tool.ToolCallCodec;
 import com.stioc.cute.engine.tool.types.ToolApprovalRequest;
 import com.stioc.cute.engine.tool.types.ToolAccessLevel;
 import com.stioc.cute.engine.tool.types.ToolExecutionContext;
@@ -368,7 +367,7 @@ public class ToolExecutionEngine {
             notifyToolCompleted(context, toolCallId);
             return;
         }
-        String targetResource = tool.getTargetResource(args);
+        String targetResource = tool.getTargetResource(args, context);
 
         // 3. 触发 on_tool_call 生命周期拦截挂点（宿主 HookListener 抛异常即拦截）
         try {
@@ -433,7 +432,7 @@ public class ToolExecutionEngine {
 
         // 6.1 非只读工具执行，获取并发排他锁（WRITE 与 SENSITIVE 均有外部副作用，统一持锁）
         boolean needsWriteLock = tool.getAccessLevel() != ToolAccessLevel.READ;
-        String lockKey = needsWriteLock ? tool.getLockKey(args) : null;
+        String lockKey = needsWriteLock ? tool.getLockKey(args, context) : null;
         Lock writeLock = null;
         if (lockKey != null && !lockKey.isBlank()) {
             writeLock = lockProvider.getWriteToolLock(lockKey);

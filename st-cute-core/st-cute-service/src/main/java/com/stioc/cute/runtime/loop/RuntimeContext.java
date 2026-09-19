@@ -6,8 +6,8 @@ import com.stioc.cute.hook.types.HookRule;
 import com.stioc.cute.mcp.McpClientInstance;
 import com.stioc.cute.runtime.loop.types.AgentRuleVo;
 import com.stioc.cute.skill.types.Skill;
-import com.stioc.cute.tool.types.ActiveProcess;
-import com.stioc.cute.tool.types.RepeatCommandTracker;
+import com.stioc.cute.tool.commandtool.ActiveProcess;
+import com.stioc.cute.tool.commandtool.RepeatCommandTracker;
 import lombok.Data;
 
 import java.util.List;

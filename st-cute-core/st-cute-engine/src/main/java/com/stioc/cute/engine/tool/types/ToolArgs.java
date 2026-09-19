@@ -129,7 +129,7 @@ public final class ToolArgs {
     }
 
     /**
-     * 数字解析内核：Number 直取，整数字符串解析，其余返回 null
+     * 数字解析内核：Number 直取，整数字符串解析，浮点数字符串截断兜底，其余返回 null
      */
     private Long parseNumber(String key) {
         Object v = raw.get(key);
@@ -140,10 +140,16 @@ public final class ToolArgs {
             return n.longValue();
         }
         if (v instanceof String s) {
+            String trimmed = s.trim();
             try {
-                return Long.parseLong(s.trim());
+                return Long.parseLong(trimmed);
             } catch (NumberFormatException e) {
-                return null;
+                // 宽容兜底：兼容部分 LLM 输出浮点数字符串（如 "1.0"）
+                try {
+                    return (long) Double.parseDouble(trimmed);
+                } catch (NumberFormatException ex) {
+                    return null;
+                }
             }
         }
         return null;

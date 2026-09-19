@@ -8,13 +8,6 @@ export interface FileUploadVo {
   compressed: boolean
 }
 
-export interface FileBase64Vo {
-  mimeType: string
-  base64: string
-  size: number
-  name?: string
-}
-
 /**
  * 上传文件到指定会话
  */
@@ -33,15 +26,10 @@ export const uploadFile = async (cid: number, file: File, compress = true): Prom
 
 /**
  * 获取文件在线预览或下载 URL
+ * <p>
+ * 注意：后端对该接口有沙箱管控，path 必须位于用户目录 ~/.st-cute/files 内，越权一律 404。
  */
 export const getFileViewUrl = (path: string, mode: 'raw' | 'thumbnail' = 'raw', download = false): string => {
   if (!path) return ''
   return `/api/file/view?path=${encodeURIComponent(path)}&mode=${mode}&download=${download}`
-}
-
-/**
- * 获取指定文件的 Base64 数据
- */
-export const getFileBase64 = async (path: string): Promise<FileBase64Vo> => {
-  return request.get(`/api/file/base64?path=${encodeURIComponent(path)}`)
 }

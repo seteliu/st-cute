@@ -5,13 +5,15 @@ import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.ConversationQuery;
 import com.stioc.cute.engine.store.types.SortDirection;
-import com.stioc.cute.service.FileStorageService;
+import com.stioc.cute.file.FileStorageService;
 import com.stioc.cute.permission.types.PermissionMode;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -49,6 +51,8 @@ public class ConversationService {
 
     /**
      * 删除指定会话（级联子会话与消息）
+     * <p>文件清理在事务提交后执行：数据库回滚无法恢复已删除的物理附件文件，
+     * 事务内做文件 IO 既拖长事务又破坏原子性语义。</p>
      */
     @Transactional
     public void deleteConversation(Long id) {
@@ -65,8 +69,19 @@ public class ConversationService {
 
         agentEngine.getConversationFacade().deleteConversation(id);
 
-        // 级联清理该会话存储的物理附件文件及 cid 文件夹
-        fileStorageService.deleteConversationFiles(id);
+        // 事务提交后再清理该会话存储的物理附件文件及 cid 文件夹，
+        // 保证 DB 删除成功落定后文件才被物理清除（回滚场景文件不丢）
+        Long fileId = id;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    fileStorageService.deleteConversationFiles(fileId);
+                } catch (Exception e) {
+                    log.error("事务提交后清理会话 {} 的物理附件文件失败（不影响已完成的数据库删除）", fileId, e);
+                }
+            }
+        });
     }
 
     /**
@@ -95,9 +110,11 @@ public class ConversationService {
         conversation.setUpdateTime(LocalDateTime.now());
 
         // 自动取最近更新会话的 permissionMode（缺省继承；供应商字段不做继承，由前端传值）
+        // limit(1)：仅需最近一条的权限模式，避免全表会话实体（含大字段）整体载入内存
         List<Conversation> existing = conversationStore.listByQuery(ConversationQuery.builder()
                 .sortField("updateTime")
                 .sortDirection(SortDirection.DESC)
+                .limit(1)
                 .build());
         if (!existing.isEmpty()) {
             Conversation latestConv = existing.getFirst();

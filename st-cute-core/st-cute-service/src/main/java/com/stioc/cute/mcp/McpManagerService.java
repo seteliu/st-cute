@@ -10,6 +10,7 @@ import com.stioc.cute.mcp.types.McpServerConfig;
 import com.stioc.cute.mcp.types.McpStatusVo;
 import com.stioc.cute.mcp.types.McpToolVo;
 import com.stioc.cute.platform.common.CharsetAwareFileKit;
+import com.stioc.cute.platform.common.VirtualThreads;
 import com.stioc.cute.platform.contract.ContractFile;
 import com.stioc.cute.runtime.loop.RuntimeContext;
 import com.stioc.cute.runtime.loop.RuntimeContextInitializer;
@@ -99,6 +100,9 @@ public class McpManagerService {
 
             if (client == null) {
                 needStart = true;
+            } else if ("CONNECTING".equals(client.getStatus())) {
+                // 异步启动窗口期占位实例：已有后台线程在拉起同名服务，直接复用等待，不得重复启动
+                log.info("会话 {} 复用异步启动中的 MCP 服务器实例: {}", context.getCid(), serverName);
             } else if ("OFFLINE".equals(client.getStatus())) {
                 log.info("检测到 MCP 客户端进程 {} 已离线，将重新启动", serverName);
                 client.shutdown();
@@ -128,7 +132,11 @@ public class McpManagerService {
                 });
 
                 if (isStdioConfig(config)) {
-                    // stdio 型：进程拉起与握手可能秒级阻塞，转后台虚拟线程异步启动，不拖慢会话创建主链路
+                    // stdio 型：进程拉起与握手可能秒级阻塞，转后台虚拟线程异步启动，不拖慢会话创建主链路。
+                    // 关键：登记占位先行——启动前即放入 sharedClients（实例状态为 CONNECTING），
+                    // 消除"异步启动窗口期内其他会话查询缓存为 null 而重复拉起同名双进程"的竞态；
+                    // 复用方在下方分支检查到 CONNECTING 状态时视为"已有实例在启动"，直接复用等待
+                    sharedClients.put(serverName, client);
                     asyncStarting.put(serverName, client);
                 } else {
                     // SSE 型：远端 HTTP 服务握手轻量，保持原有同步启动语义
@@ -153,19 +161,18 @@ public class McpManagerService {
         }
 
         // 后台虚拟线程逐个异步启动 stdio 实例：启动完成后回填共享缓存并广播事件，供前端刷新 MCP 看板
+        // （实例已在主链路登记进 sharedClients 占位，此处仅需执行启动；失败时保留 OFFLINE 实例供状态跟踪）
         for (Map.Entry<String, McpClientInstance> asyncEntry : asyncStarting.entrySet()) {
             String serverName = asyncEntry.getKey();
             McpClientInstance client = asyncEntry.getValue();
-            Thread.startVirtualThread(() -> {
+            VirtualThreads.run("mcp-init-" + serverName, () -> {
                 try {
                     client.start();
-                    sharedClients.put(serverName, client);
                     log.info("MCP 服务器 {} 异步启动成功，暴露工具数: {}", serverName, client.getExposedTools().size());
                     broadcastMcpUpdated(context.getCid(), serverName);
                 } catch (Exception ex) {
                     log.error("MCP 服务器 {} 异步启动失败", serverName, ex);
-                    // 即使拉起进程或连接失败，也存入共享 Map 以便跟踪其状态
-                    sharedClients.put(serverName, client);
+                    // 启动失败保留 OFFLINE 实例在共享 Map 中以便跟踪其状态
                     broadcastMcpUpdated(context.getCid(), serverName);
                 }
             });

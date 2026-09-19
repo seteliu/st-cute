@@ -1,8 +1,7 @@
 package com.stioc.cute.controller;
 
-import com.stioc.cute.service.types.FileBase64Vo;
-import com.stioc.cute.service.FileStorageService;
-import com.stioc.cute.service.types.FileUploadVo;
+import com.stioc.cute.file.FileStorageService;
+import com.stioc.cute.file.types.FileUploadVo;
 import com.stioc.cute.platform.common.BusinessException;
 import com.stioc.cute.platform.common.Result;
 import jakarta.annotation.Resource;
@@ -52,8 +51,11 @@ public class FileController {
 
     /**
      * 文件查看与下载接口 (支持原始文件流 raw、缩略图 thumbnail)
+     * <p>
+     * 读取范围受附件沙箱约束：仅允许读取 {@code ~/.st-cute/files} 目录内的文件，
+     * 越权路径（含 {@code ..} 穿越、软链逃逸）一律按 404 处理，不暴露文件是否存在以外的任何信息。
      *
-     * @param path     文件路径（绝对路径，或项目相对路径）
+     * @param path     文件路径（绝对路径，且必须位于附件沙箱目录内）
      * @param mode     模式：raw (原文件) 或 thumbnail (缩略图)
      * @param download 是否强制下载
      * @param response HTTP 响应对象
@@ -65,8 +67,8 @@ public class FileController {
             @RequestParam(value = "download", required = false, defaultValue = "false") Boolean download,
             HttpServletResponse response) {
         try {
-            // 路径解析：绝对路径或项目相对路径
-            File file = fileStorageService.resolveFlexiblePath(path, null);
+            // 路径解析 + 沙箱校验：绝对路径且必须落在 ~/.st-cute/files 内
+            File file = fileStorageService.resolveAttachmentFile(path);
             if (file == null) {
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 return;
@@ -108,20 +110,5 @@ public class FileController {
             log.warn("文件查看或下载异常: path={}, mode={}, error={}", path, mode, e.getMessage());
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         }
-    }
-
-    /**
-     * 获取指定文件的 Base64 编码数据
-     *
-     * @param path 文件路径（绝对路径，或项目相对路径）
-     */
-    @GetMapping("/base64")
-    public Result<FileBase64Vo> getBase64(@RequestParam("path") String path) {
-        File file = fileStorageService.resolveFlexiblePath(path, null);
-        if (file == null) {
-            throw new BusinessException("未找到指定的文件: " + path);
-        }
-        FileBase64Vo vo = fileStorageService.getFileBase64Vo(file);
-        return Result.success(vo);
     }
 }

@@ -1,7 +1,5 @@
 package com.stioc.cute.conversation.types;
 
-import com.stioc.cute.engine.store.types.Conversation;
-
 import lombok.Data;
 
 /**

@@ -3,8 +3,9 @@ package com.stioc.cute.runtime.common;
 import com.stioc.cute.engine.common.EngineExecutor;
 import org.springframework.stereotype.Component;
 
+import com.stioc.cute.platform.common.VirtualThreads;
+
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * 宿主异步执行器供血实现：虚拟线程执行器（单机部署形态）。
@@ -18,20 +19,16 @@ import java.util.concurrent.Executors;
 @Component
 public class HostExecutorProvider implements EngineExecutor {
 
-    /**
-     * 全局共享的虚拟线程执行器
-     */
-    private static final ExecutorService ASYNC_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
-
     @Override
     public ExecutorService getAsyncExecutor() {
-        return ASYNC_EXECUTOR;
+        // 动态获取全局虚拟线程执行器，确保容器重载或刷新后能获取到自愈重建的健康实例
+        return VirtualThreads.getGlobalExecutor();
     }
 
     /**
      * 提交异步任务到宿主共享虚拟线程执行器中执行
      */
     public static void submit(Runnable task) {
-        ASYNC_EXECUTOR.submit(task);
+        VirtualThreads.getGlobalExecutor().submit(task);
     }
 }
