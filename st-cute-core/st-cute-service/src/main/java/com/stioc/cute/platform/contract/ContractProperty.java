@@ -89,7 +89,7 @@ public class ContractProperty {
      */
     @PostConstruct
     public void initAndMergeConfigs() {
-        File globalJsonFile = new File(System.getProperty("user.home"), ".st-cute/config.json");
+        File globalJsonFile = new File(ContractFile.getGlobalDir(), "config.json");
         if (!globalJsonFile.exists()) {
             log.info("未检测到全局配置文件 {}，将直接使用系统内置配置", globalJsonFile.getAbsolutePath());
             return;

@@ -183,10 +183,6 @@ Daily development only requires starting the frontend and backend services and a
 * **Environment Requirements**: Rust toolchain (`cargo`, MSVC target on Windows)
 * **Runtime Dependencies**: The shell loads backend artifacts (`app.jar` + JRE); for local debugging, place them under the `st-cute-desktop/src-tauri/resources` directory first
 
-#### 🧪 About Unit Tests
-
-The `test` module currently relies on real-world content simulations. Out of privacy considerations, and given the high frequency of changes in this part, it is not included in this repository for now.
-
 ---
 
 ## 📖 Documentation Guide

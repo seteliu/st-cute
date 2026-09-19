@@ -183,10 +183,6 @@ pnpm dev
 * **环境要求**：Rust 工具链（`cargo`，Windows 下为 MSVC target）
 * **运行依赖**：壳会加载后端产物（`app.jar` + JRE），本地调试时需先将其置于 `st-cute-desktop/src-tauri/resources` 目录
 
-#### 🧪 关于单元测试
-
-test 部分由于目前采用真实内容模拟，出于隐私考虑，且该部分内容变动频次极高，暂不随本仓库开放。
-
 ---
 
 ## 📖 详细文档导览

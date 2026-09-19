@@ -104,6 +104,18 @@
 
     <build>
         <plugins>
+            <!-- 测试期全局配置目录隔离：把 ~/.st-cute 整体切换到 ~/.st-cute-test，
+                 杜绝测试污染生产配置、数据库与附件（引擎侧无 user.home 依赖，故仅在宿主模块注入） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <st-cute.config.dir-name>.st-cute-test</st-cute.config.dir-name>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+
             <!-- Spring Boot 可执行打包仅在宿主模块进行 -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>

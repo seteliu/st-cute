@@ -33,15 +33,43 @@ public class ContractFile {
      */
     public static final String DIR_RULES = "rules";
 
+    /**
+     * 全局级配置目录默认名：位于用户主目录下（~/.st-cute）。
+     */
+    public static final String DEFAULT_GLOBAL_DIR_NAME = ".st-cute";
+
+    /**
+     * 全局级配置目录名覆盖属性键。
+     * <p>
+     * 未设置或为空时使用 {@link #DEFAULT_GLOBAL_DIR_NAME}（生产行为零变化）；
+     * 测试期由构建工具传入（如 {@code -Dst-cute.config.dir-name=.st-cute-test}），
+     * 即可把全局配置、数据库、附件与临时目录整体隔离到真实用户主目录下的独立目录，
+     * 彻底避免测试污染生产数据。本属性由本类单点解析，全工程禁止再另行拼装目录名。
+     * </p>
+     */
+    public static final String PROP_GLOBAL_DIR_NAME = "st-cute.config.dir-name";
+
     // ==========================================
     // 目录管理
     // ==========================================
 
     /**
-     * 获取全局级配置目录：~/.st-cute（用户主目录，所有项目共享）
+     * 解析全局级配置目录名：优先取系统属性 {@link #PROP_GLOBAL_DIR_NAME}，缺省回退默认名
+     */
+    public static String resolveGlobalDirName() {
+        String override = System.getProperty(PROP_GLOBAL_DIR_NAME);
+        if (override != null && !override.trim().isEmpty()) {
+            return override.trim();
+        }
+        return DEFAULT_GLOBAL_DIR_NAME;
+    }
+
+    /**
+     * 获取全局级配置目录：{用户主目录}/{全局级配置目录名}（默认 ~/.st-cute，所有项目共享）。
+     * 目录名为本类单点解析，全局级路径一律经本方法取得，禁止自行拼装
      */
     public static File getGlobalDir() {
-        return new File(System.getProperty("user.home"), ".st-cute");
+        return new File(System.getProperty("user.home"), resolveGlobalDirName());
     }
 
     /**

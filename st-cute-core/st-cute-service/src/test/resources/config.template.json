@@ -1,0 +1,47 @@
+{
+  "enabled": false,
+  "targetGroup": "",
+  "targetModel": "",
+  "providers": [
+    {
+      "group": "DeepSeek",
+      "protocol": "OPENAI",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKey": "sk-your-deepseek-api-key-here",
+      "modelName": "deepseek-chat",
+      "temperature": 0.0,
+      "contextSize": 64000,
+      "maxTokens": 4096
+    },
+    {
+      "group": "OpenAI",
+      "protocol": "OPENAI",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKey": "sk-your-openai-api-key-here",
+      "modelName": "gpt-4o-mini",
+      "temperature": 0.0,
+      "contextSize": 128000,
+      "maxTokens": 4096
+    },
+    {
+      "group": "Anthropic",
+      "protocol": "ANTHROPIC",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "apiKey": "sk-ant-your-anthropic-api-key-here",
+      "modelName": "claude-3-5-sonnet-20241022",
+      "temperature": 0.0,
+      "contextSize": 200000,
+      "maxTokens": 4096
+    }
+  ],
+  "language": "zh-CN",
+  "newlineKey": "enter",
+  "llmLog": {
+    "httpLog": false,
+    "httpLogDays": 7
+  },
+  "pathSandboxEnabled": true,
+  "minimalSkillMode": false,
+  "loadAllUserAttachments": true,
+  "maxViewHistoryLimit": 2000
+}

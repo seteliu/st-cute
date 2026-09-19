@@ -10,8 +10,9 @@ spring:
     name: st-cute-core
 
   datasource:
-    # 存储在用户主目录下的 .st-cute 文件夹内
-    url: jdbc:sqlite:${user.home}/.st-cute/st-cute.db
+    # 存储在用户主目录下的全局配置目录内（目录名默认 .st-cute，
+    # 可经系统属性 -Dst-cute.config.dir-name 覆盖，测试期指向 .st-cute-test 以隔离生产数据）
+    url: jdbc:sqlite:${user.home}/${st-cute.config.dir-name:.st-cute}/st-cute.db
     driver-class-name: org.sqlite.JDBC
     hikari:
       # 强行锁定单写连接，防止 SQLite 出现 database is locked

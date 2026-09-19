@@ -237,7 +237,29 @@ public class LlmWindowManager {
         return true;
     }
 
-    private List<Message> cropHistoryToThresholdInMemory(AgentContext context, List<Message> visibleMsgs, long initialTokens, double targetLimit) {
+    /**
+     * 在内存中把归档段消息裁剪到目标 Token 限额以内（不影响数据库的 visibleToModel 状态）。
+     * <p>
+     * 裁剪顺序语义（决定「模型还能看见什么」，一旦反了会静默丢关键上下文）：
+     * <ol>
+     *   <li><b>提前分流</b>：未超目标时原样返回，不做任何删除；</li>
+     *   <li><b>阶段 1 优先裁 TOOL</b>：TOOL 消息体量最大且价值最低，先删它们；SYSTEM 恒跳过；</li>
+     *   <li><b>阶段 2 再从头删</b>：TOOL 删完仍超限时，才从第一条非 SYSTEM 消息开始删，SYSTEM 永不删。</li>
+     * </ol>
+     * </p>
+     * <p>
+     * 可见性为 public 系本方法的顺序语义无法从外部黑盒观测（压缩链路的净效果只能证明「裁过」，
+     * 无法证明「按 TOOL 优先、SYSTEM 保底」的先后），故开放给同包测试直接断言裁剪结果。
+     * 生产调用方仍只有 {@link #manageContextWindowSync} 一处，请勿在业务链路中新开调用点。
+     * </p>
+     *
+     * @param context       会话上下文（本方法不使用其状态，保留以对齐压缩链路的调用形态）
+     * @param visibleMsgs   待裁剪的消息列表（会被就地修改）
+     * @param initialTokens 裁剪前的 Token 估算总量
+     * @param targetLimit   目标 Token 上限
+     * @return 裁剪后的消息列表（未超限时与入参同一实例）
+     */
+    public List<Message> cropHistoryToThresholdInMemory(AgentContext context, List<Message> visibleMsgs, long initialTokens, double targetLimit) {
         long currentTokens = initialTokens;
         if (currentTokens < targetLimit) {
             return visibleMsgs;

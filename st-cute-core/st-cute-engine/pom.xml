@@ -48,5 +48,13 @@
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
+
+        <!-- 测试：引擎为纯 Java 模块，测试依赖仅 JUnit 一套（版本由 Boot BOM 托管）；
+             stub 一律使用 JDK 动态代理实现，不引入 Mockito，以保持零 Spring / 零字节码增强依赖 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>
