@@ -2,7 +2,6 @@ package com.stioc.cute.hook;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.stioc.cute.conversation.ConversationService;
 import com.stioc.cute.runtime.common.HostExecutorProvider;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.hook.types.HookContext;
@@ -12,14 +11,15 @@ import com.stioc.cute.platform.common.CharsetAwareFileKit;
 import com.stioc.cute.platform.contract.ContractFile;
 import com.stioc.cute.project.ProjectService;
 import com.stioc.cute.runtime.loop.RuntimeContext;
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -198,7 +198,19 @@ public class HookService {
 
             Process process = pb.start();
 
-            // 5. 60s 强超时控制
+            // 5. 先并发消费 stdout/stderr 再等待退出（redirectErrorStream 已合并两流，单流即全量输出）：
+            // 若 waitFor 之后才读流，脚本输出超过管道缓冲（Windows 约 4-8KB）时会阻塞在 write 上永不退出，
+            // 造成"明明能跑完却被判 60s 超时强杀"的伪超时（经典管道死锁反例）
+            StringBuilder outputCapture = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    outputCapture.append(line).append("\n");
+                }
+            }
+
+            // 6. 60s 强超时控制（流已消费完毕，waitFor 不会被管道缓冲卡住）
             boolean completed = process.waitFor(60, TimeUnit.SECONDS);
             if (!completed) {
                 process.destroyForcibly();
@@ -207,10 +219,7 @@ public class HookService {
 
             int exitCode = process.exitValue();
             if (exitCode != 0) {
-                String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-                if (!StringUtils.hasText(stderr)) {
-                    stderr = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-                }
+                String stderr = outputCapture.toString().trim();
                 throw new Exception("退出码: " + exitCode + ", 详情: " + stderr);
             }
 

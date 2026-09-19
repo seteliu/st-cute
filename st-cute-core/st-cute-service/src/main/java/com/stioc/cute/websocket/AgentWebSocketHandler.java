@@ -64,10 +64,11 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 .build();
 
         String jsonString = JSON.toJSONString(pongEvent);
-        synchronized (session) {
-            if (session.isOpen()) {
-                session.sendMessage(new TextMessage(jsonString));
-            }
+        // 心跳 PONG 统一经发送装饰器发出：与事件推送共享同一连接的发送缓冲队列，
+        // 避免 PONG 与事件消息并发直写同一物理连接造成 WS 协议帧交错
+        WebSocketSession decorator = WebSocketSessionManager.wrapSession(session);
+        if (decorator.isOpen()) {
+            decorator.sendMessage(new TextMessage(jsonString));
         }
         log.debug("已回复心跳 PONG");
     }

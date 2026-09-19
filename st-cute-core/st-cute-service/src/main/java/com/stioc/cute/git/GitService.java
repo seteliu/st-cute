@@ -2,14 +2,19 @@ package com.stioc.cute.git;
 
 import com.stioc.cute.git.types.FileDiffVo;
 import com.stioc.cute.git.types.GitBranchVo;
-import com.stioc.cute.git.types.*;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.io.*;
-import java.nio.file.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -58,7 +63,7 @@ public class GitService {
             return gitIndicator;
         }
         // .git 为文件，可能是 worktree 或者 submodule，格式为 "gitdir: /absolute/path"
-        try (BufferedReader reader = new BufferedReader(new FileReader(gitIndicator))) {
+        try (BufferedReader reader = Files.newBufferedReader(gitIndicator.toPath(), StandardCharsets.UTF_8)) {
             String line = reader.readLine();
             if (line != null && line.startsWith("gitdir:")) {
                 String rawPath = line.substring(7).trim();
@@ -86,7 +91,7 @@ public class GitService {
             return "";
         }
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(headFile))) {
+        try (BufferedReader reader = Files.newBufferedReader(headFile.toPath(), StandardCharsets.UTF_8)) {
             String line = reader.readLine();
             if (line == null) {
                 return "";
@@ -116,7 +121,7 @@ public class GitService {
             return "";
         }
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(headFile))) {
+        try (BufferedReader reader = Files.newBufferedReader(headFile.toPath(), StandardCharsets.UTF_8)) {
             String line = reader.readLine();
             if (line != null) {
                 line = line.trim();
@@ -145,7 +150,7 @@ public class GitService {
         // 1. 优先在当前 Worktree 专属 git 目录下查松散 ref
         File looseFile = new File(gitDir, refPath);
         if (looseFile.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(looseFile))) {
+            try (BufferedReader reader = Files.newBufferedReader(looseFile.toPath(), StandardCharsets.UTF_8)) {
                 String line = reader.readLine();
                 if (line != null) {
                     line = line.trim();
@@ -165,7 +170,7 @@ public class GitService {
         if (!commonGitDir.equals(gitDir)) {
             File commonLooseFile = new File(commonGitDir, refPath);
             if (commonLooseFile.exists()) {
-                try (BufferedReader reader = new BufferedReader(new FileReader(commonLooseFile))) {
+                try (BufferedReader reader = Files.newBufferedReader(commonLooseFile.toPath(), StandardCharsets.UTF_8)) {
                     String line = reader.readLine();
                     if (line != null) {
                         line = line.trim();
@@ -182,7 +187,7 @@ public class GitService {
         // 3. 扫描主仓 commondir 目录下的 packed-refs
         File packedFile = new File(commonGitDir, "packed-refs");
         if (packedFile.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(packedFile))) {
+            try (BufferedReader reader = Files.newBufferedReader(packedFile.toPath(), StandardCharsets.UTF_8)) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
@@ -230,7 +235,7 @@ public class GitService {
     private File getCommonGitDir(File gitDir) {
         File commondirFile = new File(gitDir, "commondir");
         if (commondirFile.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(commondirFile))) {
+            try (BufferedReader reader = Files.newBufferedReader(commondirFile.toPath(), StandardCharsets.UTF_8)) {
                 String line = reader.readLine();
                 if (line != null) {
                     String rawPath = line.trim();
@@ -251,6 +256,18 @@ public class GitService {
      * 获取指定分支相对于基础 Commit 节点的完整物理差异
      */
     public List<FileDiffVo> getBranchDiff(String projectBasePath, String branchName, String baseCommit) throws Exception {
+        // 入口参数安全校验：branchName/baseCommit 直接作为 git 子命令参数使用，
+        // 以 "-" 开头的值（如 --output=xxx）会被 git 误解析为选项，构成任意路径写等注入面；
+        // SHA 形态的 baseCommit 放行，其余一律复用 ref 名校验
+        if (!StringUtils.hasText(branchName) || !isValidRefName(branchName)) {
+            log.warn("拒绝查询非法分支名: {}", branchName);
+            return Collections.emptyList();
+        }
+        if (StringUtils.hasText(baseCommit) && !isValidRefName(baseCommit)) {
+            log.warn("拒绝查询非法 baseCommit: {}", baseCommit);
+            return Collections.emptyList();
+        }
+
         File repoRoot = null;
         if (StringUtils.hasText(projectBasePath)) {
             repoRoot = findRepoRoot(new File(projectBasePath).getAbsoluteFile());
@@ -467,8 +484,10 @@ public class GitService {
         Process process = pb.start();
 
         // 必须在 waitFor 之前（或同时）读取并消费输入流，避免缓冲区满导致子进程挂起
+        // Git for Windows 输出恒为 UTF-8（中文区默认 GBK 解码会产生乱码进分支名/文件名），显式指定解码字符集
         StringBuilder output = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 output.append(line).append("\n");
@@ -481,7 +500,7 @@ public class GitService {
             throw new TimeoutException("执行系统命令超时: " + String.join(" ", cmd));
         }
         if (process.exitValue() != 0) {
-            throw new IOException("系统命令返回非 0 退出码: " + process.exitValue() + "\n错误详情:\n" + output.toString());
+            throw new IOException("系统命令返回非 0 退出码: " + process.exitValue() + "\n错误详情:\n" + output);
         }
         return output.toString();
     }
