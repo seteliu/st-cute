@@ -21,7 +21,7 @@
         <div v-if="appStore.showMessageAvatar" class="avatar">{{ avatarLabel }}</div>
         <div class="msg-content-wrapper">
           <div 
-            v-if="message.content || hasThought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || ((message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !hasThought)" 
+            v-if="message.content || hasThought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || showEmptyDots || ((message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !hasThought)" 
             class="msg-content"
           >
             <!-- 附件区域展示 -->
@@ -69,9 +69,11 @@
               :class="{ 'is-running': isStreamingRunning && !!message.content }"
               v-html="formattedContent"
             ></div>
-            <!-- 思考中指示 (大模型正在运行/加载且尚未有输出正文内容时，显示三个小点跳动动效) -->
+            <!-- 思考中指示 (末条助手消息处于非完结态且尚无正文产出时，显示三个小点跳动动效)。
+                 条件由父级 MessageListFlow 判定后经 showEmptyDots 下发，此处不再依赖所属会话 running：
+                 移动端重连时 loopRunning 可能尚未同步回来，若仍要求 running，末条空助手会退化成一片空白 -->
             <div
-              v-if="message.role !== 'compressed' && isStreamingRunning && !message.content"
+              v-if="message.role !== 'compressed' && showEmptyDots"
               class="thinking-animation"
             >
               <thinking-dots />
@@ -216,11 +218,19 @@ const props = defineProps<{
    */
   showTailDots?: boolean
   /**
+   * 本消息是否为「末条助手消息且正文为空、状态非完结」，命中时在其正文区渲染思考中三点指示。
+   * 判定由父级 MessageListFlow 统一负责，本组件仅负责渲染。
+   *
+   * 刻意不叠加所属会话 running 守卫：移动端断线重连时 loopRunning 往往尚未同步回来，
+   * 若仍要求 running，末条空助手会退化成一片空白，用户看不到任何推进迹象。
+   */
+  showEmptyDots?: boolean
+  /**
    * 所属会话是否处于运行中。必传——由各调用点按自身语义显式表态（主会话传全局 loopRunning，
    * 子会话抽屉传子代理运行态，折叠详情传 false），刻意不提供内部回退。
    *
-   * 该属性作为本消息全部「活跃态视觉」的统一守卫（正文末尾打字光标、思考中三点、边框脉冲）：
-   * 会话已停时，任何未达终态的消息都是残留态，不应再呈现推进中的动效。
+   * 该属性作为正文末尾打字光标与边框脉冲的守卫：会话已停时，任何未达终态的消息都是残留态，
+   * 不应再呈现推进中的动效。
    */
   running: boolean
 }>()

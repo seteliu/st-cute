@@ -15,6 +15,7 @@
         :is-sub-agent="isSubAgent"
         :cid="cid"
         :show-tail-dots="index === lastPendingBatchIndex"
+        :show-empty-dots="index === lastEmptyAssistantIndex"
         :running="running"
       />
       <div
@@ -121,6 +122,37 @@ const lastPendingBatchIndex = computed(() => {
     tool => (tool.status || '').toUpperCase() === 'SUCCESS'
   )
   return allToolsSucceeded ? lastIndex : -1
+})
+
+/**
+ * 末条空助手消息所在渲染条目下标：命中时返回其下标（供 MessageItem 渲染思考中三点），否则返回 -1。
+ *
+ * 判定条件（三者同时成立）：
+ * 1. 渲染序列末项是一条「消息」条目（而非折叠卡片、孤儿工具组等）；
+ * 2. 该消息为助手类角色（ASSISTANT/BRANCH，排除 USER/SYSTEM；COMPRESSED 压缩占位消息有专属文案，不显示三点）；
+ * 3. 其状态非完结（完结态 = SUCCESS/FAILED/CANCELED；空状态视为非完结），且正文与思考均为空。
+ *
+ * 语义：整个回合正在推进、模型还没吐出任何正文的「空白等待期」，用三点指示兜住空窗。
+ * 刻意不叠加 running 守卫：移动端断线重连时 loopRunning 常常尚未同步回来（甚至信息加载失败始终为 false），
+ * 若仍要求 running，末条空助手会退化成一片空白、用户完全看不到推进迹象；一旦正文到达或状态转终态即自然消失。
+ */
+const lastEmptyAssistantIndex = computed(() => {
+  const items = props.messages
+  if (!items || items.length === 0) return -1
+
+  const lastIndex = items.length - 1
+  const lastItem = items[lastIndex]
+  if (lastItem.type !== 'message') return -1
+
+  const msg = lastItem.data
+  if (msg.role !== 'assistant' && msg.role !== 'branch') return -1
+  // 状态归一为大小写不敏感：仅三种完结态不显示三点，其余（含空状态）一律视为推进中
+  const status = (msg.status || '').toUpperCase()
+  if (status === 'SUCCESS' || status === 'FAILED' || status === 'CANCELED') return -1
+  // 正文或思考任一已产出即让位于真实内容（思考内容由 MessageItem 另行渲染）
+  if (msg.content || msg.thought) return -1
+
+  return lastIndex
 })
 
 const scrollToBottom = (smooth = true) => {
