@@ -1,6 +1,6 @@
 package com.stioc.cute.engine.llm;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.llm.types.CuteChatResponse;
@@ -125,7 +125,7 @@ class LlmProtocolContractTest {
 
             clientFor(server, protocol).call(prompt("请求体检查"));
 
-            JSONObject body = JSON.parseObject(server.lastRequestBody());
+            JSONObject body = JsonKit.parseObject(server.lastRequestBody());
             assertEquals("fake-model", body.getString("model"), protocol + " 应携带模型名");
             assertTrue(!body.getBooleanValue("stream"), protocol + " 非流式调用 stream 应为 false");
             switch (protocol) {
@@ -189,7 +189,7 @@ class LlmProtocolContractTest {
 
             consumeStream(clientFor(server, protocol), "stream 标记检查");
 
-            JSONObject body = JSON.parseObject(server.lastRequestBody());
+            JSONObject body = JsonKit.parseObject(server.lastRequestBody());
             assertTrue(body.getBooleanValue("stream"), protocol + " 流式请求 stream 必须为 true");
         }
     }
@@ -310,7 +310,7 @@ class LlmProtocolContractTest {
 
                 clientFor(server, protocol).call(prompt);
 
-                JSONObject body = JSON.parseObject(server.lastRequestBody());
+                JSONObject body = JsonKit.parseObject(server.lastRequestBody());
                 JSONArray toolArr = body.getJSONArray("tools");
                 assertNotNull(toolArr, protocol + " 请求体应携带 tools 定义");
                 assertEquals(1, toolArr.size(), protocol + " 应下发 1 个工具定义");

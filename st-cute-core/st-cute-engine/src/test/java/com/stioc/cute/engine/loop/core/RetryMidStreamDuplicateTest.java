@@ -1,6 +1,6 @@
 package com.stioc.cute.engine.loop.core;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.event.AgentEventListener;
 import com.stioc.cute.engine.event.types.AgentEvent;
@@ -263,13 +263,13 @@ class RetryMidStreamDuplicateTest {
             Message tool = EngineTestHarness.toolMessage(fixture.engine(), fixture.cid(), "call_retry");
             assertNotNull(tool, "工具消息必须存在");
 
-            JSONObject desc = JSON.parseObject(tool.getToolCalls());
+            JSONObject desc = JsonKit.parseObject(tool.getToolCalls());
             String actualArgs = desc.getString("arguments");
             assertEquals(argumentsJson, actualArgs,
                     "工具入参应恰好一份且完整，实际: " + actualArgs);
 
             // 强校验：入参必须是合法 JSON（重复拼接会破坏结构）
-            JSONObject parsed = JSON.parseObject(actualArgs);
+            JSONObject parsed = JsonKit.parseObject(actualArgs);
             assertEquals("echo hello", parsed.getString("command"), "入参 JSON 应可正常解析且内容正确");
         }
     }

@@ -1,5 +1,6 @@
 package com.stioc.cute.engine.testkit;
 
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.llm.types.CuteToolCall;
@@ -775,7 +776,7 @@ public class FakeLlmServer implements AutoCloseable {
             toolUse.put("type", "tool_use");
             toolUse.put("id", call.getId());
             toolUse.put("name", call.getName());
-            toolUse.put("input", JSONObject.parse(call.getArguments() != null ? call.getArguments() : "{}"));
+            toolUse.put("input", JsonKit.parseObject(call.getArguments() != null ? call.getArguments() : "{}"));
             contentArr.add(toolUse);
         }
         JSONObject root = new JSONObject();

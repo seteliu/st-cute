@@ -1,6 +1,6 @@
 package com.stioc.cute.engine.loop.core;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.store.types.Conversation;
@@ -89,7 +89,7 @@ class ReActLoopTest {
 
             String body = fixture.llm().lastRequestBody();
             assertNotNull(body, "假服务端应收到请求体");
-            JSONObject json = JSON.parseObject(body);
+            JSONObject json = JsonKit.parseObject(body);
             assertEquals("fake-model", json.getString("model"));
             assertTrue(json.getBooleanValue("stream"), "ReAct 循环走流式调用，stream 必须为 true");
             assertTrue(json.containsKey("messages"), "请求体必须携带 messages");

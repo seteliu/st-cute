@@ -1,18 +1,13 @@
 package com.stioc.cute.engine.loop.message;
 
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.stioc.cute.engine.common.JsonKit;
 import com.stioc.cute.engine.event.AgentEventFactory;
 import com.stioc.cute.engine.llm.types.CuteChatResponse;
 import com.stioc.cute.engine.llm.types.CuteToolCall;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.store.MessageStore;
-import com.stioc.cute.engine.store.types.Message;
-import com.stioc.cute.engine.store.types.MessagePatch;
-import com.stioc.cute.engine.store.types.MessageQuery;
-import com.stioc.cute.engine.store.types.MessageRole;
-import com.stioc.cute.engine.store.types.MessageStatus;
-import com.stioc.cute.engine.store.types.SortDirection;
+import com.stioc.cute.engine.store.types.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -409,7 +404,7 @@ public class MessageDataReporter {
             update.content(response.getContent())
                     .reasoningContent(response.getReasoningContent());
             if (response.getToolCalls() != null && !response.getToolCalls().isEmpty()) {
-                update.toolCalls(JSON.toJSONString(response.getToolCalls()));
+                update.toolCalls(JsonKit.toJson(response.getToolCalls()));
             }
             if (response.getUsage() != null) {
                 update.inputTokens(response.getUsage().getInputTokens())

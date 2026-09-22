@@ -1,8 +1,8 @@
 package com.stioc.cute.mcp;
 
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONArray;
+import com.stioc.cute.engine.common.JsonKit;
 import com.stioc.cute.mcp.types.McpServerConfig;
 import com.stioc.cute.tool.contexttool.McpCuteTool;
 import com.stioc.cute.engine.tool.CuteTool;
@@ -392,7 +392,7 @@ public class McpClientInstance {
      */
     private void processIncomingJson(String line) {
         try {
-            JSONObject obj = JSON.parseObject(line);
+            JSONObject obj = JsonKit.parseObject(line);
             if (obj == null) {
                 return;
             }

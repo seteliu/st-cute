@@ -1,6 +1,6 @@
 package com.stioc.cute.runtime.loop;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.llm.types.CuteAttachment;
@@ -42,7 +42,7 @@ public class AttachmentContentLoader {
         String baseDir = getProjectBasePath(context);
 
         try {
-            JSONArray arr = JSON.parseArray(rawAttachments.trim());
+            JSONArray arr = JsonKit.parseArray(rawAttachments.trim());
             if (arr == null || arr.isEmpty()) {
                 return list;
             }
@@ -96,7 +96,7 @@ public class AttachmentContentLoader {
             return null;
         }
         try {
-            JSONArray arr = JSON.parseArray(rawAttachments.trim());
+            JSONArray arr = JsonKit.parseArray(rawAttachments.trim());
             if (arr == null || arr.isEmpty()) {
                 return null;
             }

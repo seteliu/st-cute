@@ -1,40 +1,18 @@
 package com.stioc.cute.engine.llm;
 
-import com.stioc.cute.engine.llm.types.CuteAttachment;
-import com.stioc.cute.engine.llm.types.CuteChatResponse;
-import com.stioc.cute.engine.llm.types.CuteMessage;
-import com.stioc.cute.engine.llm.types.CuteMessageRole;
-import com.stioc.cute.engine.llm.types.CutePrompt;
-import com.stioc.cute.engine.llm.types.CuteToolCall;
-import com.stioc.cute.engine.llm.types.CuteToolDefinition;
-import com.stioc.cute.engine.llm.types.CuteUsage;
-import com.stioc.cute.engine.llm.types.ProviderProtocol;
-
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.alibaba.fastjson2.JSONWriter;
+import com.stioc.cute.engine.common.JsonKit;
+import com.stioc.cute.engine.llm.types.*;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 基于原生 OkHttp 实现的 Anthropic Claude 协议大模型客户端。
@@ -176,7 +154,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                         }
 
                         try {
-                            CuteChatResponse chunk = processEvent(eventType, JSON.parseObject(data));
+                            CuteChatResponse chunk = processEvent(eventType, JsonKit.parseObject(data));
                             if (chunk != null) {
                                 nextItem = chunk;
                                 return;
@@ -185,7 +163,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                             // SSE 错误帧（上游 API 报错）不允许跳过，必须立即中断流并向上传播以激活透明重试
                             throw e;
                         } catch (Exception e) {
-                            log.error("解析 Anthropic SSE 帧失败，跳过: event={}, data={}, error={}", 
+                            log.error("解析 Anthropic SSE 帧失败，跳过: event={}, data={}, error={}",
                                     eventType, data, e.getMessage(), e);
                         }
                     }
@@ -384,13 +362,13 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                 if (schema == null || schema.isBlank() || "{}".equals(schema.trim())) {
                     schema = "{\"type\":\"object\",\"properties\":{}}";
                 }
-                toolObj.put("input_schema", JSON.parseObject(schema));
+                toolObj.put("input_schema", JsonKit.parseObject(schema));
                 tools.add(toolObj);
             }
             body.put("tools", tools);
         }
 
-        return JSON.toJSONString(body, JSONWriter.Feature.WriteNulls);
+        return JsonKit.toJsonWithNulls(body);
     }
 
     /**
@@ -470,7 +448,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                 userMsg.put("role", "user");
                 userMsg.put("content", contentArr);
                 result.add(userMsg);
-            } 
+            }
             else if (msg.getRole() == CuteMessageRole.USER) {
                 // 合并连续的 USER 消息，并支持多模态附件内容块
                 JSONArray userContentArr = new JSONArray();
@@ -517,13 +495,13 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                 userMsgObj.put("role", "user");
                 userMsgObj.put("content", userContentArr);
                 result.add(userMsgObj);
-            } 
+            }
             else if (msg.getRole() == CuteMessageRole.ASSISTANT) {
                 // 合并连续的 ASSISTANT 消息（防范意外产生的连续 Assistant）
                 // 我们直接将它们的内容拼接，并将它们的 tool_calls 聚合
                 List<CuteToolCall> aggregatedToolCalls = new ArrayList<>();
                 StringBuilder assistantContentSb = new StringBuilder();
-                
+
                 while (i < filtered.size() && filtered.get(i).getRole() == CuteMessageRole.ASSISTANT) {
                     CuteMessage assistantMsg = filtered.get(i);
                     if (assistantMsg.getContent() != null && !assistantMsg.getContent().isEmpty()) {
@@ -549,7 +527,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                 if (converted != null) {
                     result.add(converted);
                 }
-            } 
+            }
             else {
                 // 未知角色直接跳过
                 i++;
@@ -562,7 +540,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
         while (j < result.size()) {
             JSONObject currentMsg = result.getJSONObject(j);
             String role = currentMsg.getString("role");
-            
+
             if ("user".equals(role)) {
                 JSONArray mergedContent = new JSONArray();
                 while (j < result.size() && "user".equals(result.getJSONObject(j).getString("role"))) {
@@ -581,7 +559,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                     }
                     j++;
                 }
-                
+
                 JSONObject finalUserMsg = new JSONObject();
                 finalUserMsg.put("role", "user");
                 if (mergedContent.isEmpty()) {
@@ -684,7 +662,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
                 toolUse.put("name", tc.getName());
                 Object input;
                 try {
-                    input = JSON.parseObject(tc.getArguments() != null ? tc.getArguments() : "{}");
+                    input = JsonKit.parseObject(tc.getArguments() != null ? tc.getArguments() : "{}");
                 } catch (Exception e) {
                     input = new JSONObject();
                 }
@@ -724,7 +702,7 @@ public class CuteChatForAnthropic extends AbstractCuteChat {
 
     @Override
     protected CuteChatResponse parseNonStreamResponse(String responseBody) {
-        JSONObject json = JSON.parseObject(responseBody);
+        JSONObject json = JsonKit.parseObject(responseBody);
 
         // 检查响应中的 error 字段（部分场景下 HTTP 200 但返回错误信息）
         JSONObject errorObj = json.getJSONObject("error");

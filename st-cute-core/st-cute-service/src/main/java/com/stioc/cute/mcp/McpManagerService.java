@@ -1,6 +1,6 @@
 package com.stioc.cute.mcp;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.stioc.cute.engine.AgentEngine;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.tool.CuteTool;
@@ -299,7 +299,7 @@ public class McpManagerService {
         if (globalMcpFile != null && globalMcpFile.exists()) {
             try {
                 String jsonStr = CharsetAwareFileKit.readString(globalMcpFile.toPath());
-                McpConfigWrapper wrapper = JSON.parseObject(jsonStr, McpConfigWrapper.class);
+                McpConfigWrapper wrapper = JsonKit.parseObject(jsonStr, McpConfigWrapper.class);
                 if (wrapper != null && wrapper.getMcpServers() != null) {
                     merged.putAll(wrapper.getMcpServers());
                 }
@@ -313,7 +313,7 @@ public class McpManagerService {
             ContractFile.forEachProjectFile(projectBasePath, ContractFile.FILE_MCP_SERVERS, projectMcpFile -> {
                 try {
                     String jsonStr = CharsetAwareFileKit.readString(projectMcpFile.toPath());
-                    McpConfigWrapper wrapper = JSON.parseObject(jsonStr, McpConfigWrapper.class);
+                    McpConfigWrapper wrapper = JsonKit.parseObject(jsonStr, McpConfigWrapper.class);
                     if (wrapper != null && wrapper.getMcpServers() != null) {
                         merged.putAll(wrapper.getMcpServers());
                     }

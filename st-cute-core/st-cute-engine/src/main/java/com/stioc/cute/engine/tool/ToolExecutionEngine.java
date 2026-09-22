@@ -1,9 +1,11 @@
 package com.stioc.cute.engine.tool;
 
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.stioc.cute.engine.assembly.EngineInfra;
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.common.EngineExecutor;
 import com.stioc.cute.engine.common.EngineLock;
+import com.stioc.cute.engine.common.JsonKit;
 import com.stioc.cute.engine.event.AgentEventFactory;
 import com.stioc.cute.engine.hook.HookPayload;
 import com.stioc.cute.engine.hook.HookType;
@@ -18,21 +20,11 @@ import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessagePatch;
 import com.stioc.cute.engine.store.types.MessageQuery;
 import com.stioc.cute.engine.store.types.MessageStatus;
-import com.stioc.cute.engine.tool.types.ToolApprovalRequest;
-import com.stioc.cute.engine.tool.types.ToolAccessLevel;
-import com.stioc.cute.engine.tool.types.ToolExecutionContext;
-import com.stioc.cute.engine.tool.types.ToolResult;
-import com.stioc.cute.engine.tool.types.ToolPermissionDecision;
-import com.stioc.cute.engine.tool.types.ToolPermissionVerdict;
-import lombok.RequiredArgsConstructor;
+import com.stioc.cute.engine.tool.types.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.Lock;
 import java.util.stream.Collectors;
@@ -42,19 +34,39 @@ import java.util.stream.Collectors;
  * 支持只读并发分批、副作用串行、人在回路授权挂起、技能沙箱白名单门禁、生命周期 Hook 触发以及写工具并发排他锁
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ToolExecutionEngine {
 
     private final ToolRegistry toolRegistry;
     private final ToolGuard toolGuard;
     private final MessageDataReporter messageDataReporter;
     private final AgentContextManager agentContextManager;
-    private final MessageStore messageStore;
     private final Optional<ApprovalRuleWriter> approvalRuleWriter;
+
+    private final MessageStore messageStore;
     private final EngineLock lockProvider;
     private final EngineExecutor executorProvider;
 
     private AgentLoopCoordinator agentLoopCoordinator;
+
+    /**
+     * 收存储对与技术设施聚合，构造器内解包为实际使用字段
+     */
+    public ToolExecutionEngine(ToolRegistry toolRegistry,
+                               ToolGuard toolGuard,
+                               MessageDataReporter messageDataReporter,
+                               AgentContextManager agentContextManager,
+                               EngineStores stores,
+                               Optional<ApprovalRuleWriter> approvalRuleWriter,
+                               EngineInfra infra) {
+        this.toolRegistry = toolRegistry;
+        this.toolGuard = toolGuard;
+        this.messageDataReporter = messageDataReporter;
+        this.agentContextManager = agentContextManager;
+        this.approvalRuleWriter = approvalRuleWriter;
+        this.messageStore = stores.getMessages();
+        this.lockProvider = infra.getLocks();
+        this.executorProvider = infra.getExecutor();
+    }
 
     public void bindAgentLoopCoordinator(AgentLoopCoordinator coordinator) {
         this.agentLoopCoordinator = coordinator;
@@ -72,11 +84,11 @@ public class ToolExecutionEngine {
 
         // 批执行不再返回 ToolResponse；工具状态、DB 落库和下一轮 Loop 推进都由事件回调驱动。
         for (ToolExecutionBatch batch : planExecutionBatches(calls, context)) {
-            ensureNotCanceled(context, batch.calls());
-            if (batch.readOnly()) {
-                executeReadOnlyBatch(batch.calls(), context);
+            ensureNotCanceled(context, batch.getCalls());
+            if (batch.isReadOnly()) {
+                executeReadOnlyBatch(batch.getCalls(), context);
             } else {
-                executeSerialBatch(batch.calls(), context);
+                executeSerialBatch(batch.getCalls(), context);
             }
         }
     }
@@ -188,18 +200,18 @@ public class ToolExecutionEngine {
      * 审核工具执行决策并分流执行/拒绝流向（人在回路决策闭环）
      */
     public boolean approveTool(ToolApprovalRequest request) {
-        if (request == null || request.cid() == null || request.toolCallId() == null) {
+        if (request == null || request.getCid() == null || request.getToolCallId() == null) {
             log.warn("审批请求无效或缺少必要标识: {}", request);
             return false;
         }
 
-        Long cid = request.cid();
-        String toolCallId = request.toolCallId();
-        String decision = request.decision();
-        boolean alwaysAllow = request.alwaysAllow();
-        String toolName = request.toolName();
-        String contentPattern = request.contentPattern();
-        String customArgOverride = request.customArgOverride();
+        Long cid = request.getCid();
+        String toolCallId = request.getToolCallId();
+        String decision = request.getDecision();
+        boolean alwaysAllow = request.isAlwaysAllow();
+        String toolName = request.getToolName();
+        String contentPattern = request.getContentPattern();
+        String customArgOverride = request.getCustomArgOverride();
 
         AgentContext context = agentContextManager.getOrCreateContext(cid);
         String workspaceId = context != null ? context.getWorkspaceId() : null;
@@ -247,7 +259,7 @@ public class ToolExecutionEngine {
         if (StringUtils.isNotBlank(customArgOverride)) {
             String trimmedOverride = customArgOverride.trim();
             try {
-                JSON.parse(trimmedOverride);
+                JsonKit.parse(trimmedOverride);
                 finalArgs = trimmedOverride;
                 // 参数重写走统一编解码器：单对象读写契约与解析侧同源
                 CuteToolCall original = ToolCallCodec.parseSingle(toolMsg.getToolCalls());
@@ -317,7 +329,7 @@ public class ToolExecutionEngine {
             return false;
         }
         try {
-            JSONObject obj = JSON.parseObject(trimmed);
+            JSONObject obj = JsonKit.parseObject(trimmed);
             return obj != null && obj.containsKey(ToolResult.ERROR_KEY);
         } catch (Exception e) {
             // 非 JSON 文本按正常内容处理（工具允许返回纯文本结果）
@@ -342,7 +354,7 @@ public class ToolExecutionEngine {
         // 1. 解析参数
         Map<String, Object> args = new HashMap<>();
         try {
-            args = JSON.parseObject(argumentsJson, Map.class);
+            args = JsonKit.parseObject(argumentsJson, Map.class);
         } catch (Exception e) {
             log.warn("解析工具参数 JSON 失败: {}", argumentsJson);
         }
@@ -413,7 +425,7 @@ public class ToolExecutionEngine {
 
         // 5. 若权限受限被拦截
         if (verdict.isDeny()) {
-            String denyReason = StringUtils.isNotBlank(verdict.reason()) ? verdict.reason() : "权限受限，被拦截";
+            String denyReason = StringUtils.isNotBlank(verdict.getReason()) ? verdict.getReason() : "权限受限，被拦截";
             String result = ToolResult.error(denyReason);
             log.warn("工具 {} 被拦截拒绝，原因: {}", name, denyReason);
 
@@ -518,8 +530,8 @@ public class ToolExecutionEngine {
         }
     }
 
-    private record ToolExecutionBatch(
-            List<CuteToolCall> calls,
-            boolean readOnly
-    ) {}
+    /**
+     * 单轮工具调用批执行分组（{@link ToolExecutionBatch}），
+     * 类型见 tool/types 包：按只读/写副作用切分为并发批与串行批
+     */
 }

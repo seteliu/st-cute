@@ -1,6 +1,6 @@
 package com.stioc.cute.tool.websearchtool;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.loop.core.AgentContext;
@@ -150,7 +150,7 @@ public class SearxngSearchTool implements CuteTool {
 
             SearxngSearchResponse resp;
             try {
-                resp = JSON.parseObject(bodyText, SearxngSearchResponse.class);
+                resp = JsonKit.parseObject(bodyText, SearxngSearchResponse.class);
             } catch (Exception e) {
                 log.warn("SearxngSearchTool 响应解析失败: query={}", query, e);
                 return ToolResult.error("搜索服务返回内容无法解析，请稍后重试");

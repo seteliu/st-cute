@@ -1,6 +1,6 @@
 package com.stioc.cute.runtime.llm;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.stioc.cute.engine.llm.LlmHttpLogger;
 import com.stioc.cute.platform.contract.ContractFile;
 import com.stioc.cute.platform.contract.ContractProperty;
@@ -69,7 +69,7 @@ public class LlmLoggerService implements LlmHttpLogger {
                     uuid,
                     url,
                     method,
-                    JSON.toJSONString(headers),
+                    JsonKit.toJson(headers),
                     maskSensitives(body));
 
             writeToTodayLogFile(logLine);
@@ -90,7 +90,7 @@ public class LlmLoggerService implements LlmHttpLogger {
                     url,
                     code,
                     isStream,
-                    JSON.toJSONString(headers),
+                    JsonKit.toJson(headers),
                     body);
 
             writeToTodayLogFile(logLine);
@@ -114,7 +114,7 @@ public class LlmLoggerService implements LlmHttpLogger {
                     uuid,
                     url,
                     code,
-                    JSON.toJSONString(headers),
+                    JsonKit.toJson(headers),
                     completeStream);
 
             writeToTodayLogFile(logLine);

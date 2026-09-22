@@ -1,6 +1,6 @@
 package com.stioc.cute.provider;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.llm.CuteChat;
@@ -58,7 +58,7 @@ class RealProviderIntegrationTest {
 
         try {
             String content = CharsetAwareFileKit.readString(configFile.toPath());
-            JSONObject root = JSON.parseObject(content);
+            JSONObject root = JsonKit.parseObject(content);
             if (root == null) {
                 Assumptions.assumeTrue(false, "配置文件内容为空，跳过 L4 联网测试");
                 return;
@@ -228,7 +228,7 @@ class RealProviderIntegrationTest {
                 assertTrue(call.getName().contains("get_current_time"),
                         "工具调用名称应匹配 get_current_time，实际: " + call.getName());
                 if (StringUtils.isNotBlank(call.getArguments())) {
-                    JSONObject args = JSON.parseObject(call.getArguments());
+                    JSONObject args = JsonKit.parseObject(call.getArguments());
                     assertNotNull(args, "工具参数必须为合法 JSON 字符串");
                 }
             } else {

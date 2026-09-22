@@ -1,6 +1,6 @@
 package com.stioc.cute.websocket;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -67,7 +67,7 @@ public class WebSocketBroadcast {
                     .payload(payload)
                     .build();
 
-            String jsonString = JSON.toJSONString(wsEvent);
+            String jsonString = JsonKit.toJson(wsEvent);
             WebSocketSessionManager.broadcast(jsonString);
             log.debug("已发送全局广播事件: type={}, cid={}", type.getValue(), cid);
         } catch (Exception e) {

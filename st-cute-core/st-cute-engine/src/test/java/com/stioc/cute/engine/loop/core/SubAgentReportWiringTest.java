@@ -1,6 +1,6 @@
 package com.stioc.cute.engine.loop.core;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.store.types.Conversation;
@@ -88,7 +88,7 @@ class SubAgentReportWiringTest {
             // 5. 核心不变量：父会话被唤醒后的那一次请求体里，必须真的带上了子智能体汇报
             //    （以 USER 角色 + 来源前缀进入历史，否则模型看不到子结论）
             String wakeUpBody = fixture.llm().requestBodies().get(2);
-            JSONObject body = JSON.parseObject(wakeUpBody);
+            JSONObject body = JsonKit.parseObject(wakeUpBody);
             JSONArray messages = body.getJSONArray("messages");
             String mergedRoleContent = messages.stream()
                     .map(m -> ((JSONObject) m).getString("role") + "|" + ((JSONObject) m).getString("content"))

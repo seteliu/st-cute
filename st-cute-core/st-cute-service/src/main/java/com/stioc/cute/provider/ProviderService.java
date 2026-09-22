@@ -9,9 +9,8 @@ import com.stioc.cute.engine.llm.types.Provider;
 import com.stioc.cute.websocket.WebSocketBroadcast;
 import com.stioc.cute.platform.util.ConfigMergeUtils;
 import com.stioc.cute.engine.loop.core.AgentContext;
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONObject;
-import com.alibaba.fastjson2.JSONWriter;
 import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 
@@ -174,7 +173,7 @@ public class ProviderService implements ProviderResolver {
                 configObj = new JSONObject();
             }
 
-            String json = JSON.toJSONString(configObj, JSONWriter.Feature.PrettyFormat);
+            String json = JsonKit.toPrettyJson(configObj);
             Files.writeString(file.toPath(), json, StandardCharsets.UTF_8);
             log.info("已成功将最新的配置写回全局配置文件: {}", file.getAbsolutePath());
         } catch (Exception e) {

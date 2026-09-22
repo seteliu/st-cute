@@ -1,6 +1,6 @@
 package com.stioc.cute.hook;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.runtime.common.HostExecutorProvider;
 import com.stioc.cute.engine.loop.core.AgentContext;
@@ -155,8 +155,8 @@ public class HookService {
         Path tempJsonFile = null;
         try {
             // 2. 将运行时上下文写成临时 JSON，并通过环境变量交给 Hook 脚本读取。
-            // 注意：不能直接 JSON.toJSONString(context)，因为 AgentContext 内部持有 OkHttp Call、
-            // MCP 客户端实例、事件监听器等无法被 fastjson2 序列化的复杂引用对象。
+            // 注意：AgentContext 不能直接序列化，内部持有 OkHttp Call、MCP 客户端实例、
+            // 事件监听器等无法被 JSON 序列化的复杂引用对象，须先行拆解为纯数据。
             String contextJson = buildHookContextJson(rule, context);
             tempJsonFile = Files.createTempFile("st-cute_hook_" + rule.getName() + "_", ".json");
             Files.writeString(tempJsonFile, contextJson, StandardCharsets.UTF_8);
@@ -314,7 +314,7 @@ public class HookService {
                 return;
             }
 
-            List<HookRule> rules = JSON.parseArray(jsonContent, HookRule.class);
+            List<HookRule> rules = JsonKit.parseArray(jsonContent, HookRule.class);
             if (rules != null) {
                 for (HookRule rule : rules) {
                     if (StringUtils.hasText(rule.getName())) {

@@ -1,9 +1,8 @@
 package com.stioc.cute.permission;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.alibaba.fastjson2.JSONWriter;
 import com.stioc.cute.permission.types.PermissionRule;
 import com.stioc.cute.platform.common.CharsetAwareFileKit;
 import com.stioc.cute.platform.contract.ContractFile;
@@ -169,7 +168,7 @@ public class PermissionRuleStore {
             JSONObject wrapper = new JSONObject();
             wrapper.put("rules", existing);
 
-            Files.writeString(localPath, JSON.toJSONString(wrapper, JSONWriter.Feature.PrettyFormat), StandardCharsets.UTF_8);
+            Files.writeString(localPath, JsonKit.toPrettyJson(wrapper), StandardCharsets.UTF_8);
             // 主动失效缓存：mtime 粒度有限，写盘后立即读可能拿到与旧值相同的 mtime，不能依赖指纹自动失效
             evict(projectBasePath);
             log.info("成功持久化权限规则到本地级配置: {}", rule);
@@ -214,7 +213,7 @@ public class PermissionRuleStore {
                 return list;
             }
 
-            JSONObject obj = JSON.parseObject(jsonStr);
+            JSONObject obj = JsonKit.parseObject(jsonStr);
             if (obj != null && obj.containsKey("rules")) {
                 JSONArray arr = obj.getJSONArray("rules");
                 if (arr != null) {

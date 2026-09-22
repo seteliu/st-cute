@@ -11,7 +11,7 @@ import com.stioc.cute.engine.store.types.ConversationPatch;
 import com.stioc.cute.message.types.MessageVo;
 import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessagePatch;
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -161,7 +161,7 @@ public class RuntimeEventListenerWebSocket implements AgentEventListener {
 
             Long targetCid = isSubAgent ? parentCid : cid;
             if (targetCid != null) {
-                WebSocketSessionManager.sendEvent(targetCid, JSON.toJSONString(wsEvent));
+                WebSocketSessionManager.sendEvent(targetCid, JsonKit.toJson(wsEvent));
             }
         } catch (Exception e) {
             log.error("WebSocket 物理端口翻译外推事件出错, wsType={}, cid={}",

@@ -1,6 +1,6 @@
 package com.stioc.cute.engine.tool;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.stioc.cute.engine.llm.types.CuteToolCall;
 import lombok.extern.slf4j.Slf4j;
 
@@ -35,12 +35,12 @@ public final class ToolCallCodec {
         try {
             // 标准形态：数组
             if (trimmed.startsWith("[")) {
-                List<CuteToolCall> calls = JSON.parseArray(trimmed, CuteToolCall.class);
+                List<CuteToolCall> calls = JsonKit.parseArray(trimmed, CuteToolCall.class);
                 return calls != null ? calls : List.of();
             }
             // 脏数据兼容：单对象包装为单元素列表
             if (trimmed.startsWith("{")) {
-                CuteToolCall call = JSON.parseObject(trimmed, CuteToolCall.class);
+                CuteToolCall call = JsonKit.parseObject(trimmed, CuteToolCall.class);
                 return call != null ? List.of(call) : List.of();
             }
             log.warn("tool_calls 存量格式无法识别，返回空清单: {}", abbreviate(trimmed));
@@ -62,12 +62,12 @@ public final class ToolCallCodec {
         try {
             // 标准形态：单对象
             if (trimmed.startsWith("{")) {
-                CuteToolCall call = JSON.parseObject(trimmed, CuteToolCall.class);
+                CuteToolCall call = JsonKit.parseObject(trimmed, CuteToolCall.class);
                 return call != null ? call : emptyCall();
             }
             // 脏数据兼容：数组取首个元素
             if (trimmed.startsWith("[")) {
-                List<CuteToolCall> calls = JSON.parseArray(trimmed, CuteToolCall.class);
+                List<CuteToolCall> calls = JsonKit.parseArray(trimmed, CuteToolCall.class);
                 if (calls != null && !calls.isEmpty()) {
                     return calls.get(0);
                 }
@@ -83,14 +83,14 @@ public final class ToolCallCodec {
      * 序列化为 ASSISTANT 消息的数组格式存量
      */
     public static String writeList(List<CuteToolCall> calls) {
-        return JSON.toJSONString(calls);
+        return JsonKit.toJson(calls);
     }
 
     /**
      * 序列化为 TOOL 消息的单对象格式存量
      */
     public static String writeSingle(CuteToolCall call) {
-        return JSON.toJSONString(call);
+        return JsonKit.toJson(call);
     }
 
     /**

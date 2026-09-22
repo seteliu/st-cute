@@ -1,6 +1,6 @@
 package com.stioc.cute.engine.tool.builtin;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.store.types.Conversation;
@@ -62,7 +62,7 @@ class InvokeSubagentToolTest {
                     new ToolExecutionContext(parentContext, "call_sub_1"));
 
             // 1. 返回值契约：模型据此知道「已异步派发，稍后自行汇总」
-            JSONObject resultJson = JSON.parseObject(result);
+            JSONObject resultJson = JsonKit.parseObject(result);
             assertTrue(resultJson.getBooleanValue("success"), "派发成功标志应为 true，实际: " + result);
             assertTrue(resultJson.getString("message").contains("已成功拉起后台并发子智能体"),
                     "返回值应告知模型任务已异步派发，实际: " + result);

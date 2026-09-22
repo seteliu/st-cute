@@ -1,38 +1,22 @@
 package com.stioc.cute.engine.llm;
 
-import com.stioc.cute.engine.llm.types.CuteAttachment;
-import com.stioc.cute.engine.llm.types.CuteChatResponse;
-import com.stioc.cute.engine.llm.types.CuteMessage;
-import com.stioc.cute.engine.llm.types.CutePrompt;
-import com.stioc.cute.engine.llm.types.CuteToolCall;
-import com.stioc.cute.engine.llm.types.CuteToolDefinition;
-import com.stioc.cute.engine.llm.types.CuteUsage;
-import com.stioc.cute.engine.llm.types.ProviderProtocol;
-
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.alibaba.fastjson2.JSONWriter;
+import com.stioc.cute.engine.common.JsonKit;
+import com.stioc.cute.engine.llm.types.*;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Set;
 
 /**
  * 基于原生 OkHttp 实现的 OpenAI 协议兼容大模型客户端。
@@ -160,7 +144,7 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
                     }
 
                     try {
-                        CuteChatResponse chunk = parseChunk(JSON.parseObject(data));
+                        CuteChatResponse chunk = parseChunk(JsonKit.parseObject(data));
                         if (chunk != null) {
                             nextItem = chunk;
                             return;
@@ -330,7 +314,7 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
                 if (schema == null || schema.isBlank() || "{}".equals(schema.trim())) {
                     schema = "{\"type\":\"object\",\"properties\":{}}";
                 }
-                func.put("parameters", JSON.parseObject(schema));
+                func.put("parameters", JsonKit.parseObject(schema));
                 toolObj.put("function", func);
                 tools.add(toolObj);
             }
@@ -338,7 +322,7 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
             body.put("tool_choice", "auto");
         }
 
-        return JSON.toJSONString(body, JSONWriter.Feature.WriteNulls);
+        return JsonKit.toJsonWithNulls(body);
     }
 
     private JSONObject convertMessage(CuteMessage msg) {
@@ -457,7 +441,7 @@ public class CuteChatForOpenAi extends AbstractCuteChat {
 
     @Override
     protected CuteChatResponse parseNonStreamResponse(String responseBody) {
-        JSONObject json = JSON.parseObject(responseBody);
+        JSONObject json = JsonKit.parseObject(responseBody);
         JSONArray choices = json.getJSONArray("choices");
         if (choices == null || choices.isEmpty()) {
             JSONObject errorObj = json.getJSONObject("error");

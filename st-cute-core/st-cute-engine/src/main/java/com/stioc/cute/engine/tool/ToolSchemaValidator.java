@@ -1,8 +1,8 @@
 package com.stioc.cute.engine.tool;
 
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.stioc.cute.engine.common.JsonKit;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,7 +43,7 @@ public final class ToolSchemaValidator {
         }
         JSONObject root;
         try {
-            root = JSON.parseObject(schema);
+            root = JsonKit.parseObject(schema);
         } catch (Exception e) {
             errors.add("不是合法 JSON: " + e.getMessage());
             return errors;

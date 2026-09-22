@@ -1,6 +1,6 @@
 package com.stioc.cute.websocket;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -34,7 +34,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
         log.debug("收到 WebSocket 消息: {}", payloadStr);
 
         try {
-            WebSocketEvent event = JSON.parseObject(payloadStr, WebSocketEvent.class);
+            WebSocketEvent event = JsonKit.parseObject(payloadStr, WebSocketEvent.class);
             if (event == null || event.getType() == null) {
                 log.warn("收到非法 WebSocket 数据包: {}", payloadStr);
                 return;
@@ -72,7 +72,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 .payload(new JSONObject())
                 .build();
 
-        String jsonString = JSON.toJSONString(pongEvent);
+        String jsonString = JsonKit.toJson(pongEvent);
         // 心跳 PONG 统一经发送装饰器发出：与事件推送共享同一连接的发送缓冲队列，
         // 避免 PONG 与事件消息并发直写同一物理连接造成 WS 协议帧交错
         WebSocketSession decorator = WebSocketSessionManager.wrapSession(session);

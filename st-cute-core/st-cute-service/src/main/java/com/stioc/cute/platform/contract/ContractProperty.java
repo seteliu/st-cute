@@ -1,6 +1,6 @@
 package com.stioc.cute.platform.contract;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.platform.util.ConfigMergeUtils;
 import jakarta.annotation.PostConstruct;
@@ -97,7 +97,7 @@ public class ContractProperty {
         log.info("检测到全局配置文件 {}，开始读取并与内置默认配置合并...", globalJsonFile.getAbsolutePath());
         try {
             String jsonContent = CharsetAwareFileKit.readString(globalJsonFile.toPath());
-            JSONObject root = JSON.parseObject(jsonContent);
+            JSONObject root = JsonKit.parseObject(jsonContent);
             if (root == null) {
                 return;
             }

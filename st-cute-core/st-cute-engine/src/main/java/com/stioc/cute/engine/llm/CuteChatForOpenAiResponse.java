@@ -1,19 +1,9 @@
 package com.stioc.cute.engine.llm;
 
-import com.stioc.cute.engine.llm.types.CuteAttachment;
-import com.stioc.cute.engine.llm.types.CuteChatResponse;
-import com.stioc.cute.engine.llm.types.CuteMessage;
-import com.stioc.cute.engine.llm.types.CuteMessageRole;
-import com.stioc.cute.engine.llm.types.CutePrompt;
-import com.stioc.cute.engine.llm.types.CuteToolCall;
-import com.stioc.cute.engine.llm.types.CuteToolDefinition;
-import com.stioc.cute.engine.llm.types.CuteUsage;
-import com.stioc.cute.engine.llm.types.ProviderProtocol;
-
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.alibaba.fastjson2.JSONWriter;
+import com.stioc.cute.engine.common.JsonKit;
+import com.stioc.cute.engine.llm.types.*;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
@@ -23,12 +13,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 
 /**
  * 基于原生 OkHttp 实现的 OpenAI Response 协议大模型客户端。
@@ -132,14 +117,14 @@ public class CuteChatForOpenAiResponse extends AbstractCuteChat {
                 if (schema == null || schema.isBlank() || "{}".equals(schema.trim())) {
                     schema = "{\"type\":\"object\",\"properties\":{}}";
                 }
-                toolObj.put("parameters", JSON.parseObject(schema));
+                toolObj.put("parameters", JsonKit.parseObject(schema));
                 tools.add(toolObj);
             }
             body.put("tools", tools);
             body.put("tool_choice", "auto");
         }
 
-        return JSON.toJSONString(body, JSONWriter.Feature.WriteNulls);
+        return JsonKit.toJsonWithNulls(body);
     }
 
     private void convertAndAppendInputItems(CuteMessage msg, JSONArray inputList) {
@@ -238,7 +223,7 @@ public class CuteChatForOpenAiResponse extends AbstractCuteChat {
 
     @Override
     protected CuteChatResponse parseNonStreamResponse(String responseBody) {
-        JSONObject json = JSON.parseObject(responseBody);
+        JSONObject json = JsonKit.parseObject(responseBody);
         JSONObject errorObj = json.getJSONObject("error");
         if (errorObj != null) {
             String errorMessage = errorObj.getString("message");
@@ -283,7 +268,7 @@ public class CuteChatForOpenAiResponse extends AbstractCuteChat {
                     String arguments = item.getString("arguments");
                     if (arguments == null) {
                         Object argsObj = item.get("arguments");
-                        arguments = argsObj != null ? JSON.toJSONString(argsObj) : "{}";
+                        arguments = argsObj != null ? JsonKit.toJson(argsObj) : "{}";
                     }
                     toolCalls.add(CuteToolCall.builder()
                             .id(callId)
@@ -433,7 +418,7 @@ public class CuteChatForOpenAiResponse extends AbstractCuteChat {
 
         private CuteChatResponse processSseData(String eventName, String data) {
             try {
-                JSONObject json = JSON.parseObject(data);
+                JSONObject json = JsonKit.parseObject(data);
                 if (json == null) {
                     return null;
                 }
