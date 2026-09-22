@@ -78,7 +78,8 @@ public class FileDecodeService {
             }
             return result;
         } catch (Exception e) {
-            log.warn("解码文件内容异常: filename={}, ext={}, error={}", file.getName(), extension, e.getMessage(), e);
+            // 兜底降级场景：错误信息已足够定位，无需打印完整堆栈，避免日志噪音
+            log.warn("解码文件内容异常: filename={}, ext={}, error={}", file.getName(), extension, e.getMessage());
             return List.of(CuteAttachment.builder()
                     .name(displayName)
                     .path(file.getAbsolutePath())

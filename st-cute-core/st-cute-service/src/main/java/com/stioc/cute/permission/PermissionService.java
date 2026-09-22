@@ -10,13 +10,9 @@ import com.stioc.cute.permission.types.PermissionRule;
 import com.stioc.cute.engine.tool.CuteTool;
 import com.stioc.cute.tool.ToolNames;
 
-import com.alibaba.fastjson2.JSON;
-import com.stioc.cute.platform.common.CharsetAwareFileKit;
 import com.stioc.cute.platform.contract.ContractFile;
 import com.stioc.cute.platform.contract.ContractProperty;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
-import com.alibaba.fastjson2.JSONWriter;
+import com.stioc.cute.platform.security.DesktopTokenStore;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,11 +20,13 @@ import org.springframework.util.StringUtils;
 import com.stioc.cute.project.ProjectService;
 import com.stioc.cute.runtime.loop.RuntimeContext;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.util.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import jakarta.annotation.Resource;
@@ -38,8 +36,19 @@ import jakarta.annotation.Resource;
  * <p>
  * 对外契约：{@link #evaluateVerdict(CuteTool, Map, AgentContext)} 评估工具权限返回强类型裁决，
  * {@link #evaluate(CuteTool, Map, AgentContext)} 为兼容命名别名；
- * {@link #writeLocalRule(PermissionRule)} 与 {@link #writeLocalRule(PermissionRule, String)}
+ * {@link #writeLocalPermissionRule(PermissionRule)} 与 {@link #writeLocalPermissionRule(PermissionRule, String)}
  * 向全局/项目工作区本地配置写入持久化权限授信规则。
+ * </p>
+ * <p>
+ * 本类只负责「裁决编排」：命令词法分析与危险形态判定委托 {@link CommandInspector}，
+ * 规则文件的合并读取、元数据指纹缓存与写盘委托 {@link PermissionRuleStore}。
+ * 二者均为纯职责组件，不参与裁决决策。
+ * </p>
+ * <p>
+ * 规则文件读取策略：合并结果按「项目根路径」缓存，并以构成该结果的三个文件（全局级 / 项目级 /
+ * 本地级）的元数据指纹（mtime + 长度）作自洽校验——指纹一致复用缓存，指纹变化（用户手工编辑、
+ * 新建或删除配置、热重载）自动重读。故权限规则的更新时机收敛为「装载 + 权限文件改写」两处，
+ * 常规工具调用不再重复读盘；本地规则写盘后主动失效缓存，保证「总是放行」当次立即生效。
  * </p>
  */
 @Slf4j
@@ -50,92 +59,8 @@ public class PermissionService {
     private ProjectService projectService;
     @Resource
     private ContractProperty contractProperty;
-
-    /**
-     * 危险命令形态黑名单：命令形态本身即具破坏性、无法靠路径沙箱兜底的场景。
-     * <p>
-     * 收录原则是「是否危险与目标路径无关」；形如 rm / chmod / chown 这类
-     * 「危险与否完全取决于目标路径」的命令不在此列：其沙箱外访问由层级 4 路径沙箱拦截，
-     * 沙箱内的正常操作则交由审批矩阵裁决，不做形态一刀切，避免正常运维被无差别误拦。
-     * </p>
-     */
-    private static final List<DangerousCommandPattern> DANGEROUS_COMMAND_PATTERNS = List.of(
-            new DangerousCommandPattern(Pattern.compile("mkfs(\\..*)?\\s+.*", Pattern.CASE_INSENSITIVE),
-                    "mkfs 会格式化磁盘分区，造成不可逆的数据销毁"),
-            new DangerousCommandPattern(Pattern.compile("dd\\s+.*if=.*", Pattern.CASE_INSENSITIVE),
-                    "dd 可向裸设备或分区直接写入，存在不可逆的数据销毁风险"),
-            new DangerousCommandPattern(Pattern.compile("(curl|wget)\\s+.*\\|\\s*(bash|sh|zsh|python3?|perl).*", Pattern.CASE_INSENSITIVE),
-                    "将网络下载内容直接管道给解释器执行，其真实行为无法审计"),
-            // 强制推送会覆盖远端提交历史：(?![-\w]) 用于排除 --force-with-lease —— 该写法会在
-            // 覆盖前校验远端是否已被他人更新，是官方推荐的更安全替代，不应与 --force 一视同仁
-            new DangerousCommandPattern(Pattern.compile("git\\s+push\\s+.*(--force(?![\\-\\w])|-f)(\\s|$).*", Pattern.CASE_INSENSITIVE),
-                    "git push 强制推送会覆盖远端提交历史，可能导致他人提交永久丢失（如需安全强推请用 --force-with-lease）"),
-            new DangerousCommandPattern(Pattern.compile("git\\s+reset\\s+--hard.*", Pattern.CASE_INSENSITIVE),
-                    "git reset --hard 会丢弃工作区与暂存区的全部未提交改动"),
-            new DangerousCommandPattern(Pattern.compile("git\\s+clean\\s+(-[a-zA-Z]*f[a-zA-Z]*|.*--force).*", Pattern.CASE_INSENSITIVE),
-                    "git clean 带 -f/--force 会永久删除未跟踪文件，删除后无法通过 Git 恢复"),
-            // fork bomb 形态为 ":(){ :|:& };:"，递归自调用部分位于串中而非串尾，
-            // 故首尾均需 .* 兜住，不能用 ^:...:&$ 形态的锚定写法
-            new DangerousCommandPattern(Pattern.compile(".*:.*\\|.*:&.*", Pattern.CASE_INSENSITIVE),
-                    "疑似 fork bomb，会耗尽系统进程资源")
-    );
-
-    /**
-     * 破坏性删除目标的精确匹配集合：系统根及其通配写法。
-     */
-    private static final Set<String> DESTRUCTIVE_TARGETS = Set.of(
-            "/", "/*"
-    );
-
-    /**
-     * 主目录展开前缀集合：以这些前缀开头的删除目标一律按破坏性处理。
-     * <p>
-     * 采用前缀而非精确匹配的原因：{@code ~/Documents} 这类路径会被路径解析器
-     * 当作项目内相对路径（解析为 {@code {项目根}/~/Documents}）而误判为沙箱内合法，
-     * 但 shell 实际展开后指向真实的主目录，存在真实的数据丢失风险。
-     * 因此凡是以主目录展开语义开头的目标，均在其未被展开的形态下拦截。
-     * </p>
-     */
-    private static final Set<String> HOME_EXPANSION_PREFIXES = Set.of(
-            "~", "$HOME", "${HOME}", "%USERPROFILE%", "%HOMEDRIVE%%HOMEPATH%"
-    );
-
-    /**
-     * 驱动器根路径形态（如 C:\、C:/、D:），用于识别整盘级破坏性删除目标
-     */
-    private static final Pattern DRIVE_ROOT_PATTERN = Pattern.compile("(?i)^[a-z]:[\\\\/]?$");
-
-    /**
-     * 删除类程序名集合（跨平台）：仅这些程序参与「破坏性删除目标」判定，
-     * 避免把 cat、echo 等程序路径参数里的 "/" 误判为删除目标
-     */
-    private static final Set<String> DELETE_PROGRAMS = Set.of(
-            "rm", "rmdir", "rd", "del", "erase"
-    );
-
-    /**
-     * 命令分隔符集合：用于在链式命令中切分出各个独立的命令位置
-     */
-    private static final Set<String> COMMAND_SEPARATORS = Set.of(
-            "&&", "||", ";", "|", "&"
-    );
-
-    /**
-     * 前置包装命令集合：其后的 token 仍处于命令位置（如 {@code sudo rm -rf /}）
-     */
-    private static final Set<String> COMMAND_WRAPPERS = Set.of(
-            "sudo", "doas", "command", "nohup", "setsid", "time", "env", "xargs"
-    );
-
-    /**
-     * 危险命令形态及其可读风险说明
-     *
-     * @param pattern 命令形态正则（对整个命令串做全串匹配）
-     * @param reason  面向模型与用户的拒绝原因（人类可读，刻意不回显裸正则，
-     *                避免把排查方向误导到正则语义而非真实风险上）
-     */
-    private record DangerousCommandPattern(Pattern pattern, String reason) {
-    }
+    @Resource
+    private PermissionRuleStore permissionRuleStore;
 
     /**
      * 安全无副作用命令的前缀放行白名单集合
@@ -200,7 +125,7 @@ public class PermissionService {
                 log.warn("权限裁决: DENY [安全命令快速放行被越界 cwd 阻断] - cwd={}", cwdVal);
                 return ToolPermissionVerdict.deny("命令工作目录(cwd)路径越界。禁止访问项目根目录或临时目录外的系统敏感路径: " + cwdVal);
             }
-            if (!containsShellMetaCharacters(commandVal)) {
+            if (!CommandInspector.containsShellMetaCharacters(commandVal)) {
                 String cmdTrim = commandVal.trim();
                 boolean isSafePrefix = false;
                 for (String prefix : SAFE_COMMAND_PREFIXES) {
@@ -218,29 +143,17 @@ public class PermissionService {
 
         // 层级 3: 危险命令黑名单硬拦截（DENY，高优先级，ALL_ALLOW 模式也得拦）
         if ((ToolNames.EXECUTE_COMMAND.equalsIgnoreCase(toolName)) && StringUtils.hasText(commandVal)) {
-            List<String> cmdParts = splitCommand(commandVal);
+            List<String> cmdParts = CommandInspector.splitCommand(commandVal);
             if (cmdParts.isEmpty()) {
                 return ToolPermissionVerdict.deny("命令内容为空。");
             }
 
-            // a. 递归删除指向破坏性目标（系统根、用户主目录、驱动器根）时硬拦。
-            // 判据刻意选择「目标路径」而非「命令形态」：沙箱内的常规清理（如 rm -rf dist、
-            // rm -rf node_modules）交由审批矩阵按权限模式裁决，不做无差别形态拦截，
-            // 避免正常运维被误伤；沙箱外的目标路径则由下方层级 4 的路径沙箱统一兜底。
-            String destructiveTarget = findDestructiveDeleteTarget(cmdParts);
-            if (destructiveTarget != null) {
-                log.warn("权限裁决: DENY [破坏性删除目标拦截] - command={}, target={}", commandVal, destructiveTarget);
-                return ToolPermissionVerdict.deny("命令尝试递归删除重要系统路径或用户主目录（目标: "
-                        + destructiveTarget + "）。该操作可能造成不可逆的数据丢失，已被安全拦截。");
-            }
-
-            // b. 命令形态本身即具破坏性的场景（是否危险与目标路径无关）
-            for (DangerousCommandPattern danger : DANGEROUS_COMMAND_PATTERNS) {
-                if (danger.pattern().matcher(commandVal).matches()) {
-                    log.warn("权限裁决: DENY [危险命令形态拦截] - command={}, reason={}", commandVal, danger.reason());
-                    return ToolPermissionVerdict.deny("该命令被判定为危险操作：" + danger.reason()
-                            + "。如确需执行，请改用影响范围明确、风险更小的等价命令。");
-                }
+            // 危险形态判定（破坏性删除目标 + 形态黑名单）整体委托 CommandInspector：
+            // 判据细节见其类注释，此处只负责把命中结果转成拒绝裁决
+            CommandInspector.DangerFinding finding = CommandInspector.inspectDanger(commandVal);
+            if (finding != null) {
+                log.warn("权限裁决: DENY [危险命令拦截] - command={}, reason={}", commandVal, finding.reason());
+                return ToolPermissionVerdict.deny(finding.reason());
             }
         }
 
@@ -275,7 +188,7 @@ public class PermissionService {
                 if (StringUtils.hasText(cwdVal)) {
                     pathsToCheck.add(cwdVal);
                 }
-                List<String> cmdParts = splitCommand(commandVal);
+                List<String> cmdParts = CommandInspector.splitCommand(commandVal);
                 for (int i = 1; i < cmdParts.size(); i++) {
                     String part = cmdParts.get(i);
                     if (looksLikePath(part)) {
@@ -294,8 +207,8 @@ public class PermissionService {
 
         // 层级 5: 评估本地配置文件加白规则（全局级 → 项目级 → 本地级，末条优先）
         String projectBasePath = context != null ? projectService.getProjectBasePath(context) : null;
-        List<PermissionRule> rules = loadAllRules(projectBasePath);
-        ToolPermissionVerdict ruleVerdict = evaluateRules(rules, toolName, targetContent);
+        List<PermissionRule> rules = permissionRuleStore.loadAll(projectBasePath);
+        ToolPermissionVerdict ruleVerdict = evaluatePermissions(rules, toolName, targetContent);
         if (ruleVerdict != null) {
             log.debug("权限裁决: {} [三级配置规则命中]", ruleVerdict);
             return ruleVerdict;
@@ -320,7 +233,9 @@ public class PermissionService {
                     return ToolPermissionVerdict.allow();
                 }
             } catch (Exception e) {
-                // ignore
+                // 异常时安全方向是保守的（不放行，继续走后续审批链），但不能静默吞掉：
+                // resolvePath 配置错误、RuntimeContext 缺失等真实故障需留痕可查，故降级为 debug 记录
+                log.debug("已读文件白名单强化评估失败，本次不放行：path={}, 异常={}", pathVal, e.getMessage());
             }
         }
 
@@ -403,6 +318,12 @@ public class PermissionService {
      * 解析失败（非法路径字符等）按越界处理返回 false，安全方向保守。
      * 供层级 2 快速放行前置校验与层级 4 沙箱强拦截共用，保证两处口径一致。
      * </p>
+     * <p>
+     * <b>用户级配置目录的凭证排除</b>：全局目录同时存放着敏感凭证载体
+     * （config.json 内含各供应商 apiKey 明文、.desktop-token 为桌面端停机凭证），
+     * 二者若可被 READ 级工具（免审批）读取，即构成「读凭证 → 调 /api/shutdown」的
+     * 提示注入权限提升链，故在此显式排除，不放其进入沙箱。
+     * </p>
      *
      * @param pathVal 待校验的路径字符串（相对路径以项目根为基准解析）
      * @param context 当前会话上下文（可能为 null）
@@ -426,278 +347,99 @@ public class PermissionService {
             Path tempDir = Paths.get(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
             Path userHomeConfig = ContractFile.getGlobalDir().toPath().toAbsolutePath().normalize();
 
-            return targetPath.startsWith(projectRoot)
-                    || targetPath.startsWith(tempDir)
-                    || targetPath.startsWith(userHomeConfig);
+            // 物理路径复核：软链接（Windows 上的 junction 普通用户即可创建）能让
+            // 字面路径落在沙箱内、实际内容却在沙箱外，仅靠 normalize 的纯字面比较判不出来。
+            // 此处将目标与各沙箱根一并展开为真实物理路径后再比较，与 SearchSandboxGuard 口径一致
+            Path realTarget = toRealPathSafe(targetPath);
+            Path realProjectRoot = toRealPathSafe(projectRoot);
+            Path realTempDir = toRealPathSafe(tempDir);
+            Path realUserHomeConfig = toRealPathSafe(userHomeConfig);
+
+            if (realTarget == null) {
+                return false;
+            }
+
+            // 凭证排除在物理路径上判定：软链别名指向凭证文件同样须被拒绝
+            if (isSensitiveCredentialPath(realTarget, realUserHomeConfig)) {
+                log.warn("拒绝访问敏感凭证文件（不在沙箱允许范围内）: {}", realTarget);
+                return false;
+            }
+
+            return realTarget.startsWith(realProjectRoot)
+                    || realTarget.startsWith(realTempDir)
+                    || realTarget.startsWith(realUserHomeConfig);
         } catch (Exception e) {
             log.error("沙箱绝对路径转化异常, path={}", pathVal, e);
             return false;
         }
     }
 
-    private List<String> splitCommand(String command) {
-        List<String> list = new ArrayList<>();
-        if (command == null) {
-            return list;
-        }
-        StringBuilder sb = new StringBuilder();
-        boolean inDoubleQuotes = false;
-        boolean inSingleQuotes = false;
-        for (int i = 0; i < command.length(); i++) {
-            char c = command.charAt(i);
-            if (c == '"' && !inSingleQuotes) {
-                inDoubleQuotes = !inDoubleQuotes;
-            } else if (c == '\'' && !inDoubleQuotes) {
-                inSingleQuotes = !inSingleQuotes;
-            } else if (Character.isWhitespace(c) && !inDoubleQuotes && !inSingleQuotes) {
-                if (sb.length() > 0) {
-                    list.add(sb.toString());
-                    sb.setLength(0);
-                }
-            } else {
-                sb.append(c);
-            }
-        }
-        if (sb.length() > 0) {
-            list.add(sb.toString());
-        }
-        return list;
-    }
-
     /**
-     * 从命令 token 中识别指向破坏性目标的删除操作。
+     * 将路径转换为真实的物理规范路径（展开软链接与 Windows 8.3 短路径名），消除别名判定失真。
      * <p>
-     * 判据是「删除程序 + 破坏性目标」的组合，而非对整条命令串做形态正则：
-     * 这样「rm -rf dist」保持放行、「rm -rf /」被拦截，不会因命令长得像 rm -rf 就无差别拒绝。
-     * </p>
-     * <p>
-     * 扫描范围覆盖命令中<b>所有</b>命令位置而非仅首 token：命令可以链式拼接
-     * （如 {@code echo x && rm -rf ~}、{@code ls ; rm -rf /}），若只看首 token，
-     * 把危险命令接在无害命令之后即可绕过本层拦截。
-     * </p>
-     * <p>
-     * 目标一律取自命令 token 的真实参数（经 {@link #splitCommand} 分词，引号已被剥离）。
+     * 路径不存在时回退到 canonicalPath（同样会展开已存在部分的软链接），
+     * 全部失败才退回绝对路径归一化，保证任何情况下都返回可比较的路径。
      * </p>
      *
-     * @param cmdParts 已分词的命令（首元素为程序名）
-     * @return 命中的破坏性目标原文；未命中返回 null
+     * @param path 待转换路径
+     * @return 物理规范路径；入参为 null 时返回 null
      */
-    private String findDestructiveDeleteTarget(List<String> cmdParts) {
-        // 先规范化 token 序列：粘连写法（如 fs&&rm）会把分隔符与下一个程序名并入同一 token，
-        // 不切开就识别不出「命令位置」，危险命令藏在无害命令后会整体漏检
-        List<String> tokens = normalizeCommandTokens(cmdParts);
-        for (int i = 0; i < tokens.size(); i++) {
-            if (!isCommandPosition(tokens, i)) {
-                continue;
-            }
-            String programName = extractProgramName(tokens.get(i));
-            if (!DELETE_PROGRAMS.contains(programName)) {
-                continue;
-            }
-            // 仅在该删除程序的参数范围内查找目标，直到遇到下一个命令分隔符为止
-            for (int j = i + 1; j < tokens.size(); j++) {
-                String arg = tokens.get(j).trim();
-                if (isCommandSeparator(arg)) {
-                    break;
-                }
-                if (arg.isEmpty() || isOptionArg(arg, programName)) {
-                    continue;
-                }
-                // 分词阶段已剥离引号，此处再兜一层，防止其它调用路径传入带引号的目标
-                String target = stripQuotes(arg);
-                if (isDestructiveDeleteTarget(target)) {
-                    return target;
-                }
-            }
+    private Path toRealPathSafe(Path path) {
+        if (path == null) {
+            return null;
         }
-        return null;
+        try {
+            if (Files.exists(path)) {
+                return path.toRealPath();
+            }
+            return Paths.get(path.toFile().getCanonicalPath());
+        } catch (Exception e) {
+            return path.toAbsolutePath().normalize();
+        }
     }
 
     /**
-     * 将命令 token 序列规范化：把 token 内部粘连的命令分隔符切开为独立 token。
+     * 判定目标路径是否为不允许进入沙箱的敏感凭证文件。
      * <p>
-     * 例如 {@code ls&&rm} 拆为 {@code ls}、{@code &&}、{@code rm}，
-     * 使后续「命令位置」判定能正确识别出分隔符之后的新命令。
+     * 覆盖两种载体：全局目录下的 config.json（含 apiKey 明文）与桌面端凭证文件 .desktop-token。
+     * 比对同时覆盖规范化后的绝对路径与其父目录形态，防止通过 <code>子目录/../config.json</code>
+     * 之类的等价写法绕过字面路径比较。
      * </p>
      *
-     * @param cmdParts 原始分词结果
-     * @return 分隔符已独立成项的 token 序列
+     * @param targetPath     已归一化的目标绝对路径
+     * @param userHomeConfig 已归一化的用户级配置目录路径
+     * @return true 表示属于敏感凭证文件
      */
-    private List<String> normalizeCommandTokens(List<String> cmdParts) {
-        List<String> normalized = new ArrayList<>();
-        for (String token : cmdParts) {
-            StringBuilder buffer = new StringBuilder();
-            int cursor = 0;
-            while (cursor < token.length()) {
-                String matched = matchSeparatorAt(token, cursor);
-                if (matched == null) {
-                    buffer.append(token.charAt(cursor));
-                    cursor++;
-                    continue;
-                }
-                if (buffer.length() > 0) {
-                    normalized.add(buffer.toString());
-                    buffer.setLength(0);
-                }
-                normalized.add(matched);
-                cursor += matched.length();
-            }
-            if (buffer.length() > 0) {
-                normalized.add(buffer.toString());
-            }
-        }
-        return normalized;
+    private boolean isSensitiveCredentialPath(Path targetPath, Path userHomeConfig) {
+        Path globalConfigFile = ContractFile.getGlobalConfigJsonFile().toPath().toAbsolutePath().normalize();
+        Path desktopTokenFile = userHomeConfig.resolve(DesktopTokenStore.TOKEN_FILE_NAME).normalize();
+        return targetPath.equals(globalConfigFile) || targetPath.equals(desktopTokenFile);
     }
 
     /**
-     * 在 token 的指定位置匹配命令分隔符，按最长优先（{@code &&} 优先于 {@code &}）
+     * 将放行规则写入本地级配置文件（转发 {@link PermissionRuleStore}）。
      *
-     * @param token 待匹配 token
-     * @param index 匹配起始位置
-     * @return 命中的分隔符；无命中返回 null
+     * @param rule 待写入的规则
      */
-    private String matchSeparatorAt(String token, int index) {
-        String matched = null;
-        for (String separator : COMMAND_SEPARATORS) {
-            if (token.startsWith(separator, index)
-                    && (matched == null || separator.length() > matched.length())) {
-                matched = separator;
-            }
-        }
-        return matched;
+    public void writeLocalPermissionRule(PermissionRule rule) {
+        permissionRuleStore.writeLocalRule(rule);
     }
 
     /**
-     * 判定 token 是否处于「命令位置」（即真正会被 shell 执行的程序名所在位置）。
-     * <p>
-     * 命令位置包括：整条命令的首 token；紧跟命令分隔符（{@code &&}、{@code ||}、
-     * {@code ;}、{@code |}、{@code &}）之后的 token；以及 {@code sudo} 等前置包装命令之后的 token。
-     * </p>
-     * <p>
-     * 该判定用于排除 {@code git rm}、{@code echo rm -rf /} 这类 token 恰好叫 rm、
-     * 但并非真正执行删除的场景，避免将非删除语义误判为破坏性操作。
-     * </p>
+     * 将放行规则写入指定项目的本地级配置文件（转发 {@link PermissionRuleStore}）。
      *
-     * @param cmdParts 已分词的命令
-     * @param index    待判定的 token 下标
-     * @return 处于命令位置返回 true
+     * @param rule            待写入的规则
+     * @param projectBasePath 项目根路径（null 表示无项目归属）
      */
-    private boolean isCommandPosition(List<String> cmdParts, int index) {
-        if (index == 0) {
-            return true;
-        }
-        String previous = cmdParts.get(index - 1).trim();
-        return isCommandSeparator(previous) || COMMAND_WRAPPERS.contains(previous.toLowerCase());
+    public void writeLocalPermissionRule(PermissionRule rule, String projectBasePath) {
+        permissionRuleStore.writeLocalRule(rule, projectBasePath);
     }
+
 
     /**
-     * 判定 token 是否为命令分隔符或前置包装命令。
-     * <p>
-     * 分隔符兼容粘写形态（如 {@code a&&b}、{@code a;b}），只要 token 以分隔符结尾即认定为分隔符。
-     * </p>
-     *
-     * @param token 待判定 token
-     * @return 是分隔符或前置包装命令返回 true
+     * 评估权限规则：末条优先，支持 Glob
      */
-    private boolean isCommandSeparator(String token) {
-        if (COMMAND_SEPARATORS.contains(token)) {
-            return true;
-        }
-        for (String separator : COMMAND_SEPARATORS) {
-            if (separator.length() > 1 && token.endsWith(separator)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 判定删除目标是否为破坏性目标（系统根、驱动器根、主目录及其下任意子路径）。
-     * <p>
-     * 三重判据：精确命中系统根；形如驱动器根（{@code C:\}）；或以主目录展开语义开头
-     * （{@code ~/Documents} 这类须在其未展开形态下拦截，见 {@link #HOME_EXPANSION_PREFIXES}）。
-     * </p>
-     *
-     * @param target 已剥离引号的删除目标
-     * @return 属破坏性目标返回 true
-     */
-    private boolean isDestructiveDeleteTarget(String target) {
-        if (DESTRUCTIVE_TARGETS.contains(target) || DRIVE_ROOT_PATTERN.matcher(target).matches()) {
-            return true;
-        }
-        for (String prefix : HOME_EXPANSION_PREFIXES) {
-            if (target.equals(prefix) || target.startsWith(prefix + "/") || target.startsWith(prefix + "\\")
-                    || target.startsWith(prefix + "*")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 提取程序名（去掉目录前缀与 Windows 可执行后缀），统一小写。
-     * 兼容 {@code /bin/rm}、{@code C:\tools\rm.exe} 等带路径的写法。
-     *
-     * @param programToken 命令首 token
-     * @return 归一化后的程序名（如 rm、rmdir）
-     */
-    private String extractProgramName(String programToken) {
-        String name = programToken;
-        int slashIdx = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-        if (slashIdx >= 0 && slashIdx < name.length() - 1) {
-            name = name.substring(slashIdx + 1);
-        }
-        if (name.toLowerCase().endsWith(".exe")) {
-            name = name.substring(0, name.length() - 4);
-        }
-        return name.toLowerCase();
-    }
-
-    /**
-     * 判定是否为命令行选项参数，避免把 {@code -rf}、{@code /s} 这类开关误当作删除目标。
-     * <p>
-     * Windows 风格的 {@code /x} 开关仅在删除类程序下识别，且限定 1~2 个字母，
-     * 以免把 {@code /tmp} 这类真实路径误判为开关而漏检。
-     * </p>
-     *
-     * @param arg         参数 token
-     * @param programName 归一化程序名
-     * @return 是选项返回 true
-     */
-    private boolean isOptionArg(String arg, String programName) {
-        if (arg.startsWith("-")) {
-            return true;
-        }
-        return DELETE_PROGRAMS.contains(programName) && arg.matches("/[a-zA-Z]{1,2}");
-    }
-
-    /**
-     * 剥离参数两端成对的引号（单引号或双引号）
-     *
-     * @param value 原始参数
-     * @return 去引号结果
-     */
-    private String stripQuotes(String value) {
-        String result = value;
-        while (result.length() >= 2
-                && ((result.startsWith("\"") && result.endsWith("\""))
-                || (result.startsWith("'") && result.endsWith("'")))) {
-            result = result.substring(1, result.length() - 1);
-        }
-        return result;
-    }
-
-    private boolean containsShellMetaCharacters(String cmd) {
-        // 包含分号、管道、后台运行、重定向、子命令执行等元字符
-        return cmd.contains(";") || cmd.contains("|") || cmd.contains("&")
-                || cmd.contains(">") || cmd.contains("<") || cmd.contains("$(")
-                || cmd.contains("`") || cmd.contains("\n") || cmd.contains("\r");
-    }
-
-    /**
-     * 评估白名单规则：末条优先，支持 Glob
-     */
-    private ToolPermissionVerdict evaluateRules(List<PermissionRule> rules, String toolName, String targetContent) {
+    private ToolPermissionVerdict evaluatePermissions(List<PermissionRule> rules, String toolName, String targetContent) {
         for (int i = rules.size() - 1; i >= 0; i--) { // 倒序扫描（末条优先）
             PermissionRule rule = rules.get(i);
             if (rule.getToolName().equalsIgnoreCase(toolName)) {
@@ -726,14 +468,17 @@ public class PermissionService {
         }
 
         try {
+            // 正则元字符全量转义：仅转义 "." 而放任 | + ( ) { } [ ] ^ $ \ 原样进入正则，
+            // 会使「总是放行」写入的命令模式（取自命令原文，可能含 | 等字符）被当作正则语法解析，
+            // 语义从「字面匹配该命令」漂移为「匹配其任一分支」——偏差方向是放宽权限。
+            // 故先整体转义元字符，再对通配符做定向还原
+            String escaped = pattern.replaceAll("([.\\\\+()\\[\\]{}^$|])", "\\\\$1");
+            // 占位符保护 **：若直接替换单星会殃及上一步产物，使 "**/*.java" 退化为
+            // "只能匹配一层目录"的错误语义（递归白名单静默失效），故先占位再统一还原
+            String placeholder = "\u0000DOUBLE_STAR\u0000";
             // 如果是命令执行工具，星号通配符应该支持跨目录匹配（即匹配命令中的任意字符，包括斜杠）
             String starReplacement = ToolNames.EXECUTE_COMMAND.equalsIgnoreCase(toolName) ? ".*" : "[^/]*";
-            // ** 必须先经占位符保护：若直接 replace("**",".*") 后再做单星替换，
-            // 单星替换会把上一步产物里的 "*" 再次殃及替换，导致 "**/*.java" 退化为
-            // "只能匹配一层目录"的错误语义（递归白名单静默失效）
-            String placeholder = "\u0000DOUBLE_STAR\u0000";
-            String regex = pattern
-                    .replace(".", "\\.")
+            String regex = escaped
                     .replace("**", placeholder)
                     .replace("*", starReplacement)
                     .replace("?", ".")
@@ -744,109 +489,6 @@ public class PermissionService {
         }
     }
 
-    /**
-     * 加载合并权限规则配置文件（顺序：全局级 → 项目级 → 本地级，裁决时末条优先）。
-     * <p>
-     * 权限契约的特殊性：仅认 全局级 + 项目级 + 本地级，项目通用级 .agents 完全不参与。
-     * </p>
-     */
-    private List<PermissionRule> loadAllRules(String projectBasePath) {
-        List<PermissionRule> merged = new ArrayList<>();
-
-        // 1. 全局级：~/.st-cute/permission.json
-        File globalConfig = ContractFile.getGlobalPermissionFile();
-        if (globalConfig != null) {
-            merged.addAll(loadRulesFromFile(globalConfig.toPath()));
-        }
-
-        // 2. 项目级与本地级：固定读取 {project}/.st-cute/ 下文件（项目通用级 .agents 完全不参与）
-        File levelDir = ContractFile.getProjectLevelDir(projectBasePath);
-        if (levelDir != null) {
-            // 2.1 项目级：permission.json
-            File projConfig = new File(levelDir, ContractFile.FILE_PERMISSION);
-            if (projConfig.exists()) {
-                merged.addAll(loadRulesFromFile(projConfig.toPath()));
-            }
-
-            // 2.2 本地级：permission_local.json (人在回路加白自动写入此处)
-            File localConfig = new File(levelDir, ContractFile.FILE_PERMISSION_LOCAL);
-            if (localConfig.exists()) {
-                merged.addAll(loadRulesFromFile(localConfig.toPath()));
-            }
-        }
-
-        return merged;
-    }
-
-    private List<PermissionRule> loadRulesFromFile(Path path) {
-        List<PermissionRule> list = new ArrayList<>();
-        if (!Files.exists(path)) {
-            return list;
-        }
-        try {
-            String jsonStr = CharsetAwareFileKit.readString(path);
-            if (!StringUtils.hasText(jsonStr)) {
-                return list;
-            }
-
-            JSONObject obj = JSON.parseObject(jsonStr);
-            if (obj != null && obj.containsKey("rules")) {
-                JSONArray arr = obj.getJSONArray("rules");
-                if (arr != null) {
-                    for (int i = 0; i < arr.size(); i++) {
-                        JSONObject rObj = arr.getJSONObject(i);
-                        // 三要素任一缺失（含 null 值）的规则直接跳过：避免 {"toolName": null} 类脏数据
-                        // 在裁决链 evaluateRules 中触发 NPE 中断整个权限评估
-                        if (rObj != null && StringUtils.hasText(rObj.getString("toolName"))
-                                && rObj.getString("contentPattern") != null
-                                && StringUtils.hasText(rObj.getString("effect"))) {
-                            list.add(new PermissionRule(
-                                    rObj.getString("toolName"),
-                                    rObj.getString("contentPattern"),
-                                    rObj.getString("effect")
-                            ));
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.warn("加载配置文件规则失败: {}, 降级为空。异常={}", path.toAbsolutePath(), e.getMessage());
-        }
-        return list;
-    }
-
-    /**
-     * 将白名单规则写入本地级配置文件
-     */
-    public synchronized void writeLocalRule(PermissionRule rule) {
-        writeLocalRule(rule, null);
-    }
-
-    public synchronized void writeLocalRule(PermissionRule rule, String projectBasePath) {
-        File localFile = ContractFile.getProjectPermissionLocalFile(projectBasePath);
-        if (localFile == null) {
-            log.warn("当前会话未绑定具体项目路径，跳过写入本地级权限加白文件。");
-            return;
-        }
-        Path localPath = localFile.toPath();
-        try {
-            File parent = localFile.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
-
-            List<PermissionRule> existing = loadRulesFromFile(localPath);
-            existing.add(rule);
-
-            JSONObject wrapper = new JSONObject();
-            wrapper.put("rules", existing);
-
-            Files.writeString(localPath, JSON.toJSONString(wrapper, JSONWriter.Feature.PrettyFormat), StandardCharsets.UTF_8);
-            log.info("成功持久化权限规则到本地级配置: {}", rule);
-        } catch (IOException e) {
-            log.error("写入本地级配置规则失败", e);
-        }
-    }
 
     private boolean looksLikePath(String str) {
         if (str == null || str.isBlank()) {

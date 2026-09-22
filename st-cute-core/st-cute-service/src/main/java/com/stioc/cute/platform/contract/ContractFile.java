@@ -259,11 +259,16 @@ public class ContractFile {
     }
 
     /**
-     * 项目级权限安全规则：{projectBasePath}/.st-cute/permission.json
+     * 项目级权限安全规则：固定定位 {projectBasePath}/.st-cute/permission.json。
+     * <p>
+     * 刻意不复用 {@link #getProjectDir}（其会因项目通用级 .agents 存在而改指向 .agents）：
+     * 权限契约是唯一的例外，仅认 全局级 + 项目级 + 本地级，完全不读项目通用级
+     * （见类头术语说明），项目团队共享的 .agents/permission.json 不参与权限裁决。
+     * </p>
      */
     public static File getProjectPermissionFile(String projectBasePath) {
-        File dir = getProjectDir(projectBasePath);
-        return dir != null ? new File(dir, "permission.json") : null;
+        File levelDir = getProjectLevelDir(projectBasePath);
+        return levelDir != null ? new File(levelDir, FILE_PERMISSION) : null;
     }
 
     // ==========================================

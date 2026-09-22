@@ -25,6 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 文件解码调度与管理服务测试。
  * 覆盖解码器匹配分发、未知文件类型兜底、异常保护以及文本超长截断。
+ * <p>
+ * 【日志规约】本类的异常容错用例（decoderExceptionHandledGracefully）属于"预期异常"验证：
+ * 生产代码 catch 兜底分支只允许打印一行简明日志（仅 e.getMessage()），
+ * 禁止把异常对象作为最后一个参数传给 log.warn/error（那样会输出几十行完整堆栈），
+ * 否则测试输出会被大量预期堆栈淹没，极易误判为真实故障。
+ * 例外：真正意外的、未被 catch 语义覆盖的异常才需要带堆栈打印以便排查。
  */
 class FileDecodeServiceTest {
 

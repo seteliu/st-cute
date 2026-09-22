@@ -3,25 +3,25 @@ package com.stioc.cute.controller;
 import com.stioc.cute.platform.common.Result;
 import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.ConversationPatch;
+import com.stioc.cute.conversation.AgentRuntimeQueryService;
 import com.stioc.cute.conversation.types.ActiveLlmCallVo;
 import com.stioc.cute.conversation.types.ActiveProcessVo;
 import com.stioc.cute.conversation.ConversationService;
 import com.stioc.cute.conversation.types.UpdateConfigDto;
 import com.stioc.cute.engine.AgentEngine;
 import com.stioc.cute.engine.loop.core.AgentContext;
-import com.stioc.cute.runtime.loop.RuntimeContext;
-import com.stioc.cute.tool.commandtool.ActiveProcess;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
-import okhttp3.Call;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 /**
- * 历史会话及消息的 HTTP REST API
+ * 历史会话及消息的 HTTP REST API。
+ * <p>
+ * 薄接入层：只负责参数接收、业务转发与结果封装；会话运行态的上下文收集、级联更新、
+ * 进程存活判定与视图装配下沉至 {@link AgentRuntimeQueryService}，本类不承载业务编排。
+ * </p>
  */
 @Slf4j
 @RestController
@@ -30,6 +30,8 @@ public class ConversationController {
 
     @Resource
     private ConversationService conversationService;
+    @Resource
+    private AgentRuntimeQueryService agentRuntimeQueryService;
     @Resource
     private AgentEngine agentEngine;
 
@@ -53,7 +55,7 @@ public class ConversationController {
     }
 
     /**
-     * 变更会话当前绑定的供应商和具体模型
+     * 变更会话当前绑定的供应商和具体模型（级联同步至直接子会话）
      */
     @PostMapping("/update-provider")
     public Result<Boolean> updateConversationProvider(
@@ -62,30 +64,12 @@ public class ConversationController {
             @RequestParam(required = false, defaultValue = "") String providerModelName) {
         log.info("请求修改对话会话 {} 的供应商分组为: {}, 模型为: {}", id, providerGroup, providerModelName);
 
-        AgentContext context = agentEngine.getContextFacade().getOrCreateContext(id);
-        if (context != null) {
-            ConversationPatch updatePayload = new ConversationPatch(id)
-                    .providerGroup(providerGroup)
-                    .providerModelName(providerModelName);
-            agentEngine.getConversationFacade().publishConversationUpdate(context, updatePayload);
-
-            // 联动更新直接子会话的 provider
-            List<Conversation> children = conversationService.findByParentCid(id);
-            if (children != null) {
-                for (Conversation child : children) {
-                    AgentContext childContext = agentEngine.getContextFacade().getOrCreateContext(child.getId());
-                    ConversationPatch childUpdatePayload = new ConversationPatch(child.getId())
-                            .providerGroup(providerGroup)
-                            .providerModelName(providerModelName);
-                    agentEngine.getConversationFacade().publishConversationUpdate(childContext, childUpdatePayload);
-                }
-            }
-        }
+        agentRuntimeQueryService.cascadeProviderToChildren(id, providerGroup, providerModelName);
         return Result.success(true);
     }
 
     /**
-     * 修改并应用会话的运行属性（如权限级别）
+     * 修改并应用会话的运行属性（如权限级别），级联同步至直接子会话
      */
     @PostMapping("/config")
     public Result<Boolean> updateConversationConfig(
@@ -93,26 +77,8 @@ public class ConversationController {
             @RequestBody UpdateConfigDto body) {
         log.info("请求修改对话会话 {} 的配置: {}", id, body);
 
-        AgentContext context = agentEngine.getContextFacade().getOrCreateContext(id);
-        if (context != null && body.getPermissionMode() != null) {
-            try {
-                ConversationPatch updatePayload = new ConversationPatch(id)
-                        .permissionMode(body.getPermissionMode());
-                agentEngine.getConversationFacade().publishConversationUpdate(context, updatePayload);
-
-                // 联动更新直接子会话的 config
-                List<Conversation> children = conversationService.findByParentCid(id);
-                if (children != null) {
-                    for (Conversation child : children) {
-                        AgentContext childContext = agentEngine.getContextFacade().getOrCreateContext(child.getId());
-                        ConversationPatch childUpdatePayload = new ConversationPatch(child.getId())
-                                .permissionMode(body.getPermissionMode());
-                        agentEngine.getConversationFacade().publishConversationUpdate(childContext, childUpdatePayload);
-                    }
-                }
-            } catch (Exception e) {
-                log.error("修改权限配置出错: id={}", id, e);
-            }
+        if (body != null && body.getPermissionMode() != null) {
+            agentRuntimeQueryService.cascadePermissionModeToChildren(id, body.getPermissionMode());
         }
         return Result.success(true);
     }
@@ -157,114 +123,18 @@ public class ConversationController {
         log.info("请求修改对话会话 {} 的标题为: {}", id, title);
         AgentContext context = agentEngine.getContextFacade().getOrCreateContext(id);
         if (context != null) {
-            ConversationPatch updatePayload = new ConversationPatch(id)
-                    .title(title);
+            ConversationPatch updatePayload = new ConversationPatch(id).title(title);
             agentEngine.getConversationFacade().publishConversationUpdate(context, updatePayload);
         }
         return Result.success();
     }
-
 
     /**
      * 查询指定会话（含派生的子代理会话）名下的所有活动子进程
      */
     @GetMapping("/processes")
     public Result<List<ActiveProcessVo>> getActiveProcesses(@RequestParam Long id) {
-        List<ActiveProcessVo> resultList = new ArrayList<>();
-
-        Collection<AgentContext> allContexts = agentEngine.getContextFacade().getAllContexts();
-        List<AgentContext> targetContexts = new ArrayList<>();
-
-        AgentContext mainContext = agentEngine.getContextFacade().getActiveContext(id);
-        if (mainContext != null) {
-            targetContexts.add(mainContext);
-        }
-
-        // 收集子代理会话的上下文
-        for (AgentContext ctx : allContexts) {
-            if (id.equals(ctx.getParentCid())) {
-                targetContexts.add(ctx);
-            }
-        }
-
-        long now = System.currentTimeMillis();
-        for (AgentContext ctx : targetContexts) {
-            String title = conversationService.findById(ctx.getCid())
-                    .map(Conversation::getTitle)
-                    .orElse("子智能体任务");
-
-            RuntimeContext runtimeCtx = ctx.extra(RuntimeContext.class);
-            if (runtimeCtx == null) {
-                continue;
-            }
-
-            runtimeCtx.getActiveProcesses().forEach((toolCallId, activeProcess) -> {
-                Process process = activeProcess.getProcess();
-                boolean isAlive = process.isAlive();
-
-                // 存活判定统一走 hasSurvivor：主进程 + 启动追踪名单（childPids）+ MSYS 族徽
-                // 收网名单（msysWinPids）三处任一存活即视为有活口——MSYS 孤儿不在 childPids 内，
-                // 仅按主进程/childPids 判定会让 PPID 断链孤儿在面板上失明
-                Long actualPid = process.pid();
-                if (isAlive) {
-                    resultList.add(ActiveProcessVo.builder()
-                            .cid(activeProcess.getCid())
-                            .sessionTitle(title)
-                            .toolCallId(toolCallId)
-                            .pid(actualPid)
-                            .command(activeProcess.getCommand())
-                            .cwd(activeProcess.getCwd())
-                            .startTime(activeProcess.getStartTime())
-                            .runningTimeMs(now - activeProcess.getStartTime())
-                            .build());
-                } else if (activeProcess.hasSurvivor()) {
-                    // 主进程已死但仍有后代/收网名单成员存活（wrapper 已死、真正的工作进程还在跑）：
-                    // 展示存活成员 PID，保留用户手杀通道
-                    Long survivorPid = firstAlivePid(activeProcess);
-                    if (survivorPid != null) {
-                        resultList.add(ActiveProcessVo.builder()
-                                .cid(activeProcess.getCid())
-                                .sessionTitle(title)
-                                .toolCallId(toolCallId)
-                                .pid(survivorPid)
-                                .command(activeProcess.getCommand())
-                                .cwd(activeProcess.getCwd())
-                                .startTime(activeProcess.getStartTime())
-                                .runningTimeMs(now - activeProcess.getStartTime())
-                                .build());
-                    }
-                } else {
-                    // 🌟 懒清理：一旦发现主进程和所有后代子进程均已死亡，将其从活动映射中移除，防止内存累积
-                    runtimeCtx.getActiveProcesses().remove(toolCallId);
-                }
-            });
-        }
-
-        return Result.success(resultList);
-    }
-
-    /**
-     * 返回登记条目中第一个仍存活的进程 PID（优先级：MSYS 收网名单 > 启动追踪名单）。
-     * <p>供面板展示"真正还在跑的工作进程"用；全部消亡返回 null。</p>
-     */
-    private Long firstAlivePid(ActiveProcess activeProcess) {
-        List<Long> msysWinPids = activeProcess.getMsysWinPids();
-        if (msysWinPids != null) {
-            for (Long pid : msysWinPids) {
-                if (ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) {
-                    return pid;
-                }
-            }
-        }
-        List<Long> childPids = activeProcess.getChildPids();
-        if (childPids != null) {
-            for (Long pid : childPids) {
-                if (ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) {
-                    return pid;
-                }
-            }
-        }
-        return null;
+        return Result.success(agentRuntimeQueryService.listActiveProcesses(id));
     }
 
     /**
@@ -275,45 +145,7 @@ public class ConversationController {
     public Result<Boolean> killProcess(
             @RequestParam Long id,
             @RequestParam(required = false) String toolCallId) {
-
-        Collection<AgentContext> allContexts = agentEngine.getContextFacade().getAllContexts();
-        List<AgentContext> targetContexts = new ArrayList<>();
-
-        AgentContext mainContext = agentEngine.getContextFacade().getActiveContext(id);
-        if (mainContext != null) {
-            targetContexts.add(mainContext);
-        }
-
-        for (AgentContext ctx : allContexts) {
-            if (id.equals(ctx.getParentCid())) {
-                targetContexts.add(ctx);
-            }
-        }
-
-        for (AgentContext ctx : targetContexts) {
-            RuntimeContext runtimeCtx = ctx.extra(RuntimeContext.class);
-            if (runtimeCtx == null) {
-                continue;
-            }
-
-            if (toolCallId != null && !toolCallId.isBlank()) {
-                ActiveProcess activeProcess = runtimeCtx.getActiveProcesses().get(toolCallId);
-                if (activeProcess != null) {
-                    log.info("用户请求单杀会话 {} 的子进程树: ToolCallId={}", ctx.getCid(), toolCallId);
-                    // 手杀与自动超时清扫同源：destroyForciblyAndVerify 含 MSYS 族徽撒网 +
-                    // 延迟复查补杀，用户手杀同样能确定性触达 PPID 断链的 MSYS 孤儿
-                    activeProcess.destroyForciblyAndVerify();
-                    runtimeCtx.getActiveProcesses().remove(toolCallId);
-                }
-            } else {
-                runtimeCtx.getActiveProcesses().forEach((tcId, activeProcess) -> {
-                    log.info("用户请求全杀会话 {} 的子进程树: ToolCallId={}", ctx.getCid(), tcId);
-                    activeProcess.destroyForciblyAndVerify();
-                });
-                runtimeCtx.getActiveProcesses().clear();
-            }
-        }
-
+        agentRuntimeQueryService.killProcesses(id, toolCallId);
         return Result.success(true);
     }
 
@@ -322,44 +154,6 @@ public class ConversationController {
      */
     @GetMapping("/llm-calls")
     public Result<List<ActiveLlmCallVo>> getActiveLlmCalls(@RequestParam Long id) {
-        List<ActiveLlmCallVo> resultList = new ArrayList<>();
-
-        Collection<AgentContext> allContexts = agentEngine.getContextFacade().getAllContexts();
-        List<AgentContext> targetContexts = new ArrayList<>();
-
-        AgentContext mainContext = agentEngine.getContextFacade().getActiveContext(id);
-        if (mainContext != null) {
-            targetContexts.add(mainContext);
-        }
-
-        // 收集子代理会话的上下文
-        for (AgentContext ctx : allContexts) {
-            if (id.equals(ctx.getParentCid())) {
-                targetContexts.add(ctx);
-            }
-        }
-
-        long now = System.currentTimeMillis();
-        for (AgentContext ctx : targetContexts) {
-            String title = conversationService.findById(ctx.getCid())
-                    .map(Conversation::getTitle)
-                    .orElse("子智能体任务");
-
-            ctx.getActiveLlmCalls().forEach((llmCallId, activeCall) -> {
-                Call call = activeCall.getCall();
-                if (call != null && !call.isCanceled()) {
-                    resultList.add(ActiveLlmCallVo.builder()
-                            .cid(activeCall.getCid())
-                            .sessionTitle(title)
-                            .llmCallId(llmCallId)
-                            .model(activeCall.getModel())
-                            .startTime(activeCall.getStartTime())
-                            .durationTimeMs(now - activeCall.getStartTime())
-                            .build());
-                }
-            });
-        }
-
-        return Result.success(resultList);
+        return Result.success(agentRuntimeQueryService.listActiveLlmCalls(id));
     }
 }

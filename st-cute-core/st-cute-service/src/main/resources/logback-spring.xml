@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  日志配置：原生日志落盘（替代桌面壳的 stdout 重定向转发机制）
+
+  输出策略：
+  - 托管模式（桌面壳拉起，携带 ST_CUTE_DESKTOP_MANAGED=1 环境变量时自动激活 desktop profile）：
+    仅写文件，控制台 appender 不挂载（壳无控制台句柄，控制台输出只会被壳重定向进
+    desktop_YYYY-MM-DD.log 早期报错文件，与 service 日志重复）。
+  - 开发环境（IDE 启动 / 手动 java -jar）：控制台 + 文件双写。
+
+  轮换与清理规则（与原桌面壳行为对齐并增强）：
+  - 按天 + 单文件大小（20MB）轮换，滚换文件命名为 service_YYYY-MM-DD.序号.log；
+  - maxHistory 保留 7 天，cleanHistoryOnStart 启动即清理过期日志（接替壳的启动清理职责）；
+  - totalSizeCap 500MB 总量兜底，防止磁盘被极端场景撑爆。
+-->
+<configuration>
+
+    <!-- 日志目录：与桌面壳原实现保持一致，落在用户主目录 ~/.st-cute/logs/ -->
+    <property name="LOG_DIR" value="${user.home}/.st-cute/logs"/>
+    <!-- 统一日期格式：对齐 application.yml 中 logging.pattern.dateformat 的既有约定 -->
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{50} - %msg%n"/>
+
+    <!-- 原生日志文件输出：按天 + 20MB 双维度轮换，保留 7 天 -->
+    <appender name="SERVICE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/service_%d{yyyy-MM-dd}.0.log</file>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- 轮换后的历史文件命名：service_YYYY-MM-DD.序号.log -->
+            <fileNamePattern>${LOG_DIR}/service_%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <!-- 总量兜底：该策略下所有历史日志文件合计上限 -->
+            <totalSizeCap>500MB</totalSizeCap>
+            <!-- 启动时即执行过期清理，替代原桌面壳的启动清理职责 -->
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <!-- 控制台输出：开发环境（IDE / 手动命令行）双写用，托管模式经 desktop profile 关闭 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 托管模式（desktop profile 激活时）：仅写文件 -->
+    <springProfile name="desktop">
+        <root level="INFO">
+            <appender-ref ref="SERVICE_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- 默认（开发环境）：控制台 + 文件双写 -->
+    <springProfile name="!desktop">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="SERVICE_FILE"/>
+        </root>
+    </springProfile>
+
+</configuration>

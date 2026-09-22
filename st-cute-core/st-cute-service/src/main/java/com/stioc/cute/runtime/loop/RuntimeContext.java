@@ -53,9 +53,14 @@ public class RuntimeContext implements BaseAgentContext {
     private final Map<String, McpClientInstance> mcpClients = new ConcurrentHashMap<>();
 
     /**
-     * 当前会话生命周期内成功读取过的文件内容指纹集合（绝对路径 → 内容哈希，双重强化门禁）。
-     * <p>修改类工具执行前校验哈希是否与磁盘当前内容一致——一致放行（防幻觉），
-     * 不一致拦截并要求重读（防过时修改）；文件未变化时无需重复读取，消除长会话摩擦。</p>
+     * 当前会话生命周期内成功读取过的文件内容指纹集合（绝对路径 → 内容哈希，供覆写门禁与已读白名单消费）。
+     * <p>write_file 覆写已存在的非空文件前校验哈希是否与磁盘当前内容一致——一致放行（防止未见过现有内容的盲目推平），
+     * 不一致拦截并要求重读（防过时覆写）；edit_file 靠 oldContent 唯一匹配自证，不消费本集合做前置校验。
+     * 另供 PermissionService 已读文件白名单放行（层级 5.5）比对。</p>
+     * <p><b>生命周期约束</b>：本集合为纯进程内存态，不落库、不持久化，服务重启后随上下文一起归零。
+     * 重启后历史对话中的 read_file 结果虽仍留在消息表里，但本记录不被恢复，
+     * 故会被门禁视为"未读先写"拦截——这是设计取舍（宁可多读一轮，也不承认可能过时的事实），
+     * 拦截文案已向模型显式说明该生命周期，避免其误判为工具故障。</p>
      */
     private final Map<String, String> readFiles = new ConcurrentHashMap<>();
 

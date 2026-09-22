@@ -2,6 +2,8 @@ package com.stioc.cute.tool.filetool;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,7 +29,6 @@ public final class FileEditMatcher {
      * 在目标文本中执行三阶段递进定位匹配。
      *
      * @param searchTarget        检索目标文本（局部行文本或整文件文本）
-     * @param originalExpectedOld 模型传入的原始 oldContent
      * @param normalizedOld       按文件主导风格归一化后的 oldContent
      * @param altVariantOld       互补 EOL 变体形态的 oldContent
      * @param newContent          替换后的新内容（用于防参数颠倒预检）
@@ -36,7 +37,7 @@ public final class FileEditMatcher {
      * @param isRange             是否为行号范围局部检索
      * @return 匹配定位结果
      */
-    public static MatchLocateResult locateMatch(String searchTarget, String originalExpectedOld,
+    public static MatchLocateResult locateMatch(String searchTarget,
                                                 String normalizedOld, String altVariantOld,
                                                 String newContent, String wholeFileContent,
                                                 String scopeDesc, boolean isRange) {
@@ -118,11 +119,29 @@ public final class FileEditMatcher {
 
         if (isRange) {
             return MatchLocateResult.error("在" + scopeDesc + "内未找到 'oldContent' 的匹配。\n"
-                    + "该范围内的实际内容为:\n" + searchTarget + "\n\n"
-                    + "你期望的 'oldContent' 为:\n" + originalExpectedOld);
+                    + buildRangeMismatchEcho(searchTarget));
         }
 
         return MatchLocateResult.error("在" + scopeDesc + "中未找到要替换的 'oldContent' 匹配片段（精确匹配与空白不敏感匹配均失败）。请检查空格、缩进或换行是否与文件实际内容一致。");
+    }
+
+    /**
+     * 构造范围分支未命中时的窗口回显（带回显加帽）。
+     * <p>
+     * 窗口行数超过 10 行时不再整窗倒出（宽窗口一次失败可灌数百行进上下文），
+     * 改为提示窗口规模并建议缩窄范围或重新 read_file；10 行以内维持原全量对照，
+     * 保留小窗口下"一眼看出差异"的调试价值。
+     * 刻意不回显期望 oldContent：它是模型自己刚提交的参数、就在其上下文里，
+     * 回显零信息量纯浪费 token（历史版本曾因此把 58 行 oldContent 倾倒回错误信息）。
+     * </p>
+     */
+    private static String buildRangeMismatchEcho(String searchTarget) {
+        int windowLines = countLines(searchTarget);
+        if (windowLines > 10) {
+            return "该范围共 " + windowLines + " 行，内容过长不再全量回显。"
+                    + "建议：重新 read_file 定位目标片段后缩窄行号范围重试，或省略行号范围（oldContent 唯一命中即可）。";
+        }
+        return "该范围内的实际内容为:\n" + searchTarget;
     }
 
     /**
@@ -208,10 +227,16 @@ public final class FileEditMatcher {
                         regex.append("[ \\t]*");
                     }
                     for (int n = 0; n < newlineCount; n++) {
+                        // 首个换行前的水平空白：仅非行首的空白段需要（行首空白已由上方 [ \t]* 覆盖）
                         if (n == 0 && !isLeading) {
                             regex.append("[ \\t]*");
                         }
-                        regex.append("\\r?\\n[ \\t]*");
+                        // 换行后的水平缩进：仅当该换行之后仍有待匹配内容时才追加。
+                        // 若空白段位于 oldContent 末尾（isTrailing），此处的 [ \t]* 会贪婪吞掉
+                        // 目标文本中「下一行」的前导缩进并纳入替换区间，导致下一行缩进被静默删除
+                        // （在 Python/YAML 等缩进敏感文件中会改变语义），故末尾换行后不再追加
+                        boolean lastNewline = (n == newlineCount - 1);
+                        regex.append(lastNewline && isTrailing ? "\\r?\\n" : "\\r?\\n[ \\t]*");
                     }
                 }
             } else {
@@ -280,6 +305,68 @@ public final class FileEditMatcher {
     }
 
     /**
+     * 在全文中定位与指定片段相同内容的全部出现位置（换算为 1-indexed 行号），排除本次已替换的区间。
+     * <p>
+     * 供"窗口外孪生提示"使用：行号范围分支命中后，检查文件其余部分是否还有相同片段，
+     * 有则向模型附注行号，防止窗口漂移导致的静默改错。达到 {@code maxResults} 即提前停搜
+     * （高频短片段如 "}" 只需知道"还有多处"，无需穷举完整清单）。
+     * </p>
+     *
+     * @param content            完整文件内容（替换前）
+     * @param snippet            本次替换的真实落点文本（按文件字节检索，非 oldContent 字面）
+     * @param maxResults         最多列举的行号数，达到即停
+     * @param replacedStart      本次被替换区间的起始偏移（含），该区间内的命中视为本次修改自身
+     * @param replacedEnd        本次被替换区间的结束偏移（不含）
+     * @return 窗口外孪生片段所在行号列表（升序）；无孪生时返回空列表
+     */
+    public static List<Integer> locateAllLineNumbers(String content, String snippet, int maxResults,
+                                                     int replacedStart, int replacedEnd) {
+        List<Integer> lines = new ArrayList<>();
+        if (content == null || snippet == null || snippet.isEmpty() || maxResults <= 0) {
+            return lines;
+        }
+        int idx = 0;
+        while ((idx = content.indexOf(snippet, idx)) != -1 && lines.size() < maxResults) {
+            int end = idx + snippet.length();
+            // 跳过与本次替换区间重叠的命中（那是被替换的内容本身，不是孪生）
+            if (end <= replacedStart || idx >= replacedEnd) {
+                lines.add(offsetToLineNumber(content, idx));
+            }
+            idx = end;
+        }
+        return lines;
+    }
+
+    /**
+     * 截取修改位置前后若干行的上下文文本片段（带回显加帽，对外默认入口）。
+     * <p>
+     * newContent 行数超过 4 行时，对改动区回显加帽省 token：头 2 行 + 省略提示 + 尾 2 行
+     * （完整内容模型刚亲手写过，落点行号由 matchedLines 提供，全量回显属重复税）。
+     * 4 行以内（含）退化为 {@link #getContextSnippet(String, int, int, int)} 全量回显，
+     * 小改动保留完整闭环反馈。
+     * </p>
+     *
+     * @param content        修改后的完整文件内容
+     * @param startPos       替换片段在 content 中的起始偏移（含）
+     * @param endPos         替换片段在 content 中的结束偏移（不含）
+     * @param contextLines   前后各保留的行数
+     * @param newContent     本次替换写入的新内容（用于行数判定与省略行数计算）
+     */
+    public static String getContextSnippetCapped(String content, int startPos, int endPos, int contextLines, String newContent) {
+        int newLineCount = countLines(stripTrailingNewline(newContent));
+        if (newLineCount > 4) {
+            // 前 contextLines 行 + newContent 头 2 行 + 省略中间 (newLineCount - 4) 行 + newContent 尾 2 行 + 后 contextLines 行
+            int headStart = backtrackLineStart(content, startPos, contextLines);
+            String head = content.substring(headStart, skipLines(content, startPos, 2));
+            int tailStart = backtrackLines(content, endPos, 2);
+            String tail = content.substring(tailStart, endPos);
+            String after = content.substring(endPos, skipLines(content, endPos, contextLines));
+            return head + "... [newContent 头 2 行与尾 2 行之间省略 " + (newLineCount - 4) + " 行] ...\n" + tail + after;
+        }
+        return getContextSnippet(content, startPos, endPos, contextLines);
+    }
+
+    /**
      * 截取修改位置前后若干行的上下文文本片段。
      *
      * <p>向前回溯时先遇到 '\n'，再检查其前一位是否为 '\r'（CRLF 整体跳过），
@@ -324,5 +411,75 @@ public final class FileEditMatcher {
         }
 
         return content.substring(start, end);
+    }
+
+    /**
+     * 从指定偏移向前回溯 N 个行边界，返回该 N 行起始处的前一个字符偏移（含换行符本身）。
+     * <p>供回显加帽拼接使用：head 片段需完整携带所跨行的换行符，保证与后续片段无缝衔接。</p>
+     */
+    private static int backtrackLineStart(String content, int pos, int lines) {
+        int start = pos;
+        for (int n = 0; n < lines && start > 0; ) {
+            char c = content.charAt(start - 1);
+            start--;
+            if (c == '\n') {
+                if (start > 0 && content.charAt(start - 1) == '\r') {
+                    start--;
+                }
+                n++;
+            } else if (c == '\r') {
+                n++;
+            }
+        }
+        return start;
+    }
+
+    /**
+     * 从指定偏移向前回溯 N 个行边界，返回 N 行中第一行的起始偏移（不含换行符）。
+     * <p>供回显加帽的 tail 片段使用：取 newContent 尾部 N 行的文本本体。</p>
+     */
+    private static int backtrackLines(String content, int pos, int lines) {
+        int start = backtrackLineStart(content, pos, lines);
+        // 越过所跨行的换行符，落在第一行内容起点
+        while (start < pos && (content.charAt(start) == '\r' || content.charAt(start) == '\n')) {
+            start++;
+        }
+        return start;
+    }
+
+    /**
+     * 从指定偏移向后推进 N 个行边界，返回推进后的偏移（含第 N 行的换行符）。
+     * <p>供回显加帽的 head/after 片段使用：推进量不足 N 行时停在文件末尾。</p>
+     */
+    private static int skipLines(String content, int pos, int lines) {
+        int end = pos;
+        int len = content.length();
+        for (int n = 0; n < lines && end < len; ) {
+            char c = content.charAt(end);
+            end++;
+            if (c == '\r') {
+                if (end < len && content.charAt(end) == '\n') {
+                    end++;
+                }
+                n++;
+            } else if (c == '\n') {
+                n++;
+            }
+        }
+        return end;
+    }
+
+    /**
+     * 去除字符串末尾的换行符（\r\n / \n / \r），供行数统计对齐展示口径（末尾空行不计）。
+     */
+    private static String stripTrailingNewline(String s) {
+        if (s == null || s.isEmpty()) {
+            return s;
+        }
+        int end = s.length();
+        while (end > 0 && (s.charAt(end - 1) == '\n' || s.charAt(end - 1) == '\r')) {
+            end--;
+        }
+        return s.substring(0, end);
     }
 }

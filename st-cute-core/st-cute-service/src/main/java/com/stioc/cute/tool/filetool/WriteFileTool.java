@@ -26,10 +26,21 @@ import java.util.Map;
 public class WriteFileTool extends AbstractFileTool {
 
     /**
-     * 单次写入体量上限（10MB）：写入内容字符串与目标编码字节副本会同时驻留内存，
-     * 超限拒绝写入防止巨内容打满内存，引导分片或外部方式处理
+     * 单次写入体量上限（10MB，按 UTF-8 编码后的字节数口径）。
+     * <p>
+     * 写入内容字符串与目标编码字节副本会同时驻留内存，超限拒绝写入防止巨内容打满内存。
+     * 口径与 {@link EditFileTool} 的编辑上限保持一致：二者若不一致，会出现「能读不能改」的
+     * 中间区间（如 10MB~100MB 的文件既超 write_file 上限、又超 edit_file 上限，
+     * 而 read_file 能读，导致无工具可用的死路）。
+     * </p>
      */
-    private static final long MAX_WRITE_CONTENT_SIZE = 10 * 1024 * 1024L;
+    private static final long MAX_WRITE_CONTENT_BYTES = 10 * 1024 * 1024L;
+
+    /**
+     * 单文件可读上限（与 {@link ReadFileTool} 对齐）：超出此体积的文件本就读不进来，
+     * 允许写入反而会产出无法被后续读取的"盲区文件"
+     */
+    private static final long MAX_WRITE_FILE_BYTES = 100 * 1024 * 1024L;
 
     @Override
     public String getRawName() {
@@ -39,7 +50,9 @@ public class WriteFileTool extends AbstractFileTool {
     @Override
     public String getDescription() {
         return "覆盖写入文件或新建文件。如果文件所在父目录不存在，将自动级联创建父目录。"
-                + "默认以 UTF-8 编码落盘；可通过 encoding 参数指定其他编码（如 gbk），实现文件编码转换。";
+                + "默认以 UTF-8 编码落盘；可通过 encoding 参数指定其他编码（如 gbk），实现文件编码转换。"
+                + "注意：覆写已存在的非空文件前，必须先用 read_file 读取过该文件的最新内容（否则会被门禁拦截），"
+                 + "防止在未见过现有内容的情况下盲目推平整个文件；新建文件与空文件覆写无此要求。";
     }
 
     @Override
@@ -84,10 +97,14 @@ public class WriteFileTool extends AbstractFileTool {
             return ToolResult.error("参数 'path' 不能为空。");
         }
 
-        // 体量防御：超长内容（字符串 + 编码字节副本同时驻留）直接拒绝，防止巨内容打满内存
-        if (contentVal.length() > MAX_WRITE_CONTENT_SIZE) {
-            return ToolResult.error("写入内容过大（" + contentVal.length() + " 字符），超过 write_file 单次处理上限（"
-                    + (MAX_WRITE_CONTENT_SIZE / 1024 / 1024) + " MB）。请将内容拆分为多次局部写入（write_file 分段 + edit_file 追加替换），"
+        // 体量防御：按目标编码后的实际字节数判定（而非字符数）。
+        // 字符数口径对 CJK 内容严重低估——10MB 字符的中文按 UTF-8 落盘约 30MB，
+        // 会绕过上限造成内存与磁盘的双重超预期占用
+        Charset sizeProbeCharset = resolveSizeProbeCharset(writeArgs);
+        long contentBytes = contentVal.getBytes(sizeProbeCharset).length;
+        if (contentBytes > MAX_WRITE_CONTENT_BYTES) {
+            return ToolResult.error("写入内容过大（约 " + (contentBytes / 1024 / 1024) + " MB），超过 write_file 单次处理上限（"
+                    + (MAX_WRITE_CONTENT_BYTES / 1024 / 1024) + " MB）。请将内容拆分为多次局部写入（write_file 分段 + edit_file 追加替换），"
                     + "或改用命令行工具从外部文件复制生成。");
         }
 
@@ -106,6 +123,17 @@ public class WriteFileTool extends AbstractFileTool {
         try {
             File file = resolveFile(pathVal, agentContext);
             File parent = file.getParentFile();
+
+            // 覆写已有非空文件的强制安全门禁：write_file 的破坏力最大（可推平全文且无 oldContent 自证），
+            // 要求"先读后写"确保模型见过现有内容才允许覆写；新建文件与空文件（无内容可毁）豁免。
+            // edit_file 不设此门禁：其 oldContent 唯一匹配本身即是更强的局部自证（CAS 语义）。
+            if (file.exists() && file.length() > 0) {
+                String guardError = verifyReadBeforeWrite(agentContext, file);
+                if (guardError != null) {
+                    return guardError;
+                }
+            }
+
             if (parent != null && !parent.exists()) {
                 if (!parent.mkdirs()) {
                     return ToolResult.error("无法创建父目录: " + parent.getAbsolutePath());
@@ -148,10 +176,19 @@ public class WriteFileTool extends AbstractFileTool {
             // 写入成功后记录内容哈希：write_file 产物天然是最新上下文，后续 edit 修改无需重复 read_file
             recordFileHash(agentContext, file);
 
+            // 落盘后体积复核：编码转换（如 UTF-8 → GBK）可能显著改变字节数，
+            // 超出可读上限则产出的是后续读不回来的"盲区文件"，需明确告警
+            String sizeNotice = "";
+            if (file.length() > MAX_WRITE_FILE_BYTES) {
+                sizeNotice = "（注意：落盘体积约 " + (file.length() / 1024 / 1024)
+                        + " MB，已超出 read_file 的 100 MB 读取上限，后续将无法通过 read_file 读回该文件）";
+                log.warn("WriteFileTool 落盘文件超出读取上限: path={}, size={}", pathVal, file.length());
+            }
+
             log.info("WriteFileTool 执行成功: {}", pathVal);
             return new JSONObject()
                     .fluentPut("success", true)
-                    .fluentPut("message", "文件写入成功: " + pathVal + encodingNotice)
+                    .fluentPut("message", "文件写入成功: " + pathVal + encodingNotice + sizeNotice)
                     .fluentPut("bytesWritten", file.length())
                     .toJSONString();
 
@@ -159,5 +196,22 @@ public class WriteFileTool extends AbstractFileTool {
             log.error("WriteFileTool 写入异常", e);
             return ToolResult.error("写入文件失败: " + getSafeErrorMessage(e));
         }
+    }
+
+    /**
+     * 解析用于体量判定的目标字符集：显式 encoding 优先，非法或未指定时回退 UTF-8。
+     * <p>
+     * 仅用于换算字节数，不作为实际落盘编码（落盘编码在后续流程中单独解析并做合法性报错）。
+     * </p>
+     */
+    private Charset resolveSizeProbeCharset(WriteFileArgs writeArgs) {
+        if (writeArgs.hasExplicitEncoding() && writeArgs.encoding() != null) {
+            try {
+                return Charset.forName(writeArgs.encoding());
+            } catch (Exception ignored) {
+                // 非法编码名：交由后续正式解析流程给出明确报错，此处按 UTF-8 估算
+            }
+        }
+        return StandardCharsets.UTF_8;
     }
 }

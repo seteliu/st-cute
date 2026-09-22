@@ -1,9 +1,10 @@
 use crate::logging;
-use rand::distributions::Alphanumeric;
-use rand::Rng;
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -77,18 +78,49 @@ mod win_job {
     }
 }
 
-/// 生成 32 位随机字符停机鉴权凭证
-pub fn generate_token() -> String {
-    rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(32)
-        .map(char::from)
-        .collect()
+/// 桌面端凭证文件路径：~/.st-cute/.desktop-token（由后端托管模式启动时原子写入）
+fn desktop_token_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".st-cute")
+        .join(".desktop-token")
+}
+
+/// 轮询读取后端落盘的桌面端凭证
+/// 后端原子写入存在短暂时间窗口，读到空内容或过短内容时按未就绪处理并短暂退避重试，
+/// 最长等待 10 秒，超时返回 None 交由调用方决定失败策略
+pub fn read_desktop_token() -> Option<String> {
+    let path = desktop_token_path();
+    let deadline = Instant::now() + Duration::from_secs(10);
+
+    while Instant::now() < deadline {
+        if let Ok(content) = fs::read_to_string(&path) {
+            let token = content.trim().to_string();
+            // 后端生成的凭证固定为 43 字符 Base64url，过短视为半写状态继续等待
+            if token.len() >= 32 {
+                return Some(token);
+            }
+        }
+        sleep(Duration::from_millis(100));
+    }
+    None
+}
+
+/// 主动删除桌面端凭证文件：后端监视线程感知后立即销毁内存凭证并关闭停机通道
+pub fn delete_desktop_token_file() {
+    let path = desktop_token_path();
+    if path.exists() {
+        if let Err(e) = fs::remove_file(&path) {
+            // 删除失败不阻塞停机编排：后端凭证销毁另有停机受理与强杀兜底双保险
+            eprintln!("删除桌面端凭证文件失败: {}", e);
+        }
+    }
 }
 
 pub struct ProcessManager {
     pub spawned: bool,
     pub child: Option<Child>,
+    /// 桌面端凭证：托管模式下自凭证文件轮询读取填充，空串表示尚未取得
     pub token: String,
     #[cfg(target_os = "windows")]
     job_object: Option<win_job::JobObject>,
@@ -102,7 +134,8 @@ impl ProcessManager {
         Self {
             spawned: false,
             child: None,
-            token: generate_token(),
+            // 凭证不再由壳生成：托管模式下由后端生成落盘，启动流程中轮询读取填充
+            token: String::new(),
             #[cfg(target_os = "windows")]
             job_object: job,
         }
@@ -156,10 +189,26 @@ impl ProcessManager {
 
     /// 启动托管 Java 后端服务
     pub fn spawn_service(&mut self) -> Result<(), String> {
+        // 先清理上次异常退出可能残留的旧凭证文件：防止本次启动流程
+        // 在后端写入新凭证之前误读到过期凭证，导致后续停机请求恒被拒绝
+        delete_desktop_token_file();
+
         let java_path = Self::resolve_java_path();
         let jar_path = Self::resolve_jar_path();
 
-        let log_file = logging::open_log_file()?;
+        // 早期报错兜底：显式校验 java 与 jar 路径存在，缺失时直接返回可读的失败原因。
+        // 生产壳为 GUI 子系统（无控制台），JVM 因路径错误产生的早期报错只会流入
+        // desktop 早期报错文件，在壳侧提前拦截比让用户事后翻日志更友好
+        if !java_path.exists() {
+            return Err(format!("未找到 Java 运行时: {}", java_path.display()));
+        }
+        if !jar_path.exists() {
+            return Err(format!("未找到后端应用包: {}", jar_path.display()));
+        }
+
+        // 早期报错日志：仅承接 JVM 早期启动报错（desktop_YYYY-MM-DD.log）；
+        // 原生 service 日志由后端 logback 自行落盘与轮换清理，壳侧不再转发
+        let log_file = logging::open_desktop_log_file()?;
         let err_file = log_file.try_clone().map_err(|e| format!("复制日志句柄失败: {}", e))?;
 
         let mut cmd = Command::new(&java_path);
@@ -180,7 +229,10 @@ impl ProcessManager {
 
         cmd.arg("-jar")
             .arg(&jar_path)
-            .env("ST_CUTE_SHUTDOWN_TOKEN", &self.token)
+            // 托管模式标志：后端据此激活桌面端凭证机制（生成凭证并落盘 .desktop-token），
+            // 同时后端日志子系统据此追加 desktop profile 关闭控制台 appender，仅写 service 日志文件。
+            // stdout/stderr 保持重定向至 desktop 早期报错文件，仅承载 logback 接管前的 JVM 报错
+            .env("ST_CUTE_DESKTOP_MANAGED", "1")
             .stdout(Stdio::from(log_file))
             .stderr(Stdio::from(err_file));
 

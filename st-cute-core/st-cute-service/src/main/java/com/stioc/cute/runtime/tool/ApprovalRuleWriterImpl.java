@@ -27,9 +27,9 @@ public class ApprovalRuleWriterImpl implements ApprovalRuleWriter {
         String projectBasePath = (projectService != null && StringUtils.hasText(workspaceId))
                 ? projectService.getProjectBasePath(workspaceId) : null;
         if (projectBasePath != null) {
-            permissionService.writeLocalRule(rule, projectBasePath);
+            permissionService.writeLocalPermissionRule(rule, projectBasePath);
         } else {
-            permissionService.writeLocalRule(rule);
+            permissionService.writeLocalPermissionRule(rule);
         }
     }
 }

@@ -88,7 +88,8 @@ public abstract class AbstractFileTool implements CuteTool {
     }
 
     /**
-     * 修改类工具强制安全门禁：校验"读取过的内容仍与磁盘当前内容一致"，防止幻觉与过时修改。
+     * 覆写已有非空文件的强制安全门禁：校验"读取过的内容仍与磁盘当前内容一致"，防止盲目推平与过时覆写。
+     * <p>当前唯一调用方为 {@link WriteFileTool}（覆写非空文件前）；edit_file 靠 oldContent 唯一匹配自证，不走此门禁。</p>
      *
      * @param agentContext 智能体上下文
      * @param file         目标文件
@@ -102,16 +103,17 @@ public abstract class AbstractFileTool implements CuteTool {
         RuntimeContext runtimeCtx = agentContext.extra(RuntimeContext.class);
         String recordedHash = runtimeCtx != null ? runtimeCtx.getReadFiles().get(storageKey) : null;
         if (recordedHash == null) {
-            log.warn("{} 安全防御触发：未读先改拦截 - {}", getClass().getSimpleName(), storageKey);
-            return ToolResult.error("拒绝执行代码修改。门禁判定规则：read_file 成功读取过的文件才允许修改。当前状态：本会话尚未读取过该文件。"
-                    + "请先使用 read_file 读取目标文件 [" + file.getName() + "] 的最新内容，然后重试修改。");
+            log.warn("{} 安全防御触发：未读先写拦截 - {}", getClass().getSimpleName(), storageKey);
+            return ToolResult.error("拒绝覆写该文件。门禁判定规则：write_file 覆写已存在的非空文件前，必须先用 read_file 读取过该文件。"
+                    + "若你此前确实读过仍被拦截，通常是期间服务重启过（读取记录随进程重建而清空）。"
+                    + "请先 read_file 读取 [" + file.getName() + "] 的最新内容，确认现有内容可被整体替换后重试。");
         }
         String currentHash = FileHashSupport.computeFileHash(file);
         if (!recordedHash.equals(currentHash)) {
             log.warn("{} 安全防御触发：文件内容已变化拦截 - {}", getClass().getSimpleName(), storageKey);
-            return ToolResult.error("拒绝执行代码修改。目标文件 [" + file.getName() + "] 的内容自上次 read_file 后已发生变化"
-                    + "（可能被外部程序、用户或其他工具修改）。请重新 read_file 读取最新内容后再重试修改，"
-                    + "防止基于过时上下文产生错误替换。");
+            return ToolResult.error("拒绝覆写该文件。目标文件 [" + file.getName() + "] 的内容自上次 read_file 后已发生变化"
+                    + "（可能被外部程序、用户或其他工具修改）。请重新 read_file 读取最新内容后再重试覆写，"
+                    + "防止用基于过时认知的内容推平文件。");
         }
         return null;
     }

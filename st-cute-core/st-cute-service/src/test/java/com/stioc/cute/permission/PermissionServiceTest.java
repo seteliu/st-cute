@@ -7,6 +7,7 @@ import com.stioc.cute.engine.tool.types.ToolExecutionContext;
 import com.stioc.cute.engine.tool.types.ToolPermissionDecision;
 import com.stioc.cute.engine.tool.types.ToolPermissionVerdict;
 import com.stioc.cute.permission.types.PermissionMode;
+import com.stioc.cute.permission.types.PermissionRule;
 import com.stioc.cute.platform.contract.ContractProperty;
 import com.stioc.cute.project.ProjectService;
 import com.stioc.cute.tool.ToolNames;
@@ -19,6 +20,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
@@ -73,6 +76,11 @@ class PermissionServiceTest {
             Field cpField = PermissionService.class.getDeclaredField("contractProperty");
             cpField.setAccessible(true);
             cpField.set(service, cp);
+
+            // 规则存取组件为无状态纯职责 Bean，可直接实构注入（拆分后新增的依赖）
+            Field storeField = PermissionService.class.getDeclaredField("permissionRuleStore");
+            storeField.setAccessible(true);
+            storeField.set(service, new PermissionRuleStore());
         } catch (Exception e) {
             throw new RuntimeException("注入 PermissionService 依赖失败", e);
         }
@@ -249,6 +257,95 @@ class PermissionServiceTest {
             );
 
             assertTrue(verdict.isDeny(), "高优先级黑名单在全部放行模式下依然不可绕过");
+        }
+    }
+
+    @Nested
+    @DisplayName("规则缓存：mtime 指纹自洽校验与写盘失效")
+    class RulesCacheTests {
+
+        /**
+         * 写入项目级 permission.json（权限契约固定读 .st-cute 目录，不读 .agents）
+         */
+        private Path writeProjectPermission(String rulesJson) throws Exception {
+            Path levelDir = tempDir.resolve(".st-cute");
+            Files.createDirectories(levelDir);
+            Path file = levelDir.resolve("permission.json");
+            Files.writeString(file, "{\"rules\":" + rulesJson + "}", StandardCharsets.UTF_8);
+            return file;
+        }
+
+        @Test
+        @DisplayName("项目从未配置权限文件时裁决不报错（空规则集安全兜底）")
+        void emptyConfigIsSafe() {
+            ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "mvn compile"), agentContext
+            );
+
+            assertNotNull(verdict, "无任何权限配置文件时必须给出裁决而非抛异常");
+        }
+
+        @Test
+        @DisplayName("项目级配置的 DENY 规则生效")
+        void projectLevelDenyRuleTakesEffect() throws Exception {
+            writeProjectPermission("[{\"toolName\":\"execute_command\",\"contentPattern\":\"*\",\"effect\":\"DENY\"}]");
+
+            ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "mvn compile"), agentContext
+            );
+
+            assertTrue(verdict.isDeny(), "项目级 DENY 规则应命中");
+        }
+
+        @Test
+        @DisplayName("手工编辑权限文件后，下一次裁决自动重读生效（无需任何刷新调用）")
+        void manualEditIsPickedUpAutomatically() throws Exception {
+            // 首次：无配置 → 智能审批下命令走 ASK
+            assertTrue(permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "mvn compile"), agentContext).isAsk());
+
+            // 手工新增 DENY 规则（等待到 mtime 可分辨的下一时刻，规避文件系统时间戳粒度）
+            Thread.sleep(20);
+            writeProjectPermission("[{\"toolName\":\"execute_command\",\"contentPattern\":\"*\",\"effect\":\"DENY\"}]");
+
+            ToolPermissionVerdict after = permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "mvn compile"), agentContext);
+
+            assertTrue(after.isDeny(), "手工编辑后必须自动重读，不得被旧缓存遮蔽");
+        }
+
+        @Test
+        @DisplayName("「总是放行」写盘后当次裁决立即可见（不依赖 mtime 变化）")
+        void writtenRuleIsImmediatelyVisible() {
+            // 起始无本地规则：智能审批下命令走 ASK
+            assertTrue(permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "mvn compile"), agentContext).isAsk());
+
+            // 模拟审批弹窗点「总是放行」：写盘本地级规则
+            permissionService.writeLocalPermissionRule(
+                    new PermissionRule("execute_command", "*", ToolPermissionDecision.ALLOW.name()),
+                    tempDir.toAbsolutePath().toString());
+
+            ToolPermissionVerdict after = permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "mvn compile"), agentContext);
+
+            assertTrue(after.isAllow(),
+                    "写盘后必须主动失效缓存，否则「总是放行」会失效并再次弹审批");
+        }
+
+        @Test
+        @DisplayName("末条优先：本地级规则覆盖项目级同名规则")
+        void laterRuleWins() throws Exception {
+            writeProjectPermission("[{\"toolName\":\"execute_command\",\"contentPattern\":\"*\",\"effect\":\"DENY\"}]");
+            permissionService.writeLocalPermissionRule(
+                    new PermissionRule("execute_command", "*", ToolPermissionDecision.ALLOW.name()),
+                    tempDir.toAbsolutePath().toString());
+
+            ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "mvn compile"), agentContext
+            );
+
+            assertTrue(verdict.isAllow(), "本地级（后读）应覆盖项目级（先读），体现末条优先");
         }
     }
 }

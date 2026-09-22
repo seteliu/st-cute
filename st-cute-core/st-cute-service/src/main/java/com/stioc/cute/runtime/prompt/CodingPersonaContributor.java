@@ -46,7 +46,7 @@ public class CodingPersonaContributor implements SystemPromptContributor {
 
             【开发核心约定 - 极其重要】
             - 优先使用专用只读工具（read_file / find_files / grep_search）读取、查找与检索代码，命令兜底仅作下策（取舍时机与适用场景见 execute_command 工具描述）；各工具的具体用法、参数与限制以其描述为准。
-            - 文件修改类工具（write_file、edit_file）遵循先读后改、唯一片段匹配的纪律，详见各工具描述与系统门禁提示。
+            - 文件修改类工具的读取门禁：write_file 覆写已存在的非空文件前必须先 read_file 读过该文件（新建与空文件豁免）；edit_file 无先读要求，但 oldContent 必须唯一命中才执行替换，建议修改前先 read_file 确认目标片段的最新内容。详见各工具描述。
             - 鼓励多工具并发调用：当你需要阅读多个文件或列出多个目录时，强烈建议你在单次回复中一次性并行调用多个 read_file 或 find_files 工具。后端引擎将并发处理这些只读操作，这能极大地减少交互轮数、提升效率。
             - 支持复杂链式工具调用：后端处理引擎具有强大的顺序流式执行能力，允许你在单次回复中发送一串具有逻辑先后顺序的工具调用（例如："先调用 read_file 读取文件，再调用 edit_file 修改该文件，最后调用 read_file/grep_search 验证修改"）。你可以放心大胆地一并发送，引擎会自动按序妥善处理。""";
     }

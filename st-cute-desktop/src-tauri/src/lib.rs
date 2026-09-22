@@ -53,8 +53,8 @@ fn trigger_startup_flow(app: tauri::AppHandle, force_retry: bool) {
 
         emit_status("probing", None);
 
-        // 1. 初次探测：检查是否已有外部运行实例
-        let probe_result = probe::probe_ping(BASE_URL);
+        // 1. 初次探测：检查是否已有外部运行实例（不带凭证的开放探测）
+        let probe_result = probe::probe_ping(BASE_URL, None);
         match probe_result {
             probe::ProbeResult::Ready { ref version, .. } => {
                 // 复用模式：外部已有 st-cute 正在运行，直接进入
@@ -97,6 +97,21 @@ fn trigger_startup_flow(app: tauri::AppHandle, force_retry: bool) {
                     return;
                 }
             }
+
+            // 轮询读取后端落盘的桌面端凭证（仅凭证为空时尝试，后端原子写入存在短暂窗口期）
+            if mgr.token.is_empty() {
+                match process::read_desktop_token() {
+                    Some(token) => mgr.token = token,
+                    None => {
+                        emit_status(
+                            "error",
+                            Some("获取桌面端凭证超时 (10s)，请查看后端日志排查凭证落盘异常。"),
+                        );
+                        STARTUP_RUNNING.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                }
+            }
         }
 
         // 3. 高频自适应轮询健康状态（最多等待 60 秒）
@@ -117,8 +132,13 @@ fn trigger_startup_flow(app: tauri::AppHandle, force_retry: bool) {
                 }
             }
 
-            // 快速探测服务是否已响应
-            if let probe::ProbeResult::Ready { .. } = probe::probe_ping(BASE_URL) {
+            // 快速探测服务是否已响应（托管模式下携带桌面端凭证）
+            let token = {
+                let mgr = process_state.lock().unwrap();
+                mgr.token.clone()
+            };
+            let token_opt = if token.is_empty() { None } else { Some(token.as_str()) };
+            if let probe::ProbeResult::Ready { .. } = probe::probe_ping(BASE_URL, token_opt) {
                 emit_status("ready", None);
                 navigate_to_main(&app_handle);
                 STARTUP_RUNNING.store(false, Ordering::SeqCst);
@@ -206,6 +226,9 @@ pub fn run() {
         .manage(process_mgr)
         .invoke_handler(tauri::generate_handler![open_log_dir, retry_start, app_ready])
         .setup(move |app| {
+            // 启动 desktop 日志每日清理守护线程（长驻不重启场景的过期日志兜底清理）
+            logging::spawn_daily_cleanup_thread();
+
             // 窗口以隐藏方式创建（tauri.conf.json 中 visible=false），
             // 先在隐藏状态同步恢复上次的大小与最大化，再居中/亮相，
             // 保证用户看到的第一帧即为最终形态，避免尺寸跳变闪烁

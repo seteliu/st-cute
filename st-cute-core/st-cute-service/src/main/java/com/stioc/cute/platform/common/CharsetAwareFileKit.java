@@ -1,7 +1,6 @@
 package com.stioc.cute.platform.common;
 
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -32,13 +31,16 @@ public final class CharsetAwareFileKit {
      * @throws IOException 文件不存在或 IO 读取异常；文件为不支持的 UTF-16 编码时抛非受检的 IllegalStateException
      */
     public static String readString(Path path) throws IOException {
+        // 单次采样同时取得编码与 UTF-16 BOM 标记：原先分别调用 detectFileMeta 与 detectFileCharset，
+        // 而 detectFileCharset 内部就是 detectFileMeta 的一行委托，导致同一文件被重复 open、
+        // 重复做 8KB 采样解码（每个文件 3 次 IO 降为 2 次：1 次采样 + 1 次全量读取）
+        NativeCharsetKit.FileTextMeta meta = NativeCharsetKit.detectFileMeta(path);
         // UTF-16 BOM 文件无法安全采样判定（字节含 \x00），直接抛出带明确指引的异常，由调用方按既有容错路径处理
-        if (NativeCharsetKit.detectFileMeta(path).utf16Bom()) {
+        if (meta.utf16Bom()) {
             throw new IllegalStateException(
                     "不支持 UTF-16 编码的规约配置文件（含 UTF-16 BOM），请转存为 UTF-8 或系统 ANSI 编码后重试: " + path);
         }
-        Charset charset = NativeCharsetKit.detectFileCharset(path);
-        String content = Files.readString(path, charset);
+        String content = Files.readString(path, meta.charset());
         // UTF-8 BOM 剥离：防止 BOM 字符残留为正文首个不可见字符，干扰 frontmatter 分隔符与 JSON/YAML 解析
         if (content != null && !content.isEmpty() && content.charAt(0) == '\uFEFF') {
             content = content.substring(1);

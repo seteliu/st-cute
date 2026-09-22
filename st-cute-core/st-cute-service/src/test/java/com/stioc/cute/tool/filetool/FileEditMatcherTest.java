@@ -123,6 +123,46 @@ class FileEditMatcherTest {
         }
 
         @Test
+        @DisplayName("回归：oldContent 以换行结尾时，不得吞掉目标文本下一行的前导缩进")
+        void trailingNewlineMustNotSwallowNextLineIndent() {
+            // 阶段一/二均不命中（缩进形态为 tab，与 oldContent 的空格不同），走阶段三空白不敏感匹配。
+            // 该场景曾因末尾换行后无条件追加 [ \t]* 而把下一行缩进并入匹配区间，
+            // 替换后下一行缩进被静默删除（Python/YAML 等缩进敏感文件语义被改变）
+            String content = "\tfoo();\n    bar();\n";
+            String oldContent = "foo();\n";
+
+            MatchLocateResult result = FileEditMatcher.locateMatch(
+                    content, oldContent, oldContent, oldContent,
+                    "baz();\n", content, "文件 [app.py]", false
+            );
+
+            assertTrue(result.isSuccess(), "应命中唯一位置");
+            String replaced = content.substring(0, result.startOffset())
+                    + "baz();\n"
+                    + content.substring(result.endOffset());
+            assertTrue(replaced.contains("    bar();"),
+                    "下一行的前导缩进必须完整保留，实际结果: " + replaced.replace("\n", "\\n"));
+        }
+
+        @Test
+        @DisplayName("回归：阶段三匹配命中区间止于末尾换行，不含下一行缩进")
+        void whitespaceInsensitiveRangeStopsAtTrailingNewline() {
+            // 文件首行无缩进，oldContent 为 tab 缩进且以换行结尾：
+            // 阶段一/二均不命中，必然走阶段三正则路径
+            String content = "foo();\n  bar();\n";
+            String oldContent = "\tfoo();\n";
+
+            MatchLocateResult result = FileEditMatcher.locateMatch(
+                    content, oldContent, oldContent, oldContent,
+                    "baz();\n", content, "文件 [app.py]", false
+            );
+
+            assertTrue(result.isSuccess());
+            // 命中区间必须恰为 "foo();\n"，不得延伸吞掉 "  bar();" 的缩进
+            assertEquals("foo();\n", content.substring(result.startOffset(), result.endOffset()));
+        }
+
+        @Test
         @DisplayName("阶段4：防颠倒拦截，当 oldContent 未命中但 newContent 存在于文件时给出精准指引")
         void invertedArgsDefense() {
             String content = "final int MAX_COUNT = 100;\n";

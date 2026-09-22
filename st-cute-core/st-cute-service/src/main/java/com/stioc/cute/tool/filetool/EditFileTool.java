@@ -18,7 +18,9 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 安全替换文件部分内容的本地核心修改工具
@@ -28,10 +30,24 @@ import java.util.Map;
 public class EditFileTool extends AbstractFileTool {
 
     /**
-     * 单文件编辑体量上限（10MB）：edit 需将文件全量载入内存（内容字符串 + 原始字节 + 往返编码副本，内存放大数倍），
-     * 超限文件拒绝编辑防止 OOM，引导改走 write_file 整体重写或拆分文件
+     * 单文件编辑体积上限（10MB，按 UTF-8 字节数口径）。
+     * <p>
+     * edit 需将文件全量载入内存（内容字符串 + 原始字节 + 往返编码副本，内存放大数倍），
+     * 超限文件拒绝编辑防止 OOM。
+     * </p>
+     * <p>
+     * 该口径与 {@link WriteFileTool} 的写入上限刻意保持一致：若 edit 上限低于 write 上限，
+     * 中间区间文件会同时被两者拒绝，而 read_file 却读得进来，形成"能读不能改"的死路
+     * （此前 edit 按 10MB、write 按字符数计，正是该问题的来源）。
+     * </p>
      */
-    private static final long MAX_EDIT_FILE_SIZE = 10 * 1024 * 1024L;
+    private static final long MAX_EDIT_FILE_BYTES = 10 * 1024 * 1024L;
+
+    /**
+     * 窗口外孪生提示的行号列举上限：窗口外相同片段数达到该值时视为高频短片段（如 "}"），
+     * 只报总数不逐行列行号，防止提示自身成为输出噪音
+     */
+    private static final int TWIN_TIP_MAX_LISTED = 5;
 
     @Override
     public String getRawName() {
@@ -43,7 +59,7 @@ public class EditFileTool extends AbstractFileTool {
         return "精确替换指定文件的局部片段，oldContent 必须在文件中唯一命中才会执行替换。"
                 + "匹配依次尝试三种策略：精确匹配 → CRLF 换行变体匹配 → 空白不敏感匹配（缩进与空白差异可容忍，"
                 + "命中后替换的范围可能与 oldContent 字面略有出入）。命中多处时拒绝执行，请补充上下文或指定行号范围。"
-                + "修改前必须先成功 read_file 读出该文件最新内容，否则会被门禁拦截；新建文件或整文件覆写（write_file）无此要求。";
+                + "建议修改前先 read_file 读出目标片段的最新内容，确保 oldContent 与文件实际内容精确一致，一次命中。";
     }
 
     @Override
@@ -113,16 +129,11 @@ public class EditFileTool extends AbstractFileTool {
             }
 
             // 体量防御：超大文件（如百 MB 级日志）全量载入会直接 OOM，拒绝编辑并引导改走整体重写
-            if (file.length() > MAX_EDIT_FILE_SIZE) {
+            if (file.length() > MAX_EDIT_FILE_BYTES) {
                 return ToolResult.error("文件过大（约 " + (file.length() / 1024 / 1024) + " MB），超过 edit_file 单文件处理上限（"
-                        + (MAX_EDIT_FILE_SIZE / 1024 / 1024) + " MB）。大文件修改请改用 write_file 以完整内容整体重写，"
-                        + "或先用 grep_search 定位目标片段、将相关内容拆分为独立小文件后再编辑。");
-            }
-
-            // 强制安全门禁：修改前校验"读取过的内容仍与磁盘一致"以防止幻觉与过时修改
-            String guardError = verifyReadBeforeWrite(agentContext, file);
-            if (guardError != null) {
-                return guardError;
+                        + (MAX_EDIT_FILE_BYTES / 1024 / 1024) + " MB）。该体积同样超出 write_file 上限，"
+                        + "请先用 grep_search 定位目标片段、将相关内容拆分为独立小文件后再编辑，"
+                        + "或改用 execute_command 上的外部工具（如 sed/脚本）处理。");
             }
 
             // 编码与文本元数据一致化：与 read_file 共用同一探测函数与同样本策略
@@ -172,7 +183,7 @@ public class EditFileTool extends AbstractFileTool {
                 String rangeContent = fileContent.substring(offsets.startOffset(), offsets.endOffset());
 
                 MatchLocateResult match = FileEditMatcher.locateMatch(
-                        rangeContent, oldContent, normalizedOld, altVariantOld, newContent, fileContent,
+                        rangeContent, normalizedOld, altVariantOld, newContent, fileContent,
                         "指定的行号范围 [" + startLine + ", " + endLine + "]", true
                 );
                 if (!match.isSuccess()) {
@@ -183,7 +194,7 @@ public class EditFileTool extends AbstractFileTool {
                 matchEndOffset = offsets.startOffset() + match.endOffset();
             } else {
                 MatchLocateResult match = FileEditMatcher.locateMatch(
-                        fileContent, oldContent, normalizedOld, altVariantOld, newContent, fileContent,
+                        fileContent, normalizedOld, altVariantOld, newContent, fileContent,
                         "文件 [" + file.getName() + "]", false
                 );
                 if (!match.isSuccess()) {
@@ -195,6 +206,27 @@ public class EditFileTool extends AbstractFileTool {
             }
 
             String updatedContent = fileContent.substring(0, matchStartOffset) + newContent + fileContent.substring(matchEndOffset);
+
+            // 窗口外孪生提示（防静默换错）：行号范围分支命中后，检查窗口外是否还有与本次替换片段相同的内容。
+            // 场景：模型按旧认知的行号给窗口，若文件上方被插入内容导致窗口漂移，可能框住另一处相同片段并"成功"改错位置。
+            // 全局分支无此风险（多处命中直接拒绝），故仅范围分支需要。
+            // 注意按真实落点文本（而非 oldContent 字面）检索——模糊匹配时两者存在空白差异，孪生点与落点字节一致才搜得到。
+            String twinTip = "";
+            if (editArgs.hasLineRange()) {
+                String actualMatched = fileContent.substring(matchStartOffset, matchEndOffset);
+                List<Integer> twinLines = FileEditMatcher.locateAllLineNumbers(fileContent, actualMatched,
+                        TWIN_TIP_MAX_LISTED, matchStartOffset, matchEndOffset);
+                if (!twinLines.isEmpty()) {
+                    // 达到列举上限即停搜，size>=上限 意味着真实孪生数只多不少——报"≥N 处"总数，不列行号防噪音
+                    if (twinLines.size() >= TWIN_TIP_MAX_LISTED) {
+                        twinTip = "；注意：文件内还有多处（≥" + TWIN_TIP_MAX_LISTED + " 处）与本次替换内容相同的片段，本次未修改，请确认替换落点符合预期";
+                    } else {
+                        String lineNos = twinLines.stream().map(String::valueOf).collect(Collectors.joining("、"));
+                        twinTip = "；注意：文件内另有 " + twinLines.size() + " 处相同内容位于第 " + lineNos
+                                + " 行，本次未修改，请确认你修改的是预期位置";
+                    }
+                }
+            }
 
             // UTF-8 BOM 保真：若原文件带 UTF-8 BOM 且首部被替换修改，自动补回 \uFEFF 保持落盘字节序与原文件完全一致
             if (meta.hasUtf8Bom() && !updatedContent.startsWith("\uFEFF")) {
@@ -215,9 +247,11 @@ public class EditFileTool extends AbstractFileTool {
             // 写入成功后同步更新内容哈希：同一文件连续多次编辑时无需重复 read_file
             recordFileHash(agentContext, file);
 
-            // 提取修改位置前后 3 行的上下文切片提供闭环反馈
+            // 提取修改位置前后 3 行的上下文切片提供闭环反馈。
+            // newContent 超过 4 行时对回显加帽（省 token）：前 3 行 + 头 2 行 + 省略 N 行 + 尾 2 行 + 后 3 行，
+            // 落点行号已由 matchedLines 提供，完整内容模型本就刚亲手写过，无需全量回显
             int endPos = matchStartOffset + newContent.length();
-            String contextSnippet = FileEditMatcher.getContextSnippet(updatedContent, matchStartOffset, endPos, 3);
+            String contextSnippet = FileEditMatcher.getContextSnippetCapped(updatedContent, matchStartOffset, endPos, 3, newContent);
 
             // 计算替换落点在最终文件中的行号范围 (1-indexed)，供调用方精确定位与校验
             // 当 endPos > matchStartOffset 时，以新插入内容最后一个字符偏移 (endPos - 1) 计算结束行，避免末尾换行符导致结束行号虚高
@@ -229,7 +263,7 @@ public class EditFileTool extends AbstractFileTool {
             log.info("EditFileTool 修改成功: {}", pathVal);
             return new JSONObject()
                     .fluentPut("success", true)
-                    .fluentPut("message", "已成功修改文件 [" + file.getName() + "] 的指定片段。")
+                    .fluentPut("message", "已成功修改文件 [" + file.getName() + "] 的指定片段。" + twinTip)
                     .fluentPut("matchedLines", new int[]{matchedStartLine, matchedEndLine})
                     .fluentPut("context", contextSnippet)
                     .toJSONString();

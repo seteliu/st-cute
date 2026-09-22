@@ -102,6 +102,11 @@ public final class ProcessLauncher {
         boolean bashEntry;
         String winDefaultBash = (os.contains("win") && gitBashLocator != null) ? gitBashLocator.detectPath() : null;
 
+        // Windows 下经 shell 执行的命令需预转义：JDK 默认（LEGACY 模式）不转义参数内部的双引号，
+        // 会把含空白与引号的命令裂解成多个参数（详见 WindowsCommandLineEscaper）。
+        // 该转换在非 Windows 平台为空操作；cmd.exe 分支走自身分词器、规则不同，故不适用。
+        String shellCommand = WindowsCommandLineEscaper.escapeForShell(finalCommand);
+
         if (StringUtils.hasText(shellVal) && "bash".equalsIgnoreCase(shellVal)) {
             String bashPath = os.contains("win") ? winDefaultBash : "bash";
             if (bashPath == null) {
@@ -109,7 +114,7 @@ public final class ProcessLauncher {
                         + "请安装 Git for Windows 后重试，或改传 shell=\"cmd\" 经 cmd.exe 执行。");
             }
             log.info("execute_command 指定 shell=bash，经 Git Bash 执行: {}", bashPath);
-            pb = new ProcessBuilder(bashPath, "-c", finalCommand);
+            pb = new ProcessBuilder(bashPath, "-c", shellCommand);
             bashEntry = true;
         } else if (StringUtils.hasText(shellVal) && "cmd".equalsIgnoreCase(shellVal)) {
             log.info("execute_command 指定 shell=cmd，经 cmd.exe 执行");
@@ -120,7 +125,7 @@ public final class ProcessLauncher {
                     + "（经 Git Bash 执行）与 shell=\"cmd\"（经 cmd.exe 执行）。不传该参数时优先经 Git Bash 执行，未探测到时使用 cmd.exe。");
         } else if (winDefaultBash != null) {
             log.info("execute_command 未指定 shell，默认经 Git Bash 执行: {}", winDefaultBash);
-            pb = new ProcessBuilder(winDefaultBash, "-c", finalCommand);
+            pb = new ProcessBuilder(winDefaultBash, "-c", shellCommand);
             bashEntry = true;
         } else if (os.contains("win")) {
             pb = new ProcessBuilder("cmd.exe", "/c", finalCommand);
