@@ -15,6 +15,7 @@ import com.stioc.cute.platform.config.SqliteLocalDateTimeTypeHandler;
 import com.stioc.cute.repository.ConversationMapper;
 import com.stioc.cute.repository.MessageMapper;
 import com.stioc.cute.runtime.common.GuavaStripedLockProvider;
+import com.stioc.cute.testkit.TestTempDirFactory;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.ibatis.mapping.Environment;
@@ -60,7 +61,9 @@ public abstract class AbstractStoreIntegrationTest {
     @BeforeAll
     void setUpAll() throws Exception {
         // 1. 初始化独立临时目录与单连接 HikariCP 数据源
-        this.tempDir = Files.createTempDirectory("st-cute-store-test-");
+        // 临时目录统一锁定到测试隔离全局目录下的 testfiles 子目录（与 @TempDir 同源口径），
+        // 不落系统临时目录，避免测试产物与系统噪声混放、残留难辨识归属
+        this.tempDir = Files.createTempDirectory(TestTempDirFactory.resolveTestTempRoot(), "st-cute-store-test-");
         Path dbPath = tempDir.resolve("test-store-" + UUID.randomUUID() + ".db");
         String jdbcUrl = "jdbc:sqlite:" + dbPath.toAbsolutePath().toString().replace('\\', '/');
 
