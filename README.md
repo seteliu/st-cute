@@ -14,40 +14,44 @@
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-green.svg)](https://spring.io/projects/spring-boot)
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-brightgreen.svg)](https://vuejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/seteliu/st-cute)](https://github.com/seteliu/st-cute/releases)
+[![CI](https://github.com/seteliu/st-cute/actions/workflows/ci.yml/badge.svg)](https://github.com/seteliu/st-cute/actions/workflows/ci.yml)
 
 ---
 
 ## 🏛️ 项目特色
 
+**使用与体验**
+
+- **设计哲学**：不能不设计，也不能过度设计。在简陋与臃肿之间恰到好处。如果 AI 是匹野马，更多的时候，要的不是笨重的航母，而是一套简单易用的马具。
+- **多形态包**：提供多种形态的 release 包，适配多种环境，桌面与无UI服务器都可部署，解压即跑。
+- **多端同步**：一处部署，桌面端 / 网页端 / 移动端同步访问完整功能，响应式适配，手机也能随地 Vibe Coding。
+- **办公支持**：PDF / Word / Excel 内置工具直接读取，无需外挂转换。
+- **美好体验**：
+  - 齐全又克制的内置功能，让你没有负担。将你的创意舞台，交给组件化 Harness。
+  - 智能折叠降噪，超流畅的消息列表。
+  - 可观测：思考过程、工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志全程可溯。
+- **独创特色**：
+  - 极简 Skill 模式：可开关，开启后所有 Skill 通过显示命令按需触发，不会无脑把目录给大模型，平常情况 0 Token 消耗。适用于很多 Skill 的用户，超省 Token，超小干扰！
+  - 极致 Windows 友好：自动探测 git bash，bash 优先，深度优化字符转义。无 bash 回退 cmd 方案时，命令执行工具自动行级编码探测，最大可能解决乱码问题。在 Windows 环境下，AI 体感远超同类产品！
+- **安全纯粹**：纯绿色、无后门、支持路径沙箱。
+
 **引擎与架构**
 
 - **整体介绍**：WebUI、前后端分离、独立桌面壳。
 - **后端特色**：引擎与宿主分离。
-  - **引擎侧**：自研的通用 Java ReAct 框架。抽象设计，零 Spring 依赖，生态通吃。不限宿主环境，可运用于本地，可集成于SaaS服务。基于回调驱动的循环，内建状态管理、SubAgent、工具调用、权限管理、事件总线、窗口压缩、防爆裁剪、异常情况自愈等基础能力。抽象提示词贡献器，工具接口等供宿主侧实现。
-  - **宿主侧**：作为实际运行环境，实现引擎侧的抽象定义，丰富落地 Coding Agent 相关功能。
-
-**使用与体验**
-
-- **轻量即用**：在简陋与臃肿之间刚刚好。解压即跑，功能齐全，好驾驭。
-- **多形态包**：提供多种形态的 release 包，适配多种环境，桌面与服务器都壳部署。
-- **多端同步**：一处部署，桌面端 / 网页端 / 移动端同步访问完整功能，响应式适配，手机也能随地 Vibe Coding。
-- **办公支持**：PDF / Word / Excel 内置工具直接读取，无需外挂转换。
-- **美好体验**：智能折叠降噪，超流畅的消息列表；可观测：思考过程、工具调用链、SubAgent 执行状态、活跃子进程、大模型 HTTP 完整请求响应日志全程可溯。
-- **独创特色**：极简 Skill 模式：可开关，开启后所有 Skill 可通过显示命令按需触发，不会把全部清单给大模型。适用于 Skill 很多的用户，超省 Token。
-- **安全纯粹**：纯绿色、无后门、支持路径沙箱。
-- **Windows友好**：命令执行工具自动行级编码探测，最大可能解决乱码问题。且自适应优先使用 git bash，减少奇怪问题。
+    - **引擎侧**：自研的通用 Java ReAct 框架。抽象设计，零 Spring 依赖，生态通吃。不限宿主环境，可运用于本地，可集成于 SaaS 服务。基于回调驱动的循环，内建状态管理、SubAgent、工具调用、权限管理、事件总线、窗口压缩、防爆裁剪、异常情况自愈等基础能力。抽象提示词贡献器，工具接口等供宿主侧实现。
+    - **宿主侧**：作为实际运行环境，实现引擎侧的抽象定义，丰富落地 Coding Agent 相关功能。
 
 ---
 
 ## 🛠️ 技术栈
 
-| 模块 | 技术选型 | 说明 |
-| :--- | :--- | :--- |
-| **后端** (`st-cute-core`) | Java 25 / Spring Boot 4.1 | 事件驱动与轻量架构 |
-| **持久层** | SQLite 3 + MyBatis-Flex | 默认开启 WAL 模式，无需安装繁重数据库 |
-| **网络与通信** | OkHttp + WebSocket | REST API + 实时双向通信，完整 HTTP 探针日志 |
-| **前端** (`st-cute-web`) | Vue 3 + Vite 8 + TypeScript 6 | Naive UI 基础库，pnpm workspace 管理 |
-| **桌面壳** (`st-cute-desktop`) | Rust + Tauri | 原生窗体外壳，双击即用，自动托管后端生命周期 |
+| 模块 | 技术选型                      | 说明                                         |
+| :--- |:------------------------------|:---------------------------------------------|
+| **后端** (`st-cute-core`) | Java 25 / Spring Boot 4.1     | ReAct 引擎 + 本地 CodingAgent 宿主           |
+| **前端** (`st-cute-web`) | Vue 3 + Vite 8 + TypeScript 6 | Naive UI 基础库，pnpm workspace 管理         |
+| **桌面壳** (`st-cute-desktop`) | Rust + Tauri2                 | 原生窗体外壳，双击即用，自动托管后端生命周期 |
 
 ---
 
@@ -105,7 +109,7 @@
 
 ### 📦 预编译安装包直接运行（推荐）
 
-您可以直接在 GitHub 的 **[Releases](releases)** 页面下载对应系统的压缩包开箱即用。
+您可以直接在 GitHub 的 **[Releases](https://github.com/seteliu/st-cute/releases)** 页面下载对应系统的压缩包开箱即用。
 
 > [!NOTE]
 > ST-Cute 核心是一个 **Java 后端服务**，运行依赖 **JRE**（Java 运行环境）：`desktop` / `bundle` 包已内置，`base` 包需自备。
@@ -148,6 +152,52 @@
 > 如果您准备进行**公网端口映射**，或从**移动端设备（如手机/平板等外部网络）**连接访问部署的 ST-Cute：
 > 1. 请务必在服务启动后，先在系统 **【设置】** 页面中配置 **安全访问码 (Access Security Code)**；
 > 2. 设置并生效访问码后，再将 `9661` 端口映射到局域网外或公网，切勿将无保护的服务直接裸露在公网环境！
+> 3. 公网暴露**强烈建议经反向代理终结 HTTPS**：裸 HTTP 下访问码与会话 Cookie 均以明文过网，可被链路上任何节点嗅探。
+
+#### 无界面部署（Docker / 服务器）如何配置访问码
+
+后端无法获取访问码原文（页面保存时仅上传摘要），因此容器等无界面场景请直接在全局配置文件中写入**明文**，
+后端启动时会自动识别并升级为带盐摘要存储（升级后原文不再落盘）：
+
+```bash
+# 文件位置：~/.st-cute/config.json（Docker 下为容器内该路径，建议挂载为数据卷）
+{
+  "st-cute": {
+    "password": "YourPass123"
+  }
+}
+```
+
+* 明文须满足安全策略：**8~32 位**、同时包含英文字母与数字、仅可使用常见半角字符；
+* 不合规时启动日志会打印 **ERROR** 并保留原值不迁移（便于手工修正），登录也会被拒绝；
+* 也可在服务运行后经页面设置，效果一致。
+
+#### 反向代理部署要点
+
+若使用 Nginx / Caddy 等反向代理，**必须保留原始 Host 头**并传递协议信息，否则会出现全站 403 或登录态异常：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:9661;
+    # 必须保留：后端以此校验请求来源同源性（Host 与 Origin 必须一致）
+    proxy_set_header Host $http_host;
+    # 必须传递：后端据此识别 HTTPS，会话 Cookie 才会被自动标记 Secure
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    # WebSocket 升级支持（实时事件推送必需）
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+* 后端已内置同源校验（针对状态变更类请求与 WebSocket 握手）：请求的 `Origin` 须与 `Host` 一致，
+  可自适应任意域名、IP、端口与协议，**无需配置白名单**；
+* 若代理未保留 Host 头（被改写成 `127.0.0.1:9661`），则与浏览器 Origin 不同源，POST/WS 将被 403 拒绝；
+* 特殊部署形态确需放行额外来源时，可在 `application.yml` 的 `st-cute.security.trusted-origins` 中追加条目
+  （支持 `example.com` 或 `example.com:8443` 两种写法）；桌面壳固定来源 `tauri.localhost` 已内置放行；
+* **非浏览器客户端**（curl、Postman、命令行工具）不携带 Origin 头，不受同源校验影响，可正常调用。
 
 ---
 

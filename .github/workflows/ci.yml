@@ -1,0 +1,46 @@
+name: CI
+
+# 触发范围：仅 main 分支推送与指向 main 的 PR。
+# 刻意不监听 tag（'v*'）：打 tag 发版由 release.yml 独立负责（其内含同等的测试门禁 Job），
+# 若此处也响应 tag，同一次发布会把测试重复跑一遍，白白消耗 Actions 额度。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 同一分支的旧运行在新提交到来时自动取消：避免连续推送导致运行排队堆积
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 后端测试门禁 Job：main 分支每次提交与 PR 均执行全量单测。
+  # 本 Job 是 README 顶部 CI 徽章的数据来源，代表"当前 main 代码是否健康"。
+  backend-test:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25 with Maven cache
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # 测试统一在聚合根下执行，同时覆盖 st-cute-engine 与 st-cute-service 两个模块；
+      # 不加 -DskipTests，任何用例失败都会令本 Job 失败并使徽章转红
+      - name: Run Backend Tests
+        run: mvn -f st-cute-core/pom.xml test -B
+
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: st-cute-core/**/target/surefire-reports/
+          if-no-files-found: ignore
