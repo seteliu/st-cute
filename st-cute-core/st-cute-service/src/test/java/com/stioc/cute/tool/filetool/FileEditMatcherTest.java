@@ -28,7 +28,7 @@ class FileEditMatcherTest {
             String oldContent = "System.out.println(\"hello\");";
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, oldContent, oldContent,
-                    "System.out.println(\"world\");", content, "文件 [Test.java]", false
+                    "System.out.println(\"world\");", content, "文件 [Test.java]", false, 1
             );
 
             assertTrue(result.isSuccess());
@@ -44,7 +44,7 @@ class FileEditMatcherTest {
             String oldContent = "int a = 1;";
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, oldContent, oldContent,
-                    "int a = 2;", content, "文件 [Test.java]", false
+                    "int a = 2;", content, "文件 [Test.java]", false, 1
             );
 
             assertFalse(result.isSuccess());
@@ -62,7 +62,7 @@ class FileEditMatcherTest {
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, normalizedOld, altVariantOld,
-                    "newLines", content, "文件 [Test.java]", false
+                    "newLines", content, "文件 [Test.java]", false, 1
             );
 
             assertTrue(result.isSuccess());
@@ -80,7 +80,7 @@ class FileEditMatcherTest {
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, normalizedOld, altVariantOld,
-                    "new", content, "文件 [Test.java]", false
+                    "new", content, "文件 [Test.java]", false, 1
             );
 
             assertFalse(result.isSuccess());
@@ -97,7 +97,7 @@ class FileEditMatcherTest {
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, oldContent, oldContent,
-                    "class App {\n    int value = 100;\n}", content, "文件 [Test.java]", false
+                    "class App {\n    int value = 100;\n}", content, "文件 [Test.java]", false, 1
             );
 
             assertTrue(result.isSuccess());
@@ -115,7 +115,7 @@ class FileEditMatcherTest {
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, oldContent, oldContent,
-                    "int x = 2;", content, "文件 [Test.java]", false
+                    "int x = 2;", content, "文件 [Test.java]", false, 1
             );
 
             assertFalse(result.isSuccess());
@@ -133,7 +133,7 @@ class FileEditMatcherTest {
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, oldContent, oldContent,
-                    "baz();\n", content, "文件 [app.py]", false
+                    "baz();\n", content, "文件 [app.py]", false, 1
             );
 
             assertTrue(result.isSuccess(), "应命中唯一位置");
@@ -154,7 +154,7 @@ class FileEditMatcherTest {
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, oldContent, oldContent,
-                    "baz();\n", content, "文件 [app.py]", false
+                    "baz();\n", content, "文件 [app.py]", false, 1
             );
 
             assertTrue(result.isSuccess());
@@ -171,7 +171,7 @@ class FileEditMatcherTest {
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, oldContent, oldContent,
-                    newContent, content, "文件 [App.java]", false
+                    newContent, content, "文件 [App.java]", false, 1
             );
 
             assertFalse(result.isSuccess());
@@ -179,19 +179,38 @@ class FileEditMatcherTest {
         }
 
         @Test
-        @DisplayName("阶段4：行号范围内未找到匹配，报错附带窗口实际内容切片")
+        @DisplayName("阶段4：行号范围内未找到匹配，报错附带带行号的窗口实际内容切片")
         void notFoundInRangeEchoesActualContent() {
+            String rangeContent = "int a = 10;\nint b = 20;\n";
+            String oldContent = "int c = 30;";
+
+            // 窗口取自文件第 5 行起（如模型按旧认知给出行号范围）：回显行号必须以真实行号为基准
+            MatchLocateResult result = FileEditMatcher.locateMatch(
+                    rangeContent, oldContent, oldContent,
+                    "int c = 40;", "whole file", "指定的行号范围 [5, 6]", true, 5
+            );
+
+            assertFalse(result.isSuccess());
+            assertTrue(result.errorMessage().contains("指定的行号范围 [5, 6]"));
+            // 窗口原文按真实行号标注，而非从 1 起算
+            assertTrue(result.errorMessage().contains("该范围内的实际内容为:\n5: int a = 10;\n6: int b = 20;\n"),
+                    "实际错误信息:\n" + result.errorMessage());
+        }
+
+        @Test
+        @DisplayName("阶段4：范围窗口起始行号基准为 1 时，回显行号从 1 起编")
+        void notFoundInRangeEchoesActualContentFromLineOne() {
             String rangeContent = "int a = 10;\nint b = 20;\n";
             String oldContent = "int c = 30;";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     rangeContent, oldContent, oldContent,
-                    "int c = 40;", "whole file", "指定的行号范围 [1, 2]", true
+                    "int c = 40;", "whole file", "指定的行号范围 [1, 2]", true, 1
             );
 
             assertFalse(result.isSuccess());
-            assertTrue(result.errorMessage().contains("指定的行号范围 [1, 2]"));
-            assertTrue(result.errorMessage().contains(rangeContent));
+            assertTrue(result.errorMessage().contains("该范围内的实际内容为:\n1: int a = 10;\n2: int b = 20;\n"),
+                    "实际错误信息:\n" + result.errorMessage());
         }
 
         @Test
@@ -202,7 +221,7 @@ class FileEditMatcherTest {
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
                     content, oldContent, oldContent,
-                    "replacement", content, "文件 [App.java]", false
+                    "replacement", content, "文件 [App.java]", false, 1
             );
 
             assertFalse(result.isSuccess());
@@ -266,7 +285,7 @@ class FileEditMatcherTest {
         }
 
         @Test
-        @DisplayName("getContextSnippet 截取修改位置前后各指定行数的上下文")
+        @DisplayName("getContextSnippet 截取修改位置前后各指定行数的上下文（每行带真实行号）")
         void testGetContextSnippet() {
             String content = "line 1\nline 2\nline 3\nline 4\nline 5\n";
             int startPos = content.indexOf("line 3");
@@ -274,11 +293,48 @@ class FileEditMatcherTest {
 
             // 传入 2：向前向后各跨越 2 道换行符边界，截取包含 line 2, line 3, line 4
             String snippet = FileEditMatcher.getContextSnippet(content, startPos, endPos, 2);
-            assertTrue(snippet.contains("line 2\n"));
-            assertTrue(snippet.contains("line 3"));
-            assertTrue(snippet.contains("line 4\n"));
+            // 行号取文件内真实行号（1-indexed），与 read_file 展示口径一致
+            assertEquals("2: line 2\n3: line 3\n4: line 4\n", snippet);
             assertFalse(snippet.contains("line 1"));
             assertFalse(snippet.contains("line 5"));
+        }
+
+        @Test
+        @DisplayName("getContextSnippet 支持 CRLF 文件且行号不因换行符成对而偏移")
+        void testGetContextSnippetCrlf() {
+            String content = "line 1\r\nline 2\r\nline 3\r\nline 4\r\n";
+            int startPos = content.indexOf("line 3");
+            int endPos = startPos + "line 3".length();
+
+            String snippet = FileEditMatcher.getContextSnippet(content, startPos, endPos, 2);
+            assertEquals("2: line 2\n3: line 3\n4: line 4\n", snippet);
+        }
+
+        @Test
+        @DisplayName("getContextSnippetCapped 加帽回显：省略区前后行号仍为真实行号")
+        void testGetContextSnippetCappedKeepsRealLineNumbers() {
+            // 第 1-3 行为前置上下文，第 4-13 行为改动区（10 行 > 4 触发加帽），第 14-16 行为后置上下文
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i <= 3; i++) {
+                sb.append("before").append(i).append('\n');
+            }
+            for (int i = 1; i <= 10; i++) {
+                sb.append("fresh").append(i).append('\n');
+            }
+            for (int i = 1; i <= 3; i++) {
+                sb.append("after").append(i).append('\n');
+            }
+            String content = sb.toString();
+            int startPos = content.indexOf("fresh1");
+            int endPos = content.indexOf("after1");
+
+            String snippet = FileEditMatcher.getContextSnippetCapped(content, startPos, endPos, 3, content.substring(startPos, endPos));
+            // 前置上下文 + 改动区头 2 行，行号为文件内真实行号
+            assertTrue(snippet.startsWith("2: before2\n3: before3\n4: fresh1\n5: fresh2\n"), "实际输出:\n" + snippet);
+            // 省略提示以真实行号表述，与前后可见行号自洽（改动区 10 行 = 头 2 行 + 省略 6 行 + 尾 2 行）
+            assertTrue(snippet.contains("... [此处省略第 6-11 行，共 6 行] ...\n"), "实际输出:\n" + snippet);
+            // 省略区之后继续按真实行号连续编号
+            assertTrue(snippet.contains("12: fresh9\n13: fresh10\n14: after1\n"), "实际输出:\n" + snippet);
         }
     }
 }

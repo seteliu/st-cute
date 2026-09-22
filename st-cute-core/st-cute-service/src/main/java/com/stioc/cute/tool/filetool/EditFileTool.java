@@ -96,7 +96,7 @@ public class EditFileTool extends AbstractFileTool {
 
     @Override
     public ToolAccessLevel getAccessLevel() {
-        // 写级：文件局部修改，随文件写类工具治理（智能审批放行）
+        // 写级：文件局部修改，随文件写类工具治理（宽松审批放行）
         return ToolAccessLevel.WRITE;
     }
 
@@ -184,7 +184,7 @@ public class EditFileTool extends AbstractFileTool {
 
                 MatchLocateResult match = FileEditMatcher.locateMatch(
                         rangeContent, normalizedOld, altVariantOld, newContent, fileContent,
-                        "指定的行号范围 [" + startLine + ", " + endLine + "]", true
+                        "指定的行号范围 [" + startLine + ", " + endLine + "]", true, startLine
                 );
                 if (!match.isSuccess()) {
                     return ToolResult.error(match.errorMessage());
@@ -195,7 +195,7 @@ public class EditFileTool extends AbstractFileTool {
             } else {
                 MatchLocateResult match = FileEditMatcher.locateMatch(
                         fileContent, normalizedOld, altVariantOld, newContent, fileContent,
-                        "文件 [" + file.getName() + "]", false
+                        "文件 [" + file.getName() + "]", false, 1
                 );
                 if (!match.isSuccess()) {
                     return ToolResult.error(match.errorMessage());
@@ -247,7 +247,8 @@ public class EditFileTool extends AbstractFileTool {
             // 写入成功后同步更新内容哈希：同一文件连续多次编辑时无需重复 read_file
             recordFileHash(agentContext, file);
 
-            // 提取修改位置前后 3 行的上下文切片提供闭环反馈。
+            // 提取修改位置前后 3 行的上下文切片提供闭环反馈，每行带真实行号（与 read_file 展示口径一致），
+            // 便于模型直接核对落点、构造后续带行号范围的编辑。
             // newContent 超过 4 行时对回显加帽（省 token）：前 3 行 + 头 2 行 + 省略 N 行 + 尾 2 行 + 后 3 行，
             // 落点行号已由 matchedLines 提供，完整内容模型本就刚亲手写过，无需全量回显
             int endPos = matchStartOffset + newContent.length();
