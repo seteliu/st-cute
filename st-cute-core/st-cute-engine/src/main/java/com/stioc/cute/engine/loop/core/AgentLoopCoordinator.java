@@ -1,18 +1,14 @@
 package com.stioc.cute.engine.loop.core;
 
+import com.stioc.cute.engine.assembly.EngineInfra;
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.common.EngineExecutor;
 import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.loop.message.MessageDataReporter;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
-import com.stioc.cute.engine.store.types.Conversation;
-import com.stioc.cute.engine.store.types.ConversationQuery;
-import com.stioc.cute.engine.store.types.Message;
-import com.stioc.cute.engine.store.types.MessageQuery;
-import com.stioc.cute.engine.store.types.MessageRole;
-import com.stioc.cute.engine.store.types.MessageStatus;
+import com.stioc.cute.engine.store.types.*;
 import com.stioc.cute.engine.support.ChatNamingHelper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -27,18 +23,37 @@ import java.util.concurrent.locks.Lock;
  * </p>
  */
 @Slf4j
-@RequiredArgsConstructor
 public class AgentLoopCoordinator {
 
     private final AgentLoopProcessor agentProcessor;
     private final AgentContextManager agentContextManager;
-    private final ConversationStore conversationStore;
     private final LoopDataReporter loopDataReporter;
-    private final MessageStore messageStore;
     private final MessageDataReporter messageDataReporter;
+    private ChatNamingHelper chatNamingHelper;
+
+    private final ConversationStore conversationStore;
+    private final MessageStore messageStore;
     private final EngineLock lockProvider;
     private final EngineExecutor executorProvider;
-    private ChatNamingHelper chatNamingHelper;
+
+    /**
+     * 收存储对与技术设施聚合，构造器内解包为实际使用字段
+     */
+    public AgentLoopCoordinator(AgentLoopProcessor agentProcessor,
+                                AgentContextManager agentContextManager,
+                                EngineStores stores,
+                                LoopDataReporter loopDataReporter,
+                                MessageDataReporter messageDataReporter,
+                                EngineInfra infra) {
+        this.agentProcessor = agentProcessor;
+        this.agentContextManager = agentContextManager;
+        this.loopDataReporter = loopDataReporter;
+        this.messageDataReporter = messageDataReporter;
+        this.conversationStore = stores.getConversations();
+        this.messageStore = stores.getMessages();
+        this.lockProvider = infra.getLocks();
+        this.executorProvider = infra.getExecutor();
+    }
 
     /**
      * 绑定会话智能命名助手（Builder 装配后回填）

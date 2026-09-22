@@ -1,14 +1,25 @@
 package com.stioc.cute.engine.tool.types;
 
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
 /**
  * 结构化工具权限裁决结果载荷。
- *
- * @param decision 裁决类型（ALLOW, ASK, DENY）
- * @param reason   拒绝或拦截时的详细原因描述（ALLOW/ASK 时通常为 null）
  */
-public record ToolPermissionVerdict(ToolPermissionDecision decision, String reason) {
+@Getter
+@RequiredArgsConstructor(access = lombok.AccessLevel.PRIVATE)
+public class ToolPermissionVerdict {
+
+    /**
+     * 裁决类型（ALLOW, ASK, DENY）
+     */
+    private final ToolPermissionDecision decision;
+
+    /**
+     * 拒绝或拦截时的详细原因描述（ALLOW/ASK 时通常为 null）
+     */
+    private final String reason;
 
     public static ToolPermissionVerdict allow() {
         return new ToolPermissionVerdict(ToolPermissionDecision.ALLOW, null);
@@ -32,14 +43,6 @@ public record ToolPermissionVerdict(ToolPermissionDecision decision, String reas
 
     public boolean isDeny() {
         return decision == ToolPermissionDecision.DENY;
-    }
-
-    public ToolPermissionDecision getDecision() {
-        return decision;
-    }
-
-    public String getReason() {
-        return reason;
     }
 
     /**

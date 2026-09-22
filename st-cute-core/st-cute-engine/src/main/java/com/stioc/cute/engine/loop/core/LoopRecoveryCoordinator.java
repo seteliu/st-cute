@@ -1,16 +1,11 @@
 package com.stioc.cute.engine.loop.core;
 
+import com.stioc.cute.engine.assembly.EngineInfra;
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
-import com.stioc.cute.engine.store.types.Conversation;
-import com.stioc.cute.engine.store.types.ConversationQuery;
-import com.stioc.cute.engine.store.types.Message;
-import com.stioc.cute.engine.store.types.MessageQuery;
-import com.stioc.cute.engine.store.types.MessageRole;
-import com.stioc.cute.engine.store.types.MessageStatus;
-import com.stioc.cute.engine.store.types.SortDirection;
-import lombok.RequiredArgsConstructor;
+import com.stioc.cute.engine.store.types.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -29,18 +24,34 @@ import java.util.concurrent.locks.Lock;
  * </p>
  */
 @Slf4j
-@RequiredArgsConstructor
 public class LoopRecoveryCoordinator {
 
     private static final Set<MessageStatus> STALE_STATUSES =
             EnumSet.of(MessageStatus.PENDING, MessageStatus.RUNNING, MessageStatus.WAITING_APPROVAL);
 
-    private final ConversationStore conversationStore;
-    private final MessageStore messageStore;
     private final LoopDataReporter loopDataReporter;
     private final AgentContextManager agentContextManager;
     private final AgentLoopCoordinator loopCoordinator;
+
+    private final ConversationStore conversationStore;
+    private final MessageStore messageStore;
     private final EngineLock lockProvider;
+
+    /**
+     * 收存储对与技术设施聚合，构造器内解包为实际使用字段
+     */
+    public LoopRecoveryCoordinator(EngineStores stores,
+                                   LoopDataReporter loopDataReporter,
+                                   AgentContextManager agentContextManager,
+                                   AgentLoopCoordinator loopCoordinator,
+                                   EngineInfra infra) {
+        this.conversationStore = stores.getConversations();
+        this.messageStore = stores.getMessages();
+        this.loopDataReporter = loopDataReporter;
+        this.agentContextManager = agentContextManager;
+        this.loopCoordinator = loopCoordinator;
+        this.lockProvider = infra.getLocks();
+    }
 
     /**
      * 清理并自愈僵死消息与会话状态

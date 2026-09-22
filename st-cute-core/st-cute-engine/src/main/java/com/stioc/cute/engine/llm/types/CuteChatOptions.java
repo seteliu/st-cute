@@ -2,6 +2,7 @@ package com.stioc.cute.engine.llm.types;
 
 import lombok.Builder;
 import lombok.Data;
+
 import java.util.List;
 
 /**

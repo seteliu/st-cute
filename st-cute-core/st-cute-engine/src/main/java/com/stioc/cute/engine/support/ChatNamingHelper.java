@@ -1,27 +1,18 @@
 package com.stioc.cute.engine.support;
 
-import com.stioc.cute.engine.llm.types.CuteChatOptions;
-import com.stioc.cute.engine.llm.types.CuteMessage;
-import com.stioc.cute.engine.llm.types.CuteMessageRole;
-import com.stioc.cute.engine.llm.types.CutePrompt;
-import com.stioc.cute.engine.llm.types.CuteChatResponse;
+import com.stioc.cute.engine.assembly.EngineInfra;
+import com.stioc.cute.engine.assembly.EngineStores;
+import com.stioc.cute.engine.common.EngineLock;
+import com.stioc.cute.engine.event.AgentEventFactory;
+import com.stioc.cute.engine.llm.ChatOptionsFactory;
 import com.stioc.cute.engine.llm.CuteChat;
 import com.stioc.cute.engine.llm.CuteChatFactory;
-import com.stioc.cute.engine.llm.ChatOptionsFactory;
-import com.stioc.cute.engine.llm.types.Provider;
-import com.stioc.cute.engine.event.AgentEventFactory;
+import com.stioc.cute.engine.llm.types.*;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.loop.core.AgentContextManager;
-import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.ConversationStore;
-import com.stioc.cute.engine.store.types.Message;
-import com.stioc.cute.engine.store.types.MessageQuery;
 import com.stioc.cute.engine.store.MessageStore;
-import com.stioc.cute.engine.store.types.ConversationPatch;
-import com.stioc.cute.engine.store.types.SortDirection;
-import com.stioc.cute.engine.common.EngineLock;
-import java.util.concurrent.locks.Lock;
-import lombok.RequiredArgsConstructor;
+import com.stioc.cute.engine.store.types.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -29,21 +20,40 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.locks.Lock;
 
 /**
  * 自动为新创建的会话命名的助手组件
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ChatNamingHelper {
 
-    private final ConversationStore conversationStore;
-    private final MessageStore messageStore;
     private final CuteChatFactory chatClientFactory;
     private final AgentContextManager agentContextManager;
     private final ChatOptionsFactory chatOptionsFactory;
+
+    private final ConversationStore conversationStore;
+    private final MessageStore messageStore;
     private final EngineLock lockProvider;
     private final String defaultConversationTitle;
+
+    /**
+     * 收存储对与技术设施聚合，构造器内解包为实际使用字段
+     */
+    public ChatNamingHelper(EngineStores stores,
+                            CuteChatFactory chatClientFactory,
+                            AgentContextManager agentContextManager,
+                            ChatOptionsFactory chatOptionsFactory,
+                            EngineInfra infra,
+                            String defaultConversationTitle) {
+        this.conversationStore = stores.getConversations();
+        this.messageStore = stores.getMessages();
+        this.chatClientFactory = chatClientFactory;
+        this.agentContextManager = agentContextManager;
+        this.chatOptionsFactory = chatOptionsFactory;
+        this.lockProvider = infra.getLocks();
+        this.defaultConversationTitle = defaultConversationTitle;
+    }
 
     /**
      * 判断会话是否为“新会话”，如果是则通过 AI 自动命名

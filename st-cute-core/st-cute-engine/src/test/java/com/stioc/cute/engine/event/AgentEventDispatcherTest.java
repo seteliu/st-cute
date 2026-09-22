@@ -1,5 +1,6 @@
 package com.stioc.cute.engine.event;
 
+import com.stioc.cute.engine.assembly.EngineInfra;
 import com.stioc.cute.engine.common.NotifyExecutor;
 import com.stioc.cute.engine.event.types.AgentEvent;
 import com.stioc.cute.engine.event.types.AgentEventType;
@@ -72,7 +73,8 @@ class AgentEventDispatcherTest {
     void fastModeDispatchesNetworkStreamAsync() throws Exception {
         ThreadCapturingListener listener = new ThreadCapturingListener(3, false);
         AgentEventDispatcher dispatcher = new AgentEventDispatcher(
-                List.of(listener), EngineStubs.engineLock(), new NotifyExecutor(2), true);
+                List.of(listener), new EngineInfra(EngineStubs.engineLock(), EngineStubs.engineExecutor()),
+                new NotifyExecutor(2), true);
 
         String callerThread = Thread.currentThread().getName();
         dispatcher.dispatch(1L, streamEvent(AgentEventType.AGENT_CONTENT_STREAM));
@@ -91,7 +93,8 @@ class AgentEventDispatcherTest {
     void nonFastModeDispatchesNetworkStreamSynchronously() throws Exception {
         ThreadCapturingListener listener = new ThreadCapturingListener(1, false);
         AgentEventDispatcher dispatcher = new AgentEventDispatcher(
-                List.of(listener), EngineStubs.engineLock(), new NotifyExecutor(2), false);
+                List.of(listener), new EngineInfra(EngineStubs.engineLock(), EngineStubs.engineExecutor()),
+                new NotifyExecutor(2), false);
 
         String callerThread = Thread.currentThread().getName();
         dispatcher.dispatch(1L, streamEvent(AgentEventType.AGENT_CONTENT_STREAM));
@@ -107,7 +110,8 @@ class AgentEventDispatcherTest {
     void nonFastModeKeepsToolLogAsync() throws Exception {
         ThreadCapturingListener listener = new ThreadCapturingListener(1, false);
         AgentEventDispatcher dispatcher = new AgentEventDispatcher(
-                List.of(listener), EngineStubs.engineLock(), new NotifyExecutor(2), false);
+                List.of(listener), new EngineInfra(EngineStubs.engineLock(), EngineStubs.engineExecutor()),
+                new NotifyExecutor(2), false);
 
         dispatcher.dispatch(1L, streamEvent(AgentEventType.TOOL_LOG_STREAM));
 
@@ -138,7 +142,8 @@ class AgentEventDispatcherTest {
             }
         };
         AgentEventDispatcher dispatcher = new AgentEventDispatcher(
-                List.of(failing, second), EngineStubs.engineLock(), new NotifyExecutor(2), false);
+                List.of(failing, second), new EngineInfra(EngineStubs.engineLock(), EngineStubs.engineExecutor()),
+                new NotifyExecutor(2), false);
 
         // 前者抛异常不应中断分发，后者必须照常执行
         dispatcher.dispatch(1L, streamEvent(AgentEventType.AGENT_CONTENT_STREAM));
@@ -151,7 +156,8 @@ class AgentEventDispatcherTest {
     void fastModeAllowsCrossConversationParallelism() throws Exception {
         int laneCount = 3;
         AgentEventDispatcher dispatcher = new AgentEventDispatcher(
-                List.of(), EngineStubs.engineLock(), new NotifyExecutor(laneCount + 2), true);
+                List.of(), new EngineInfra(EngineStubs.engineLock(), EngineStubs.engineExecutor()),
+                new NotifyExecutor(laneCount + 2), true);
         // 仅验证不抛异常且调用方不被阻塞（车道数远大于事件数）
         for (long cid = 1; cid <= 10; cid++) {
             dispatcher.dispatch(cid, streamEvent(AgentEventType.AGENT_CONTENT_STREAM));

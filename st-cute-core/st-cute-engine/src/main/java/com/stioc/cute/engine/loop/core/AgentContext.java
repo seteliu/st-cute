@@ -1,20 +1,19 @@
 package com.stioc.cute.engine.loop.core;
 
-import com.stioc.cute.engine.loop.types.ActiveLlmCall;
+import com.stioc.cute.engine.common.StreamBufferHolder;
+import com.stioc.cute.engine.common.StreamBufferType;
 import com.stioc.cute.engine.event.AgentEventDispatcher;
 import com.stioc.cute.engine.event.types.AgentEvent;
 import com.stioc.cute.engine.hook.AgentHookDispatcher;
 import com.stioc.cute.engine.hook.HookPayload;
 import com.stioc.cute.engine.hook.HookType;
-import com.stioc.cute.engine.common.StreamBufferHolder;
-import com.stioc.cute.engine.common.StreamBufferType;
+import com.stioc.cute.engine.loop.types.ActiveLlmCall;
 import com.stioc.cute.engine.tool.DynamicToolProvider;
+import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
-import lombok.AccessLevel;
-
 import okhttp3.Call;
-import java.util.Collection;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -126,7 +125,7 @@ public class AgentContext implements BaseAgentContext {
     }
 
     /**
-     * 当前权限兜底配置模式（字符串化承载，语义由宿主定义，如 READ_ONLY / SMART_APPROVAL / ALL_ALLOW）
+     * 当前权限兜底配置模式（字符串化承载，语义由宿主定义，如 STRICT_APPROVAL / RELAXED_APPROVAL / ALL_ALLOW）
      */
     private volatile String permissionMode = null;
 

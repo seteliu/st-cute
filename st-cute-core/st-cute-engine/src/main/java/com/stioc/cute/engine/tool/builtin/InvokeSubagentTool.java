@@ -1,22 +1,16 @@
 package com.stioc.cute.engine.tool.builtin;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.stioc.cute.engine.common.EngineExecutor;
+import com.stioc.cute.engine.event.AgentEventFactory;
+import com.stioc.cute.engine.loop.core.AgentContext;
+import com.stioc.cute.engine.loop.core.AgentContextManager;
+import com.stioc.cute.engine.loop.core.AgentLoopCoordinator;
+import com.stioc.cute.engine.store.types.*;
+import com.stioc.cute.engine.tool.CuteTool;
 import com.stioc.cute.engine.tool.types.ToolArgs;
 import com.stioc.cute.engine.tool.types.ToolExecutionContext;
 import com.stioc.cute.engine.tool.types.ToolResult;
-import com.stioc.cute.engine.tool.CuteTool;
-import com.stioc.cute.engine.loop.core.AgentContextManager;
-import com.stioc.cute.engine.loop.core.AgentLoopCoordinator;
-import com.stioc.cute.engine.loop.core.AgentContext;
-
-
-import com.stioc.cute.engine.event.AgentEventFactory;
-import com.stioc.cute.engine.store.types.ConversationPatch;
-import com.stioc.cute.engine.store.types.Conversation;
-import com.stioc.cute.engine.store.types.Message;
-import com.stioc.cute.engine.store.types.MessageRole;
-import com.stioc.cute.engine.store.types.MessageStatus;
-import com.stioc.cute.engine.common.EngineExecutor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 

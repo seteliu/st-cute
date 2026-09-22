@@ -1,5 +1,6 @@
 package com.stioc.cute.engine.loop.message;
 
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.llm.ChatOptionsFactory;
 import com.stioc.cute.engine.llm.types.CuteMessage;
 import com.stioc.cute.engine.llm.types.CuteMessageRole;
@@ -100,7 +101,7 @@ class LlmWindowManagerTest {
 
             AgentContext context = fixtureContext(cid);
             MessageHistoryAligner aligner = new MessageHistoryAligner(
-                    fixture.engine().getMessageStore(),
+                    new EngineStores(null, fixture.engine().getMessageStore()),
                     new com.stioc.cute.engine.prompt.SystemPromptAssembler(new ArrayList<>()),
                     newTestChatFactory(fixture),
                     List.of(),
@@ -148,7 +149,7 @@ class LlmWindowManagerTest {
 
             AgentContext context = fixtureContext(cid);
             MessageHistoryAligner aligner = new MessageHistoryAligner(
-                    fixture.engine().getMessageStore(),
+                    new EngineStores(null, fixture.engine().getMessageStore()),
                     new com.stioc.cute.engine.prompt.SystemPromptAssembler(new ArrayList<>()),
                     newTestChatFactory(fixture),
                     List.of(),
@@ -182,7 +183,7 @@ class LlmWindowManagerTest {
 
             AgentContext context = fixtureContext(cid);
             MessageHistoryAligner aligner = new MessageHistoryAligner(
-                    fixture.engine().getMessageStore(),
+                    new EngineStores(null, fixture.engine().getMessageStore()),
                     new com.stioc.cute.engine.prompt.SystemPromptAssembler(new ArrayList<>()),
                     newTestChatFactory(fixture),
                     List.of(),
@@ -215,7 +216,7 @@ class LlmWindowManagerTest {
 
             AgentContext context = fixtureContext(cid);
             MessageHistoryAligner aligner = new MessageHistoryAligner(
-                    fixture.engine().getMessageStore(),
+                    new EngineStores(null, fixture.engine().getMessageStore()),
                     new com.stioc.cute.engine.prompt.SystemPromptAssembler(new ArrayList<>()),
                     newTestChatFactory(fixture),
                     List.of(),
@@ -330,6 +331,6 @@ class LlmWindowManagerTest {
     }
 
     private static LlmWindowManager newManager() {
-        return new LlmWindowManager(null, null, new ChatOptionsFactory(), null, null, null);
+        return new LlmWindowManager(new EngineStores(null, null), null, new ChatOptionsFactory(), null, null, null);
     }
 }

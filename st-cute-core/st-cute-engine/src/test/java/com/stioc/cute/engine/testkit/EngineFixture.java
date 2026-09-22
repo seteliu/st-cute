@@ -1,6 +1,7 @@
 package com.stioc.cute.engine.testkit;
 
 import com.stioc.cute.engine.AgentEngine;
+import com.stioc.cute.engine.assembly.AgentEngineBuilder;
 import com.stioc.cute.engine.event.AgentEventListener;
 import com.stioc.cute.engine.hook.HookListener;
 import com.stioc.cute.engine.llm.ProviderResolver;
@@ -167,7 +168,7 @@ public final class EngineFixture implements AutoCloseable {
             ScriptedToolGuard toolGuard = new ScriptedToolGuard();
 
             ProviderResolver resolver = context -> provider;
-            AgentEngine.Builder engineBuilder = AgentEngine.builder()
+            AgentEngineBuilder engineBuilder = AgentEngine.builder()
                     .conversationStore(conversationStore)
                     .messageStore(messageStore)
                     .providerResolver(resolver)

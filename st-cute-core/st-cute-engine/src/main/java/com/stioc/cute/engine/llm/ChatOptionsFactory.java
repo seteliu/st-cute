@@ -1,8 +1,8 @@
 package com.stioc.cute.engine.llm;
 
-import com.stioc.cute.engine.llm.types.Provider;
 import com.stioc.cute.engine.llm.types.CuteChatOptions;
 import com.stioc.cute.engine.llm.types.CuteToolDefinition;
+import com.stioc.cute.engine.llm.types.Provider;
 import com.stioc.cute.engine.tool.CuteTool;
 import lombok.RequiredArgsConstructor;
 
@@ -25,7 +25,7 @@ public class ChatOptionsFactory {
     public CuteChatOptions buildOptions(Provider activeConfig, List<CuteTool> cuteTools) {
         double temperature = activeConfig.getTemperature() != null ? activeConfig.getTemperature() : 0.7;
         String modelName = activeConfig.getModelName();
-        
+
         List<CuteToolDefinition> tools = cuteTools.stream()
                 .map(tool -> {
                     String schema = tool.getArgumentSchema();

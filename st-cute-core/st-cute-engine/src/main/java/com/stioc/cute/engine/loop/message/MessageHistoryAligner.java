@@ -1,22 +1,18 @@
 package com.stioc.cute.engine.loop.message;
 
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.llm.CuteChatFactory;
 import com.stioc.cute.engine.llm.types.CuteMessage;
 import com.stioc.cute.engine.llm.types.CuteMessageRole;
 import com.stioc.cute.engine.llm.types.CuteToolCall;
-import com.stioc.cute.engine.loop.types.MessageIndexInfo;
-import com.stioc.cute.engine.loop.types.MessagePayload;
 import com.stioc.cute.engine.llm.types.Provider;
 import com.stioc.cute.engine.loop.core.AgentContext;
+import com.stioc.cute.engine.loop.types.MessageIndexInfo;
+import com.stioc.cute.engine.loop.types.MessagePayload;
 import com.stioc.cute.engine.prompt.SystemPromptAssembler;
 import com.stioc.cute.engine.store.MessageStore;
-import com.stioc.cute.engine.store.types.Message;
-import com.stioc.cute.engine.store.types.MessageQuery;
-import com.stioc.cute.engine.store.types.MessageRole;
-import com.stioc.cute.engine.store.types.MessageStatus;
+import com.stioc.cute.engine.store.types.*;
 import com.stioc.cute.engine.tool.ToolCallCodec;
-import com.stioc.cute.engine.store.types.SortDirection;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -44,18 +40,22 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MessageHistoryAligner {
 
-    private final MessageStore messageStore;
     private final SystemPromptAssembler systemPromptAssembler;
     private final CuteChatFactory chatClientFactory;
     private final List<MessageInterceptor> messageInterceptors;
     private final MessageDataReporter messageDataReporter;
 
-    public MessageHistoryAligner(MessageStore messageStore,
+    private final MessageStore messageStore;
+
+    /**
+     * 收存储对聚合，构造器内解包（本组件仅消费消息存储）
+     */
+    public MessageHistoryAligner(EngineStores stores,
                                  SystemPromptAssembler systemPromptAssembler,
                                  CuteChatFactory chatClientFactory,
                                  List<MessageInterceptor> messageInterceptors,
                                  MessageDataReporter messageDataReporter) {
-        this.messageStore = messageStore;
+        this.messageStore = stores.getMessages();
         this.systemPromptAssembler = systemPromptAssembler;
         this.chatClientFactory = chatClientFactory;
         // 构造时按 order 升序排定一次，历史重建每次直接复用，避免重复排序

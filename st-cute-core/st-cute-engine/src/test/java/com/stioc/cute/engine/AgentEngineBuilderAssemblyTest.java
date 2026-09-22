@@ -1,5 +1,6 @@
 package com.stioc.cute.engine;
 
+import com.stioc.cute.engine.assembly.AgentEngineBuilder;
 import com.stioc.cute.engine.common.EngineExecutor;
 import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.llm.ProviderResolver;
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link AgentEngine.Builder} 装配完整性单元测试。
+ * {@link AgentEngineBuilder} 装配完整性单元测试。
  * <p>
  * Builder 是全引擎唯一的装配点（引擎组件不经 Spring 容器出生），故装配错误
  * 只可能在此暴露。本测试不依赖 Mockito：全部供血接口均以 JDK 动态代理生成替身，
@@ -34,7 +35,7 @@ class AgentEngineBuilderAssemblyTest {
     /**
      * 组装一个全部供血齐备的 Builder（各用例按需覆写）
      */
-    private AgentEngine.Builder fullBuilder() {
+    private AgentEngineBuilder fullBuilder() {
         return AgentEngine.builder()
                 .conversationStore(EngineStubs.conversationStore())
                 .messageStore(EngineStubs.messageStore())
@@ -78,7 +79,7 @@ class AgentEngineBuilderAssemblyTest {
      */
     @Test
     void failsFastWhenRequiredSupplyMissing() {
-        AgentEngine.Builder builder = AgentEngine.builder()
+        AgentEngineBuilder builder = AgentEngine.builder()
                 .messageStore(EngineStubs.messageStore())
                 .providerResolver(EngineStubs.stub(ProviderResolver.class))
                 .toolGuard(EngineStubs.toolGuard())

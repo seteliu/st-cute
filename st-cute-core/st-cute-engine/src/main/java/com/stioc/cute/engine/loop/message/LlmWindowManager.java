@@ -4,15 +4,11 @@ import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.EncodingType;
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.llm.ChatOptionsFactory;
 import com.stioc.cute.engine.llm.CuteChat;
 import com.stioc.cute.engine.llm.CuteChatFactory;
-import com.stioc.cute.engine.llm.types.CuteChatOptions;
-import com.stioc.cute.engine.llm.types.CuteChatResponse;
-import com.stioc.cute.engine.llm.types.CuteMessage;
-import com.stioc.cute.engine.llm.types.CuteMessageRole;
-import com.stioc.cute.engine.llm.types.CutePrompt;
-import com.stioc.cute.engine.llm.types.Provider;
+import com.stioc.cute.engine.llm.types.*;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.loop.core.LoopDataReporter;
 import com.stioc.cute.engine.store.MessageStore;
@@ -20,9 +16,9 @@ import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessageQuery;
 import com.stioc.cute.engine.store.types.MessageRole;
 import com.stioc.cute.engine.store.types.SortDirection;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -31,15 +27,32 @@ import java.util.UUID;
  * 统一管理会话 Token 用量计算、大日志过滤折叠、以及滑动窗口物理防爆裁剪的 LLM 窗口管理器
  */
 @Slf4j
-@RequiredArgsConstructor
 public class LlmWindowManager {
 
-    private final MessageStore messageStore;
     private final CuteChatFactory chatClientFactory;
     private final ChatOptionsFactory chatOptionsFactory;
     private final MessageHistoryAligner messageHistoryAligner;
     private final MessageDataReporter messageDataReporter;
     private final LoopDataReporter loopDataReporter;
+
+    private final MessageStore messageStore;
+
+    /**
+     * 收存储对聚合，构造器内解包（本组件仅消费消息存储）
+     */
+    public LlmWindowManager(EngineStores stores,
+                            CuteChatFactory chatClientFactory,
+                            ChatOptionsFactory chatOptionsFactory,
+                            MessageHistoryAligner messageHistoryAligner,
+                            MessageDataReporter messageDataReporter,
+                            LoopDataReporter loopDataReporter) {
+        this.messageStore = stores.getMessages();
+        this.chatClientFactory = chatClientFactory;
+        this.chatOptionsFactory = chatOptionsFactory;
+        this.messageHistoryAligner = messageHistoryAligner;
+        this.messageDataReporter = messageDataReporter;
+        this.loopDataReporter = loopDataReporter;
+    }
 
     private static final EncodingRegistry encodingRegistry = Encodings.newDefaultEncodingRegistry();
     private static final Encoding cl100kBaseEncoding = encodingRegistry.getEncoding(EncodingType.CL100K_BASE);

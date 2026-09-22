@@ -1,5 +1,6 @@
 package com.stioc.cute.engine.testkit;
 
+import com.stioc.cute.engine.assembly.EngineInfra;
 import com.stioc.cute.engine.common.EngineExecutor;
 import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.common.NotifyExecutor;
@@ -195,7 +196,7 @@ public final class EngineStubs {
     public static AgentContext agentContext(Long cid) {
         EngineLock lock = engineLock();
         AgentEventDispatcher eventDispatcher = new AgentEventDispatcher(
-                List.of(), lock, new NotifyExecutor(), true);
+                List.of(), new EngineInfra(lock, engineExecutor()), new NotifyExecutor(), true);
         AgentHookDispatcher hookDispatcher = new AgentHookDispatcher(Optional.of(List.of()), lock);
         return new AgentContext(cid, eventDispatcher, hookDispatcher);
     }
@@ -220,7 +221,7 @@ public final class EngineStubs {
                                             EngineLock lock,
                                             boolean notifyFastMode) {
         AgentEventDispatcher eventDispatcher = new AgentEventDispatcher(
-                eventListeners, lock, new NotifyExecutor(), notifyFastMode);
+                eventListeners, new EngineInfra(lock, engineExecutor()), new NotifyExecutor(), notifyFastMode);
         AgentHookDispatcher hookDispatcher = new AgentHookDispatcher(Optional.of(hookListeners), lock);
         return new AgentContext(cid, eventDispatcher, hookDispatcher);
     }

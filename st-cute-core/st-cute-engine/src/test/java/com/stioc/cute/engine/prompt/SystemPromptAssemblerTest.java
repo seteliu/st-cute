@@ -23,8 +23,17 @@ class SystemPromptAssemblerTest {
     /**
      * 假贡献者：按构造参数返回固定内容或抛异常
      */
-    private record FakeContributor(int order, String content, boolean throwOnContribute)
-            implements SystemPromptContributor {
+    private static class FakeContributor implements SystemPromptContributor {
+
+        private final int order;
+        private final String content;
+        private final boolean throwOnContribute;
+
+        private FakeContributor(int order, String content, boolean throwOnContribute) {
+            this.order = order;
+            this.content = content;
+            this.throwOnContribute = throwOnContribute;
+        }
 
         @Override
         public int order() {

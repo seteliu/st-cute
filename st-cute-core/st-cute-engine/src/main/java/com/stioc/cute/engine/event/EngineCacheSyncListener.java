@@ -1,12 +1,12 @@
 package com.stioc.cute.engine.event;
 
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.event.types.AgentEvent;
 import com.stioc.cute.engine.event.types.ListenerTier;
 import com.stioc.cute.engine.loop.core.AgentContext;
+import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.ConversationPatch;
-import com.stioc.cute.engine.store.ConversationStore;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -18,10 +18,16 @@ import lombok.extern.slf4j.Slf4j;
  * </p>
  */
 @Slf4j
-@RequiredArgsConstructor
 public class EngineCacheSyncListener implements AgentEventListener {
 
     private final ConversationStore conversationStore;
+
+    /**
+     * 收存储对聚合，构造器内解包（本层只消费会话存储）
+     */
+    public EngineCacheSyncListener(EngineStores stores) {
+        this.conversationStore = stores.getConversations();
+    }
 
     @Override
     public ListenerTier getTier() {

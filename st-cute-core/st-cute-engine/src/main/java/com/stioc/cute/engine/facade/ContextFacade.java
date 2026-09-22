@@ -1,8 +1,7 @@
 package com.stioc.cute.engine.facade;
 
-import com.stioc.cute.engine.loop.core.AgentContextManager;
 import com.stioc.cute.engine.loop.core.AgentContext;
-
+import com.stioc.cute.engine.loop.core.AgentContextManager;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Collection;

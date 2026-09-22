@@ -1,9 +1,10 @@
 package com.stioc.cute.engine.event;
 
+import com.stioc.cute.engine.assembly.EngineInfra;
+import com.stioc.cute.engine.common.EngineLock;
+import com.stioc.cute.engine.common.NotifyExecutor;
 import com.stioc.cute.engine.event.types.AgentEvent;
 import com.stioc.cute.engine.event.types.ListenerTier;
-import com.stioc.cute.engine.common.NotifyExecutor;
-import com.stioc.cute.engine.common.EngineLock;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -63,9 +64,12 @@ public class AgentEventDispatcher {
      */
     private final boolean notifyFastMode;
 
-    public AgentEventDispatcher(List<AgentEventListener> eventListeners, EngineLock lockProvider,
+    /**
+     * 收技术设施装配壳（锁）与通知执行器，构造器内解包使用
+     */
+    public AgentEventDispatcher(List<AgentEventListener> eventListeners, EngineInfra infra,
                                 NotifyExecutor notifyExecutor, boolean notifyFastMode) {
-        this.lockProvider = lockProvider;
+        this.lockProvider = infra.getLocks();
         this.notifyExecutor = notifyExecutor;
         this.notifyFastMode = notifyFastMode;
         if (eventListeners == null || eventListeners.isEmpty()) {

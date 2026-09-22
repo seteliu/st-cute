@@ -1,5 +1,7 @@
 package com.stioc.cute.engine.loop.core;
 
+import com.stioc.cute.engine.assembly.EngineInfra;
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.event.AgentEventFactory;
 import com.stioc.cute.engine.llm.types.CuteUsage;
@@ -7,14 +9,7 @@ import com.stioc.cute.engine.loop.message.MessageDataReporter;
 import com.stioc.cute.engine.loop.types.SubAgentOutcome;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
-import com.stioc.cute.engine.store.types.Conversation;
-import com.stioc.cute.engine.store.types.ConversationPatch;
-import com.stioc.cute.engine.store.types.Message;
-import com.stioc.cute.engine.store.types.MessageQuery;
-import com.stioc.cute.engine.store.types.MessageRole;
-import com.stioc.cute.engine.store.types.MessageStatus;
-import com.stioc.cute.engine.store.types.SortDirection;
-import lombok.RequiredArgsConstructor;
+import com.stioc.cute.engine.store.types.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -33,7 +28,6 @@ import java.util.concurrent.locks.Lock;
  * </p>
  */
 @Slf4j
-@RequiredArgsConstructor
 public class LoopDataReporter {
 
     /**
@@ -41,9 +35,20 @@ public class LoopDataReporter {
      */
     private static final String DEFAULT_STOP_REASON = "子智能体运行被强制停止。";
 
+    private final MessageDataReporter messageDataReporter;
+
+    /**
+     * 收存储对与技术设施装配壳，构造器内解包为实际使用字段（装配壳拆完即弃，不作持有）
+     */
+    public LoopDataReporter(EngineStores stores, MessageDataReporter messageDataReporter, EngineInfra infra) {
+        this.messageDataReporter = messageDataReporter;
+        this.conversationStore = stores.getConversations();
+        this.messageStore = stores.getMessages();
+        this.lockProvider = infra.getLocks();
+    }
+
     private final ConversationStore conversationStore;
     private final MessageStore messageStore;
-    private final MessageDataReporter messageDataReporter;
     private final EngineLock lockProvider;
 
     /**

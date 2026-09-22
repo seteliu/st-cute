@@ -1,9 +1,9 @@
 package com.stioc.cute.engine.llm;
 
+import com.stioc.cute.engine.llm.types.CachedClient;
 import com.stioc.cute.engine.llm.types.Provider;
 import com.stioc.cute.engine.llm.types.ProviderProtocol;
 import com.stioc.cute.engine.loop.core.AgentContext;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -35,11 +35,9 @@ public class CuteChatFactory {
     }
 
     /**
-     * 缓存条目：客户端实例 + 组装时的配置快照（指纹比对基准）
+     * 缓存条目（{@link CachedClient}）：客户端实例 + 组装时的配置快照（指纹比对基准），
+     * 类型见 llm/types 包
      */
-    private record CachedClient(CuteChat client, Provider configSnapshot) {
-    }
-
     private final Map<String, CachedClient> cache = new ConcurrentHashMap<>();
 
     /**
@@ -69,12 +67,12 @@ public class CuteChatFactory {
 
         CachedClient cached = cache.computeIfAbsent(cacheKey, key -> assemble(config));
         // 指纹自失效：宿主配置变更 → resolver 返回的新快照与创建时快照不一致 → 重建替换
-        if (!config.equals(cached.configSnapshot())) {
+        if (!config.equals(cached.getConfigSnapshot())) {
             log.info("供应商配置发生变化，重建大模型客户端: {}", cacheKey);
             cached = new CachedClient(createClient(config), config);
             cache.put(cacheKey, cached);
         }
-        return cached.client();
+        return cached.getClient();
     }
 
     private CachedClient assemble(Provider config) {

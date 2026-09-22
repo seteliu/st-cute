@@ -1,5 +1,6 @@
 package com.stioc.cute.engine.event;
 
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.common.SFunction;
 import com.stioc.cute.engine.event.types.AgentEvent;
 import com.stioc.cute.engine.event.types.ListenerTier;
@@ -7,12 +8,7 @@ import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.loop.core.AgentContextManager;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
-import com.stioc.cute.engine.store.types.Conversation;
-import com.stioc.cute.engine.store.types.ConversationPatch;
-import com.stioc.cute.engine.store.types.Message;
-import com.stioc.cute.engine.store.types.MessagePatch;
-import com.stioc.cute.engine.store.types.MessageQuery;
-import lombok.RequiredArgsConstructor;
+import com.stioc.cute.engine.store.types.*;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -26,7 +22,6 @@ import java.util.List;
  * </p>
  */
 @Slf4j
-@RequiredArgsConstructor
 public class EngineDirectListener implements AgentEventListener {
 
     private static final List<SFunction<Conversation, String>> DELTA_SET_FIELDS = List.of(
@@ -37,6 +32,14 @@ public class EngineDirectListener implements AgentEventListener {
     private final ConversationStore conversationStore;
     private final MessageStore messageStore;
     private AgentContextManager contextManager;
+
+    /**
+     * 收存储对聚合，构造器内解包为实际使用的存储字段
+     */
+    public EngineDirectListener(EngineStores stores) {
+        this.conversationStore = stores.getConversations();
+        this.messageStore = stores.getMessages();
+    }
 
     /**
      * 两段式绑定上下文管理器（解耦 Builder 构造循环依赖）

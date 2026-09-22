@@ -1,5 +1,6 @@
 package com.stioc.cute.engine.loop.message;
 
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.llm.ChatOptionsFactory;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.store.types.Message;
@@ -168,6 +169,6 @@ class LlmWindowManagerCropTest {
      * 只需 token 估算能力，故除选项工厂外全部依赖传空（裁剪链路不触达它们）
      */
     private static LlmWindowManager newManager() {
-        return new LlmWindowManager(null, null, new ChatOptionsFactory(), null, null, null);
+        return new LlmWindowManager(new EngineStores(null, null), null, new ChatOptionsFactory(), null, null, null);
     }
 }

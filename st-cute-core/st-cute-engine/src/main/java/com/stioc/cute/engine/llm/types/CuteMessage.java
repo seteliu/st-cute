@@ -2,6 +2,7 @@ package com.stioc.cute.engine.llm.types;
 
 import lombok.Builder;
 import lombok.Data;
+
 import java.util.List;
 
 /**
@@ -25,7 +26,7 @@ public class CuteMessage {
      * 大模型思考内容
      */
     private final String reasoningContent;
-    
+
     /**
      * TOOL 专用：请求调用的唯一 ID
      */
@@ -35,7 +36,7 @@ public class CuteMessage {
      * TOOL 专用：工具名称
      */
     private final String toolName;
-    
+
     /**
      * ASSISTANT 专用：本次助手轮次发起的工具调用集合
      */

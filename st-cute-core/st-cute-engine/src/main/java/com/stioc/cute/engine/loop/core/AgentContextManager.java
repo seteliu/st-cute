@@ -1,15 +1,14 @@
 package com.stioc.cute.engine.loop.core;
 
+import com.stioc.cute.engine.assembly.EngineStores;
 import com.stioc.cute.engine.event.AgentEventDispatcher;
 import com.stioc.cute.engine.event.AgentEventFactory;
 import com.stioc.cute.engine.hook.AgentHookDispatcher;
 import com.stioc.cute.engine.loop.AgentContextInitializer;
-
-import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
+import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.MessageQuery;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -37,7 +36,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * </p>
  */
 @Slf4j
-@RequiredArgsConstructor
 public class AgentContextManager {
 
     private final AgentEventDispatcher eventDispatcher;
@@ -45,6 +43,20 @@ public class AgentContextManager {
     private final ConversationStore conversationStore;
     private final MessageStore messageStore;
     private final Optional<List<AgentContextInitializer>> contextInitializers;
+
+    /**
+     * 收存储对聚合，构造器内解包为实际使用的存储字段
+     */
+    public AgentContextManager(AgentEventDispatcher eventDispatcher,
+                               AgentHookDispatcher hookDispatcher,
+                               EngineStores stores,
+                               Optional<List<AgentContextInitializer>> contextInitializers) {
+        this.eventDispatcher = eventDispatcher;
+        this.hookDispatcher = hookDispatcher;
+        this.conversationStore = stores.getConversations();
+        this.messageStore = stores.getMessages();
+        this.contextInitializers = contextInitializers;
+    }
 
     /**
      * 内存活动上下文缓存容器 Map

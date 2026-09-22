@@ -4,13 +4,8 @@ import com.stioc.cute.engine.event.types.AgentEvent;
 import com.stioc.cute.engine.event.types.AgentEventType;
 import com.stioc.cute.engine.event.types.StreamChunkPayload;
 import com.stioc.cute.engine.loop.core.AgentContext;
-import com.alibaba.fastjson2.JSONObject;
-import com.stioc.cute.engine.store.types.Message;
-
-import java.util.Map;
-
-import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.ConversationPatch;
+import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessagePatch;
 
 /**
