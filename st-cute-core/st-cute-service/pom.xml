@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.stioc</groupId>
         <artifactId>st-cute-core</artifactId>
-        <version>0.2.3</version>
+        <version>0.2.4</version>
         <!-- 聚合根 pom 位于上级目录 -->
         <relativePath>../pom.xml</relativePath>
     </parent>
