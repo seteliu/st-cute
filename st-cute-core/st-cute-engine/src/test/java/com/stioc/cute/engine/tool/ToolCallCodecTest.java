@@ -26,7 +26,7 @@ class ToolCallCodecTest {
     void parsesAndRoundTripsList() {
         List<CuteToolCall> calls = List.of(
                 CuteToolCall.builder().id("call_1").name("read_file").arguments("{\"path\":\"a.txt\"}").build(),
-                CuteToolCall.builder().id("call_2").name("grep_search").arguments("{\"query\":\"x\"}").build());
+                CuteToolCall.builder().id("call_2").name("grep_search").arguments("{\"pattern\":\"x\"}").build());
 
         String raw = ToolCallCodec.writeList(calls);
         List<CuteToolCall> parsed = ToolCallCodec.parseList(raw);

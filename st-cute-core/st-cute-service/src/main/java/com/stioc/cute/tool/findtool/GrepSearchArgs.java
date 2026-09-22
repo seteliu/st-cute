@@ -8,7 +8,7 @@ import java.util.Map;
  * 局部/全局文本文件正文搜索匹配工具输入参数强类型绑定对象
  */
 public record GrepSearchArgs(
-        String query,
+        String pattern,
         String rootDir,
         boolean useRegex,
         boolean ignoreCase,
@@ -20,7 +20,7 @@ public record GrepSearchArgs(
 
     public static GrepSearchArgs from(Map<String, Object> arguments) {
         ToolArgs args = ToolArgs.of(arguments);
-        String query = args.getString("query");
+        String pattern = args.getString("pattern");
         String rootDir = args.getStringTrimmed("rootDir");
         boolean useRegex = Boolean.TRUE.equals(args.getBoolean("useRegex"));
         boolean ignoreCase = Boolean.TRUE.equals(args.getBoolean("ignoreCase"));
@@ -31,6 +31,6 @@ public record GrepSearchArgs(
                 ? Math.max(1, Math.min(MAX_RESULTS_LIMIT, maxResultsVal))
                 : DEFAULT_MAX_RESULTS;
 
-        return new GrepSearchArgs(query, rootDir, useRegex, ignoreCase, includeExcludedDirs, maxResults);
+        return new GrepSearchArgs(pattern, rootDir, useRegex, ignoreCase, includeExcludedDirs, maxResults);
     }
 }
