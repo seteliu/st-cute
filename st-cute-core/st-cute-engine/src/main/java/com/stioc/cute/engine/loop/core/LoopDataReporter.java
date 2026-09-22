@@ -4,15 +4,19 @@ import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.event.AgentEventFactory;
 import com.stioc.cute.engine.llm.types.CuteUsage;
 import com.stioc.cute.engine.loop.message.MessageDataReporter;
+import com.stioc.cute.engine.loop.types.SubAgentOutcome;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
 import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.ConversationPatch;
 import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessageQuery;
+import com.stioc.cute.engine.store.types.MessageRole;
+import com.stioc.cute.engine.store.types.MessageStatus;
 import com.stioc.cute.engine.store.types.SortDirection;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,6 +35,11 @@ import java.util.concurrent.locks.Lock;
 @Slf4j
 @RequiredArgsConstructor
 public class LoopDataReporter {
+
+    /**
+     * 默认停止原因：外部介入收场（INTERRUPTED）时未提供原因文案的兜底文案
+     */
+    private static final String DEFAULT_STOP_REASON = "子智能体运行被强制停止。";
 
     private final ConversationStore conversationStore;
     private final MessageStore messageStore;
@@ -95,43 +104,44 @@ public class LoopDataReporter {
 
     /**
      * 写子代理分支报告消息并从父会话等待屏障剔除该子会话占位，判定是否全部完成（通过事件上报）。
+     * <p>
+     * <b>收场定性内部推导</b>：以子会话当前库中的 {@code loopRunning} 为唯一事实源——仍在运行或已查无此人
+     * 即为外部介入（报告定性「已停止」并附 reason），已自行收尾则按其最后 ASSISTANT 状态如实呈现
+     * （已完成 / 失败 / 已中断，此时 reason 不参与）。调用方无需（也无法）替子会话选定性，
+     * 本方法汇报发生在清账之前，库值恒为「停止时刻」的真实现场。
+     * </p>
+     * <p>
+     * <b>顺序语义（关键）</b>：触发守卫必须先于报告发布。强制停止与宕机自愈介入后，
+     * 「同一子会话被汇报两次」成为常态（强停线程一次 + 子会话线程退出时 finally 一次），
+     * 若报告先落库，父会话将收到两份自相矛盾的结论（一份「已停止」、一份「已完成」）。
+     * 故本方法在锁内先行校验占位仍然存在，迟到/重复汇报整条丢弃。
+     * </p>
      *
      * @param parentContext 父会话运行上下文
      * @param subCid        子会话 ID
-     * @param errorDetail   错误描述详情（子智能体异常超时挂掉的报告），正常结束传 null
+     * @param reason        停止原因文案（仅外部介入定性时消费；正常结束传 null）
      * @return 若该子会话是最后一个完成的，返回 true；否则返回 false
      */
-    public boolean updateWaitingSubAgentToCompleted(AgentContext parentContext, Long subCid, String errorDetail) {
+    public boolean updateWaitingSubAgentToCompleted(AgentContext parentContext, Long subCid, String reason) {
         Long parentCid = parentContext.getCid();
-
-        // 1. 构建子代理工作报告（正常结束取子会话最后一条消息内容，异常结束携带错误详情）
-        String reportContent;
-        if (errorDetail != null) {
-            reportContent = buildReport(subCid, null, new RuntimeException(errorDetail));
-        } else {
-            Message lastMsg = messageStore.getByQuery(MessageQuery.builder()
-                    .cid(subCid)
-                    .sortField("id")
-                    .sortDirection(SortDirection.DESC)
-                    .build());
-            String lastContent = lastMsg != null ? lastMsg.getContent() : null;
-            reportContent = buildReport(subCid, lastContent, null);
-        }
-
-        messageDataReporter.createBranchMessage(parentContext, reportContent);
 
         // 会话级排他锁：与 updateWaitingToolToCompleted 对称的子 Agent 完成判定路径，
         // 防止多子 Agent 完成回调交错时重复拉起父会话下一轮
         Lock cidLock = lockProvider.getConversationDataLock(parentCid);
         cidLock.lock();
         try {
-            // 2. 入口验证：子会话 id 必须仍在等待集合中（对称触发守卫）。
-            // 僵死清理、forceReset 等路径已扣减过该 id 时，迟到的完成汇报直接丢弃
+            // 1. 入口验证：子会话 id 必须仍在等待集合中（对称触发守卫）。
+            // 强制停止/僵死自愈路径下「先扣减、后二次汇报被守卫拦截」是设计内常态，属预期事件故降为 debug；
+            // 该守卫真正要抓的是迟到/重复回调这类异常时序，若需排查再临时提级
             if (!parentContext.getWaitingSubCids().contains(subCid)) {
-                log.warn("[触发守卫] 子会话 id 不在等待集合中（重复/迟到/清理后滞留），丢弃本次汇报: parentCid={}, subCid={}",
+                log.debug("[触发守卫] 子会话 id 不在等待集合中（重复/迟到/清理后滞留），丢弃本次汇报: parentCid={}, subCid={}",
                         parentCid, subCid);
                 return false;
             }
+
+            // 2. 构建并发布子代理工作报告（收场定性依子会话当前库中运行态现场推导）
+            SubAgentOutcome outcome = SubAgentOutcome.of(conversationStore.getById(subCid));
+            messageDataReporter.createBranchMessage(parentContext, buildSubAgentReport(subCid, outcome, reason));
 
             // 3. 上报差量剔除子会话事件（事件链在锁内同步完成写盘与内存回填）
             ConversationPatch updatePayload = new ConversationPatch(parentCid)
@@ -147,6 +157,11 @@ public class LoopDataReporter {
 
     /**
      * 清空循环运行状态账目（DB 侧清空 waitingToolIds/waitingSubCids/计数器，loopRunning=0）。
+     * <p>
+     * 值为 null 经事件链直达 Store 的 updateByPatch，即「置 null 落库」的清空语义
+     * （不能走 updateByQuery——ORM 会忽略 null 字段，写了等于没写）；
+     * 事件链同时刷新内存运行态，是「强停 / 重启对账」等收口动作的唯一合法入口。
+     * </p>
      */
     public void clearLoopState(AgentContext context) {
         Long cid = context.getCid();
@@ -232,20 +247,74 @@ public class LoopDataReporter {
     }
 
     /**
-     * 子代理工作报告构建
+     * 子代理工作报告构建：状态行由「收场定性」与「子会话自身终态」共同推导，
+     * 使正常结束、异常结束、强制停止三条路径共用同一收口，父会话收到的结论恒与子会话实际死法一致。
+     * <p>
+     * <b>为何不能只看消息状态</b>：子 Agent 正在跑时，其最后一条 ASSISTANT 往往是「工具调用载体」
+     * （{@code updateAssistantToToolCalls} 已置 SUCCESS），此刻强杀它若纯看状态会误报「已完成」。
+     * 故规则为：{@link SubAgentOutcome#INTERRUPTED} 一律以「已停止」收场，
+     * 唯一例外是子会话自身已落 FAILED——真出错的错误正文比外部原因更有价值，如实报「失败」；
+     * {@link SubAgentOutcome#NATURAL} 时纯按状态推导（已完成 / 失败 / 已中断）。
+     * </p>
+     * <p>
+     * 取 ASSISTANT 而非「任意末条」的原因：末条常为 TOOL 消息，其正文是工具结果 JSON
+     * （失败时为一串 {@code {"error": ...}}），直接当结果摘要喂给父会话模型会造成误导。
+     * </p>
+     *
+     * @param subCid  子会话 ID
+     * @param outcome 收场定性（NATURAL 按自身终态呈现；INTERRUPTED 定性为「已停止」，FAILED 除外）
+     * @param reason  停止原因（仅 INTERRUPTED 定性时消费）
      */
-    private String buildReport(Long subCid, String assistantOutput, Throwable runThrowable) {
+    private String buildSubAgentReport(Long subCid, SubAgentOutcome outcome, String reason) {
+        Message lastAssistant = messageStore.getByQuery(MessageQuery.builder()
+                .cid(subCid)
+                .role(MessageRole.ASSISTANT)
+                .sortField("id")
+                .sortDirection(SortDirection.DESC)
+                .build());
+        String output = lastAssistant != null ? lastAssistant.getContent() : null;
+        MessageStatus subStatus = lastAssistant != null && lastAssistant.getStatus() != null
+                ? lastAssistant.getStatus()
+                : MessageStatus.SUCCESS;
+        boolean interrupted = SubAgentOutcome.INTERRUPTED == outcome;
+
+        String stateLine;
+        String reasonLine = null;
+        if (interrupted && MessageStatus.FAILED != subStatus) {
+            // 外部介入优先：定性「已停止」并附原因（FAILED 例外——自身已落失败终态时如实报失败，
+            // 错误正文比外部原因对父会话更有价值）
+            stateLine = "运行状态: 已停止";
+            reasonLine = StringUtils.defaultIfBlank(reason, DEFAULT_STOP_REASON);
+        } else {
+            switch (subStatus) {
+                case FAILED -> {
+                    // 子会话自身已落失败终态：如实报失败，原因优先取助手消息里的错误正文
+                    stateLine = "运行状态: 失败";
+                    reasonLine = StringUtils.isNotBlank(output) ? output
+                            : StringUtils.defaultIfBlank(reason, "子智能体执行失败，未保留错误详情。");
+                }
+                case CANCELED -> {
+                    stateLine = "运行状态: 已停止";
+                    reasonLine = StringUtils.defaultIfBlank(reason, DEFAULT_STOP_REASON);
+                }
+                case PENDING, RUNNING, WAITING_APPROVAL -> {
+                    // 中间态且非外部介入：纯粹停留在中间态（如进程曾中断）
+                    stateLine = "运行状态: 已中断";
+                    reasonLine = "子智能体执行记录停留在未完成状态，疑似服务中断。";
+                }
+                default -> stateLine = "运行状态: 已完成";
+            }
+        }
+
         StringBuilder report = new StringBuilder();
         report.append("[子 Agent 工作报告]\n");
         report.append("子 Agent 会话 ID: ").append(subCid).append("\n");
-        if (runThrowable != null) {
-            report.append("运行状态: 失败 (").append(runThrowable.getClass().getSimpleName()).append(")\n");
-            report.append("错误信息: ").append(runThrowable.getMessage()).append("\n");
-        } else {
-            report.append("运行状态: 已完成\n");
+        report.append(stateLine).append("\n");
+        if (reasonLine != null) {
+            report.append("原因: ").append(reasonLine).append("\n");
         }
         report.append("结果摘要:\n");
-        report.append(assistantOutput != null && !assistantOutput.isEmpty() ? assistantOutput : "(无输出内容)");
+        report.append(StringUtils.isNotBlank(output) ? output : "(无输出内容)");
         return report.toString();
     }
 

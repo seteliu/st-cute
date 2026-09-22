@@ -121,11 +121,15 @@ public final class CommandResultBuilder {
 
     /**
      * 发送控制台增量日志事件
+     *
+     * @param messageId    工具消息 ID（日志流按消息 ID 归属；为 null 时不推送）
+     * @param text         增量日志文本
+     * @param agentContext 会话上下文
      */
-    public static void sendIncrementalLog(String toolCallId, String text, AgentContext agentContext) {
-        if (toolCallId != null && agentContext != null) {
+    public static void sendIncrementalLog(Long messageId, String text, AgentContext agentContext) {
+        if (messageId != null && agentContext != null) {
             try {
-                agentContext.publishEvent(AgentEventFactory.createToolLogStream(agentContext, toolCallId, text));
+                agentContext.publishEvent(AgentEventFactory.createToolLogStream(agentContext, messageId, text));
             } catch (Exception e) {
                 log.error("发送控制台流式日志出错", e);
             }

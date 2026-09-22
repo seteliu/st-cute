@@ -108,6 +108,9 @@ public class AgentContextManager {
                             ctx.setLoopRunning(conv.getLoopRunning() == 1);
                         }
 
+                        // 恢复等待屏障（waitingToolIds / waitingSubCids）
+                        restoreWaitingBarriers(ctx, conv);
+
                         // 恢复工作区标识（宿主 ProjectService 等业务层解析语义，引擎不解释）
                         if (conv.getWorkspaceId() != null) {
                             ctx.setWorkspaceId(conv.getWorkspaceId());
@@ -126,6 +129,42 @@ public class AgentContextManager {
 
             return ctx;
         });
+    }
+
+    /**
+     * 从数据库恢复等待屏障到内存上下文（waitingToolIds / waitingSubCids）。
+     * <p>
+     * 屏障是「本进程内仍有工具/子循环在跑」的内存事实，库中两列只是它的镜像。
+     * 进程重启后内存清零而库值残留，若恢复时不灌回内存，会出现「库非空、内存空」的不一致：
+     * 子会话终止汇报的触发守卫读内存判定占位不存在 → 直接丢弃 → 父会话的屏障永远扣不掉。
+     * 故此处与 {@code EngineCacheSyncListener} 保持同一解析口径（逗号分隔、去空白、跳过空串），
+     * 使「首次触碰即一致」成为不变量，重启对账等后续流程才能正确工作。
+     * </p>
+     */
+    private void restoreWaitingBarriers(AgentContext ctx, Conversation conv) {
+        ctx.getWaitingToolIds().clear();
+        if (StringUtils.isNotBlank(conv.getWaitingToolIds())) {
+            for (String id : conv.getWaitingToolIds().split(",")) {
+                if (StringUtils.isNotBlank(id)) {
+                    ctx.getWaitingToolIds().add(id.trim());
+                }
+            }
+        }
+
+        ctx.getWaitingSubCids().clear();
+        if (StringUtils.isNotBlank(conv.getWaitingSubCids())) {
+            for (String id : conv.getWaitingSubCids().split(",")) {
+                String trimmed = id.trim();
+                if (StringUtils.isBlank(trimmed)) {
+                    continue;
+                }
+                try {
+                    ctx.getWaitingSubCids().add(Long.valueOf(trimmed));
+                } catch (NumberFormatException e) {
+                    log.warn("会话 {} 的 waitingSubCids 含非法子会话 ID，已跳过: {}", conv.getId(), trimmed);
+                }
+            }
+        }
     }
 
     /**
@@ -252,7 +291,7 @@ public class AgentContextManager {
         try {
             eventDispatcher.dispatch(cid, AgentEventFactory.createConversationDelete(context, cid));
         } catch (Exception e) {
-            log.warn("分发删除会话事件失败, cid={}", cid, e);
+            log.warn("分发删除会话事件失败: cid={}", cid, e);
         }
         removeContext(cid);
     }

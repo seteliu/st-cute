@@ -69,6 +69,13 @@ public class AgentEventFactory {
     }
 
     /**
+     * 创建「思考流清空」控制信号事件（透明重试重放前发出，指示下游丢弃已累积的思考内容）
+     */
+    public static AgentEvent createThinkingStreamClear(AgentContext context, Long messageId) {
+        return build(context, AgentEventType.AGENT_THINKING_STREAM, StreamChunkPayload.clear(messageId));
+    }
+
+    /**
      * 创建大模型正文流式输出片段事件
      */
     public static AgentEvent createContentStream(AgentContext context, Long messageId, String chunkContent) {
@@ -76,10 +83,20 @@ public class AgentEventFactory {
     }
 
     /**
-     * 创建工具运行日志控制台增量输出流事件
+     * 创建「正文流清空」控制信号事件（透明重试重放前发出，指示下游丢弃已累积的正文内容）
      */
-    public static AgentEvent createToolLogStream(AgentContext context, String toolCallId, String text) {
-        return build(context, AgentEventType.TOOL_LOG_STREAM, new StreamChunkPayload(toolCallId, text));
+    public static AgentEvent createContentStreamClear(AgentContext context, Long messageId) {
+        return build(context, AgentEventType.AGENT_CONTENT_STREAM, StreamChunkPayload.clear(messageId));
+    }
+
+    /**
+     * 创建工具运行日志控制台增量输出流事件
+     *
+     * @param messageId 工具消息 ID（与助手流统一按消息 ID 归属）
+     * @param text      增量日志文本
+     */
+    public static AgentEvent createToolLogStream(AgentContext context, Long messageId, String text) {
+        return build(context, AgentEventType.TOOL_LOG_STREAM, new StreamChunkPayload(messageId, text));
     }
 
     /**

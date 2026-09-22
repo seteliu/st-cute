@@ -56,8 +56,11 @@ public final class CommandExecutionHandler {
 
     /**
      * 执行后台持久服务命令。
+     *
+     * @param toolCallId   工具调用 ID（进程登记与追踪使用）
+     * @param messageId    工具消息 ID（控制台日志流按消息 ID 归属）
      */
-    public static String executeBackground(Process process, String toolCallId, AgentContext agentContext,
+    public static String executeBackground(Process process, String toolCallId, Long messageId, AgentContext agentContext,
                                            String finalCommand, File dir, Charset forcedCharset) {
         boolean needDetect = IS_WINDOWS && forcedCharset == null;
         StringBuffer backgroundOutput = new StringBuffer();
@@ -70,7 +73,7 @@ public final class CommandExecutionHandler {
                             forcedCharset != null ? forcedCharset : StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    CommandResultBuilder.sendIncrementalLog(toolCallId, line + "\n", agentContext);
+                    CommandResultBuilder.sendIncrementalLog(messageId, line + "\n", agentContext);
                     log.info("[后台控制台输出 - {}] {}", toolCallId, line);
 
                     // 保留前期一部分报错日志提供给主线程失败返回
@@ -157,8 +160,11 @@ public final class CommandExecutionHandler {
 
     /**
      * 执行前台同步命令。
+     *
+     * @param toolCallId 工具调用 ID（进程登记与追踪使用）
+     * @param messageId  工具消息 ID（控制台日志流按消息 ID 归属）
      */
-    public static String executeForeground(Process process, String toolCallId, AgentContext agentContext,
+    public static String executeForeground(Process process, String toolCallId, Long messageId, AgentContext agentContext,
                                            String finalCommand, File dir, Charset forcedCharset,
                                            long idleTimeoutMs, long maxTimeoutMs, boolean bashEntry,
                                            String repeatFingerprint) {
@@ -179,7 +185,7 @@ public final class CommandExecutionHandler {
                 while ((line = reader.readLine()) != null) {
                     lastOutputTime.set(System.currentTimeMillis());
                     sb.append(line).append("\n");
-                    CommandResultBuilder.sendIncrementalLog(toolCallId, line + "\n", agentContext);
+                    CommandResultBuilder.sendIncrementalLog(messageId, line + "\n", agentContext);
                     if (sb.length() > CommandResultBuilder.OUTPUT_PROTECT_LIMIT) {
                         log.warn("execute_command 输出超过保护上限 {} 字符，判定失控刷屏，级联强杀整个进程树", CommandResultBuilder.OUTPUT_PROTECT_LIMIT);
                         sb.append("\n... [输出已超过保护上限 ").append(CommandResultBuilder.OUTPUT_PROTECT_LIMIT)
@@ -188,7 +194,16 @@ public final class CommandExecutionHandler {
                         break;
                     }
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable t) {
+                // 不静默吞掉：读取中断会让输出在此处截断且模型无从知晓，
+                // 需在日志留痕并把原因回显到结果中，避免"看似成功实则残缺"的误导。
+                // 刻意接 Throwable：本工具常被用于在服务自身项目上跑构建（如 mvn compile），
+                // 构建会重写运行中服务的 target/classes，读流线程首次懒加载工具类时撞上
+                // 类文件重写窗口会抛 NoClassDefFoundError 等 Error——若不兜住，outputFuture
+                // 永不完成、主线程组装结果的同款懒加载二次炸穿，工具调用永久挂死无结果
+                log.warn("命令输出读取异常，输出可能不完整: toolCallId={}, 原因={}", toolCallId, t.getMessage());
+                sb.append("\n... [输出读取中断，以下内容可能不完整: ")
+                        .append(t.getMessage()).append("] ...\n");
             }
             return sb.toString();
         }, task -> VirtualThreads.run("cmd-stdout-" + (toolCallId != null ? toolCallId : "anon"), task));

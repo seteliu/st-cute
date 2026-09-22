@@ -25,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -196,6 +197,17 @@ public class AgentLoopProcessor {
 
     /**
      * 消费 LLM 流式响应，并汇总文本、思考内容、工具调用和 usage 元数据。
+     * <p>
+     * <b>重试语义（关键）</b>：{@code streamConsume} 的 consumer 每次 HTTP 尝试都会被调用一次，
+     * 装饰器透明重试时会从头发起并重新 accept，故本 lambda 体内必须<b>先重置累加器</b>，
+     * 使「一次尝试 = 一份独立累积状态」。否则流在已产出部分内容后失败时，
+     * 失败前累积的片段会被重试叠加第二遍，最终思考/正文出现重复。
+     * </p>
+     * <p>
+     * 注意边界：本方法只保证<b>最终内容</b>（返回值与落库）不重复；重试重发时
+     * 已推向前端的流式通知会重复到达，这属于中间过程展示（渲染层按累加处理），
+     * 刻意不做缓冲回滚。
+     * </p>
      */
     private CuteChatResponse consumeChatResponseStream(CuteChat cuteChat, CutePrompt prompt, AgentContext context) throws InterruptedException {
         Long activeAssistantMsgId = context.getActiveAssistantMsgId();
@@ -205,45 +217,63 @@ public class AgentLoopProcessor {
         StringBuilder reasoningBuilder = new StringBuilder();
         List<StreamingToolCall> streamingToolCalls = new ArrayList<>();
         AtomicReference<CuteUsage> usageRef = new AtomicReference<>();
+        AtomicInteger attemptCount = new AtomicInteger();
 
-        cuteChat.streamConsume(prompt, stream -> stream
-                .takeWhile(_ -> !context.isCanceled())
-                .forEach(chatResponse -> {
-                    String content = chatResponse.getContent();
-                    String reasoning = chatResponse.getReasoningContent();
+        cuteChat.streamConsume(prompt, stream -> {
+            // 每次尝试进入时重置累积状态：本 lambda 会被调用多次（初始尝试 + 各次透明重试），
+            // 且重试从头发送完整内容，不清空即会把失败前的产出叠成重复内容。
+            contentBuilder.setLength(0);
+            reasoningBuilder.setLength(0);
+            streamingToolCalls.clear();
+            usageRef.set(null);
 
-                    if (chatResponse.getToolCalls() != null && !chatResponse.getToolCalls().isEmpty()) {
-                        for (var tc : chatResponse.getToolCalls()) {
-                            if (StringUtils.isNotBlank(tc.getId())) {
-                                StreamingToolCall existing = streamingToolCalls.stream()
-                                        .filter(p -> p.id.equals(tc.getId()))
-                                        .findFirst().orElse(null);
-                                if (existing == null) {
-                                    streamingToolCalls.add(new StreamingToolCall(tc.getId(), tc.getName(), tc.getArguments()));
+            // 重试（非首次尝试）时额外向下游发出清空信号：已推向前端的流式内容是累加语义，
+            // 若不通知丢弃，重放内容会被继续叠加（用户可见的思考/正文重复）。
+            // 信号先于本次重放的首片内容发出，二者经同会话同车道保序，故下游必先清空再累积。
+            // 首次尝试不发；零产出失败时发出亦无害（清空的是空缓存），故无需判断是否已产出。
+            if (attemptCount.incrementAndGet() > 1) {
+                context.publishEvent(AgentEventFactory.createThinkingStreamClear(context, activeAssistantMsgId));
+                context.publishEvent(AgentEventFactory.createContentStreamClear(context, activeAssistantMsgId));
+            }
+
+            stream.takeWhile(_ -> !context.isCanceled())
+                    .forEach(chatResponse -> {
+                        String content = chatResponse.getContent();
+                        String reasoning = chatResponse.getReasoningContent();
+
+                        if (chatResponse.getToolCalls() != null && !chatResponse.getToolCalls().isEmpty()) {
+                            for (var tc : chatResponse.getToolCalls()) {
+                                if (StringUtils.isNotBlank(tc.getId())) {
+                                    StreamingToolCall existing = streamingToolCalls.stream()
+                                            .filter(p -> p.id.equals(tc.getId()))
+                                            .findFirst().orElse(null);
+                                    if (existing == null) {
+                                        streamingToolCalls.add(new StreamingToolCall(tc.getId(), tc.getName(), tc.getArguments()));
+                                    } else {
+                                        existing.arguments.append(tc.getArguments());
+                                    }
                                 } else {
-                                    existing.arguments.append(tc.getArguments());
-                                }
-                            } else {
-                                if (!streamingToolCalls.isEmpty()) {
-                                    streamingToolCalls.get(streamingToolCalls.size() - 1).arguments.append(tc.getArguments());
+                                    if (!streamingToolCalls.isEmpty()) {
+                                        streamingToolCalls.get(streamingToolCalls.size() - 1).arguments.append(tc.getArguments());
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if (StringUtils.isNotEmpty(reasoning)) {
-                        reasoningBuilder.append(reasoning);
-                        context.publishEvent(AgentEventFactory.createThinkingStream(context, activeAssistantMsgId, reasoning));
-                    }
-                    if (StringUtils.isNotEmpty(content)) {
-                        contentBuilder.append(content);
-                        context.publishEvent(AgentEventFactory.createContentStream(context, activeAssistantMsgId, content));
-                    }
+                        if (StringUtils.isNotEmpty(reasoning)) {
+                            reasoningBuilder.append(reasoning);
+                            context.publishEvent(AgentEventFactory.createThinkingStream(context, activeAssistantMsgId, reasoning));
+                        }
+                        if (StringUtils.isNotEmpty(content)) {
+                            contentBuilder.append(content);
+                            context.publishEvent(AgentEventFactory.createContentStream(context, activeAssistantMsgId, content));
+                        }
 
-                    if (chatResponse.getUsage() != null) {
-                        usageRef.set(chatResponse.getUsage());
-                    }
-                }));
+                        if (chatResponse.getUsage() != null) {
+                            usageRef.set(chatResponse.getUsage());
+                        }
+                    });
+        });
 
         long callDuration = System.currentTimeMillis() - callStart;
 

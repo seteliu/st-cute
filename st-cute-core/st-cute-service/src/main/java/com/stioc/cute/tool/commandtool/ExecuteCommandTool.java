@@ -151,6 +151,8 @@ public class ExecuteCommandTool implements CuteTool {
         }
 
         String toolCallId = context.toolCallId();
+        // 工具消息 ID：控制台日志流按消息 ID 归属（与助手流统一模型）
+        Long messageId = context.messageId();
         Process process = null;
 
         try {
@@ -165,17 +167,21 @@ public class ExecuteCommandTool implements CuteTool {
             // 7. 分流前后台执行模式
             if (runInBackground) {
                 return CommandExecutionHandler.executeBackground(
-                        process, toolCallId, agentContext, finalCommand, dir, forcedCharset
+                        process, toolCallId, messageId, agentContext, finalCommand, dir, forcedCharset
                 );
             }
 
             return CommandExecutionHandler.executeForeground(
-                    process, toolCallId, agentContext, finalCommand, dir, forcedCharset,
+                    process, toolCallId, messageId, agentContext, finalCommand, dir, forcedCharset,
                     idleTimeoutMs, maxTimeoutMs, launchSpec.bashEntry(), repeatFingerprint
             );
 
-        } catch (Exception e) {
-            log.error("execute_command 执行异常", e);
+        } catch (Throwable t) {
+            // 刻意接 Throwable 而非 Exception：本工具常被用于在服务自身项目上跑构建（如 mvn compile），
+            // 构建会重写运行中服务的 target/classes，执行链路上任何类（如 CommandResultBuilder）的
+            // 首次懒加载撞上重写窗口都会抛 NoClassDefFoundError 等 Error——若放任穿透，工具调用
+            // 永久挂死无结果且进程树无人清扫。此处兜住：强杀进程树 + 返回错误让模型可感知重试
+            log.error("execute_command 执行异常", t);
             if (process != null) {
                 try {
                     // 异常兜底同样级联清扫整棵进程树，防止半启动状态的孙进程脱钩残留
@@ -184,7 +190,7 @@ public class ExecuteCommandTool implements CuteTool {
                     log.error("级联强杀进程树异常", ex);
                 }
             }
-            return ToolResult.error("命令执行发生异常: " + e.getMessage());
+            return ToolResult.error("命令执行发生异常: " + t.getMessage());
         } finally {
             ProcessTracker.cleanupOnFinish(agentContext, toolCallId, runInBackground);
         }

@@ -58,6 +58,19 @@ export interface Conversation {
   waitingSubCids?: number[]
 }
 
+/** 聊天输入框的暂存附件结构（按会话吸附的草稿附件，暂存于前端 store，发送时随消息一并提交） */
+export interface StagedFile {
+  id: string
+  file: File
+  name: string
+  size: number
+  isImage: boolean
+  previewUrl?: string
+  status: 'idle' | 'uploading' | 'success' | 'error'
+  uploadedPath?: string
+  mimeType?: string
+}
+
 export interface Project {
   id: number
   name: string
@@ -73,9 +86,15 @@ export interface LimitMessageDto {
   truncated: boolean
 }
 
+/** 流式切片语义类型（与后端 StreamChunkType 对齐）：null/缺省=常规增量内容，CLEAR=清空重放 */
+export type StreamChunkType = 'CLEAR'
+
 /** 流式切片推送载荷契约（与后端 StreamChunkPayload 对齐） */
 export interface StreamChunkPayload {
-  id: number | string
+  /** 目标消息 ID：思考流/正文流为助手消息 ID，工具日志流为工具消息 ID（三条流统一按消息 ID 归属） */
+  id: number
   text: string
+  /** 切片语义类型：缺省表示常规增量；CLEAR 表示透明重试重放前发出、需丢弃已累积内容 */
+  type?: StreamChunkType | null
 }
 

@@ -5,6 +5,7 @@ import com.stioc.cute.engine.common.EngineLock;
 import com.stioc.cute.engine.loop.message.MessageDataReporter;
 import com.stioc.cute.engine.store.ConversationStore;
 import com.stioc.cute.engine.store.MessageStore;
+import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.ConversationQuery;
 import com.stioc.cute.engine.store.types.Message;
 import com.stioc.cute.engine.store.types.MessageQuery;
@@ -14,6 +15,8 @@ import com.stioc.cute.engine.support.ChatNamingHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 
 /**
@@ -93,11 +96,13 @@ public class AgentLoopCoordinator {
                 }
                 // 联动 Hook：若是子智能体且已停止运行，写入工作报告并尝试唤醒父智能体
                 if (context.getParentCid() != null) {
-                    // 只有子代理会话的 loopRunning 变成 0（真正推理终结且助手消息入库）时，才向父智能体汇报
+                    // 只有子代理会话的 loopRunning 变成 0（真正推理终结且助手消息入库）时，才向父智能体汇报。
+                    // 收场定性由 LoopDataReporter 依子会话库中运行态现场推导（已完成/失败/已中断），无需传原因
                     if (!isConversationLoopRunning(context.getCid())) {
                         AgentContext parentContext = agentContextManager.getOrCreateContext(context.getParentCid());
-                        boolean allDone = loopDataReporter.updateWaitingSubAgentToCompleted(parentContext, context.getCid(), null);
-                        if (allDone) {
+                        boolean allDone = loopDataReporter.updateWaitingSubAgentToCompleted(parentContext,
+                                context.getCid(), null);
+                        if (allDone && !parentContext.isCanceled()) {
                             log.debug("[AgentLoopCoordinator] 所有子智能体已完成，异步拉起父智能体: parentCid={}", context.getParentCid());
                             executeLoopAsync(context.getParentCid());
                         }
@@ -144,15 +149,67 @@ public class AgentLoopCoordinator {
 
     /**
      * 强制重置 Loop 状态（DB 侧重置快照数据，同步中断并等待内存中活跃执行线程退出，并将挂起的消息标为 CANCELED）
+     * <p>
+     * 顶层会话调用时会级联强停其名下仍在运行的子会话——「主会话停止」的语义必须是整棵树停止，
+     * 否则子 Agent 会在后台继续烧 token 并把结论投递给一个已经停摆的父会话。
+     * </p>
+     * <p>
+     * 用户主动停止：父会话真在等待子会话时会被唤醒补一轮汇总（allowParentWake=true）。
+     * </p>
      */
     public void forceResetLoopState(Long cid) {
-        log.debug("[AgentLoopCoordinator] 开始强制重置 Loop 状态并强制中断线程: cid={}", cid);
+        forceResetLoopState(cid, null, true);
+    }
+
+    /**
+     * 强制重置 Loop 状态的完整形态。
+     * <p>
+     * <b>停止语义的三条不变量</b>：
+     * <ol>
+     *   <li><b>级联</b>：停父必停子树，且级联排在父自身清账之前——父屏障若先被抹掉，
+     *       子会话的终止汇报会被触发守卫当作「迟到」丢弃，父会话消息流里将不留任何痕迹；</li>
+     *   <li><b>等同错误结束</b>：子会话被停后仍要向父会话写工作报告并扣减等待屏障，
+     *       否则父会话的屏障永远扣不掉、父永远醒不来；</li>
+     *   <li><b>不复活</b>：停止期间父会话不得被级联汇报误唤醒（父自身已置 canceled，
+     *       该门禁在 {@link #executeLoopSync} 与 {@link #notifyToolCompleted} 双重兜底）。
+     * </ol>
+     * </p>
+     *
+     * @param cid        目标会话 ID
+     * @param reason     停止原因文案（纯展示用途：本会话恰好是子会话、需向父会话汇报时才被消费；
+     *                   顶层会话忽略。为空时取默认文案）
+     * @param allowParentWake 父会话屏障清空时是否允许唤醒父会话补一轮汇总。
+     *                   取值由调用场景决定：用户主动停止/定时自愈为 true（父会话真在等）；
+     *                   进程重启自愈为 false（D1 裁决：无人值守不自动续跑）。
+     *                   作用于父会话侧，与当前会话自身无关——当前会话是顶层会话时该值无消费方
+     */
+    public void forceResetLoopState(Long cid, String reason, boolean allowParentWake) {
+        log.debug("[AgentLoopCoordinator] 开始强制重置 Loop 状态并强制中断线程: cid={}, allowParentWake={}",
+                cid, allowParentWake);
 
         AgentContext context = agentContextManager.getOrCreateContext(cid);
-        // 1. 调用数据上报器仅清空 DB 的 Loop 状态指标，保留上报收口
-        loopDataReporter.clearLoopState(context);
 
-        // 2. 抢占式清理：将本会话所有尚未完成的 TOOL 与 ASSISTANT 消息全部标记为 CANCELED
+        // 1. 抢占取消门禁：先置 canceled 再动手，防止级联与汇报期间父会话被误唤醒后真的开跑
+        context.setCanceled(true);
+
+        // 2. 级联强停仍在运行的子会话（必须排在自身清账之前，保证子会话的终止汇报能正常落库并扣减屏障；
+        //    且必须排在清账之前才能读到父会话此刻完整的待办子会话屏障，据以判定谁还在跑）
+        stopSubConversations(context, allowParentWake);
+
+        // 3. 向父会话汇报自身的停止（子会话专有：等同错误结束，仅状态与原因不同。
+        //    收场定性由 LoopDataReporter 依子会话停止时刻的库中运行态现场推导，无需调用方传递）
+        reportStopToParent(context, reason, allowParentWake);
+
+        // 4. 调用数据上报器仅清空 DB 的 Loop 状态指标，保留上报收口
+        //    （异常隔离：此前插入的级联与汇报环节已各自容错，此处再兜一层，
+        //     确保「用户点了停止」这一语义上最关键的清场动作绝不会被任何上游异常跳过）
+        try {
+            loopDataReporter.clearLoopState(context);
+        } catch (Exception e) {
+            log.warn("[AgentLoopCoordinator] 清空会话循环账目失败（继续执行后续清场）: cid={}", cid, e);
+        }
+
+        // 5. 抢占式清理：将本会话所有尚未完成的 TOOL 与 ASSISTANT 消息全部标记为 CANCELED
         // （通过发布 MESSAGE_UPDATE 事件，以使缓存和前端 WebSocket 完美自愈同步）。
         try {
             messageDataReporter.cancelAllInflightMessages(context, "Execution canceled by user.");
@@ -160,26 +217,102 @@ public class AgentLoopCoordinator {
             log.warn("[AgentLoopCoordinator] 抢占式清理未完成的消息失败: cid={}", cid, e);
         }
 
-        // 3. 同步中断内存中的活跃执行线程并通知前端
-        if (context != null) {
-            context.setCanceled(true);
+        // 6. 强制取消活跃的物理副作用（强杀外部子进程 + cancel 大模型 HTTP 连接），并中断活跃执行线程
+        agentContextManager.cancelActiveSideEffects(context);
 
-            // 3.5 强制取消活跃的物理副作用（强杀外部子进程 + cancel 大模型 HTTP 连接）
-            agentContextManager.cancelActiveSideEffects(context);
-
-            Thread activeThread = context.getActiveThread();
-            if (activeThread != null && activeThread.isAlive()) {
-                log.debug("[AgentLoopCoordinator] 向活跃执行线程 {} 发送中断信号: cid={}", activeThread.getName(), cid);
-                activeThread.interrupt();
-                try {
-                    activeThread.join(2000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                if (activeThread.isAlive()) {
-                    log.warn("[AgentLoopCoordinator] 旧执行线程 {} 在 2 秒内未退出，强制继续: cid={}", activeThread.getName(), cid);
-                }
+        Thread activeThread = context.getActiveThread();
+        if (activeThread != null && activeThread.isAlive()) {
+            log.debug("[AgentLoopCoordinator] 向活跃执行线程 {} 发送中断信号: cid={}", activeThread.getName(), cid);
+            activeThread.interrupt();
+            try {
+                activeThread.join(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
+            if (activeThread.isAlive()) {
+                log.warn("[AgentLoopCoordinator] 旧执行线程 {} 在 2 秒内未退出，强制继续: cid={}", activeThread.getName(), cid);
+            }
+        }
+    }
+
+    /**
+     * 级联强停指定会话名下「仍在运行」的子会话（单个失败不影响其余，绝不阻断父会话的停止主流程）。
+     * <p>
+     * <b>只级联还在跑的子会话</b>：已完结的历史子会话不牵连（其报告早已投递、屏障早已扣减），
+     * 无差别遍历会对它们做无谓的上下文创建（{@code getOrCreateContext} 会触发宿主资产装载：
+     * 读技能/规则/MCP），并越界清理其历史消息。
+     * </p>
+     */
+    private void stopSubConversations(AgentContext parentContext, boolean allowParentWake) {
+        Long cid = parentContext.getCid();
+        List<Conversation> children;
+        try {
+            children = conversationStore.listByQuery(ConversationQuery.builder()
+                    .parentCid(cid)
+                    .build());
+        } catch (Exception e) {
+            log.warn("[AgentLoopCoordinator] 查询子会话失败，跳过级联停止: cid={}", cid, e);
+            return;
+        }
+        if (children.isEmpty()) {
+            return;
+        }
+
+        // 父会话此刻的待办子会话快照（本方法排在 clearLoopState 之前，故内存屏障仍完整）
+        Set<Long> pendingSubCids = Set.copyOf(parentContext.getWaitingSubCids());
+        String cascadeReason = "父会话已停止，级联终止该子智能体。";
+
+        for (Conversation child : children) {
+            Long childCid = child.getId();
+            if (childCid == null || childCid.equals(cid)) {
+                // 跳过非法 ID 与自环脏数据（parentCid 指向自身会造成无限递归）
+                continue;
+            }
+            boolean childRunning = child.getLoopRunning() != null && child.getLoopRunning() == 1;
+            if (!childRunning && !pendingSubCids.contains(childCid)) {
+                // 已完结的历史子会话：不牵连（其报告早已投递、屏障早已扣减）
+                continue;
+            }
+            try {
+                // 停止原因按现场分流：仍在跑的子会话交代「被级联终止」；
+                // 已自行收尾却仍占位于屏障的（跑完了、父会话尚未被唤醒就点了停止）传 null，
+                // 其结论按自身终态如实呈现「已完成」，避免把一次成功执行误报成被停止
+                log.info("[AgentLoopCoordinator] 级联强停子会话: parentCid={}, subCid={}, running={}",
+                        cid, childCid, childRunning);
+                forceResetLoopState(childCid, childRunning ? cascadeReason : null, allowParentWake);
+            } catch (Exception e) {
+                // 单个子会话异常不得中断级联，更不得阻断父会话自身的清场
+                log.warn("[AgentLoopCoordinator] 级联强停子会话异常，继续处理其余子会话: subCid={}", childCid, e);
+            }
+        }
+    }
+
+    /**
+     * 子会话被强制停止后向父会话写工作报告并扣减等待屏障（子会话专有收口）。
+     * <p>
+     * 这是「子 Agent 被强杀后父 Agent 永远在等」的根治点：无论子会话是否有活跃线程，
+     * 停止动作本身都必须完成上报与扣减，父会话才可能被唤醒或收口。
+     * </p>
+     * <p>
+     * 全程异常隔离：汇报走事件链（第一、二层失败会熔断抛异常），若任其传播将导致
+     * 调用方的清账与消息清理被整体跳过——用户点了停止，父会话反而卡在「运行中」。
+     * </p>
+     */
+    private void reportStopToParent(AgentContext context, String reason, boolean allowParentWake) {
+        Long parentCid = context.getParentCid();
+        if (parentCid == null || parentCid == 0L) {
+            return;
+        }
+        try {
+            AgentContext parentContext = agentContextManager.getOrCreateContext(parentCid);
+            boolean allDone = loopDataReporter.updateWaitingSubAgentToCompleted(parentContext, context.getCid(), reason);
+            if (allDone && allowParentWake && !parentContext.isCanceled()) {
+                log.debug("[AgentLoopCoordinator] 子会话停止后父会话等待清空，唤醒父智能体汇总: parentCid={}", parentCid);
+                executeLoopAsync(parentCid);
+            }
+        } catch (Exception e) {
+            log.warn("[AgentLoopCoordinator] 向父会话汇报子会话停止失败（不阻断停止主流程）: subCid={}, parentCid={}",
+                    context.getCid(), parentCid, e);
         }
     }
 
@@ -193,7 +326,8 @@ public class AgentLoopCoordinator {
             // 调用数据上报器发送屏障扣减事件并评估是否全部完成
             allDone = loopDataReporter.updateWaitingToolToCompleted(context, toolCallId);
         } catch (Exception e) {
-            log.warn("[AgentLoopCoordinator] 更新工具等待状态失败: cid={}, toolCallId={}", context.getCid(), toolCallId, e);
+            log.warn("[AgentLoopCoordinator] 更新工具等待状态失败: cid={}, toolCallId={}",
+                    context.getCid(), toolCallId, e);
             return;
         }
 

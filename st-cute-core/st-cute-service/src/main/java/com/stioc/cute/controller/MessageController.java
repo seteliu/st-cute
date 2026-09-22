@@ -12,6 +12,7 @@ import com.stioc.cute.conversation.types.ApproveToolDto;
 import com.stioc.cute.conversation.ConversationService;
 import com.stioc.cute.runtime.loop.RuntimeContext;
 import com.stioc.cute.engine.AgentEngine;
+import com.stioc.cute.engine.common.StreamBufferType;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.tool.types.ToolApprovalRequest;
 import jakarta.annotation.Resource;
@@ -51,21 +52,30 @@ public class MessageController {
 
         // 附加回填：流式输出期间刷新页面时，RUNNING 状态的 ASSISTANT 消息在 DB 中尚是空壳，
         // 从内存流式缓存中补齐已累积的思考/正文内容，避免过程中内容丢失带来的困惑。
+        // 工具消息同理：命令执行类工具运行期 DB content 为空，日志只在内存缓存中，
+        // 不回填则刷新页面看不到执行中的输出。
         // 竞态窗口内快照可能落后 1~2 个 chunk，属可接受语义竞态，流结束后的终态全量刷新保证最终一致
         // 折叠视图下折叠块永不含 RUNNING 消息（RUNNING 属于外露尾部），回填逻辑天然无冲突
         AgentContext ctx = agentEngine.getContextFacade().getActiveContext(cid);
         if (ctx != null) {
             for (MessageVo vo : list.getMessages()) {
-                if (MessageRole.ASSISTANT != vo.getRole() || MessageStatus.RUNNING != vo.getStatus()) {
+                if (MessageStatus.RUNNING != vo.getStatus()) {
                     continue;
                 }
-                String content = ctx.snapshotStreamText(false, vo.getId());
-                if (content != null && !content.isEmpty()) {
-                    vo.setContent(content);
-                }
-                String thought = ctx.snapshotStreamText(true, vo.getId());
-                if (thought != null && !thought.isEmpty()) {
-                    vo.setThought(thought);
+                if (MessageRole.ASSISTANT == vo.getRole()) {
+                    String content = ctx.snapshotStreamText(StreamBufferType.CONTENT, vo.getId());
+                    if (content != null && !content.isEmpty()) {
+                        vo.setContent(content);
+                    }
+                    String thought = ctx.snapshotStreamText(StreamBufferType.THINKING, vo.getId());
+                    if (thought != null && !thought.isEmpty()) {
+                        vo.setThought(thought);
+                    }
+                } else if (MessageRole.TOOL == vo.getRole()) {
+                    String logText = ctx.snapshotStreamText(StreamBufferType.TOOL_LOG, vo.getId());
+                    if (logText != null && !logText.isEmpty()) {
+                        vo.setContent(logText);
+                    }
                 }
             }
         }
@@ -147,6 +157,8 @@ public class MessageController {
 
     /**
      * 获取指定消息的详细信息 (前端点击日志时按需调用)
+     * <p>与列表接口保持同一回填口径：运行中的消息在 DB 中尚无内容，从内存流式缓存补齐，
+     * 否则工具/助手执行期间打开详情抽屉会看到空白</p>
      */
     @GetMapping("/detail")
     public Result<MessageVo> getMessageDetail(@RequestParam Long messageId) {
@@ -154,6 +166,30 @@ public class MessageController {
         Message entity = messageService.findById(messageId)
                 .orElseThrow(() -> new BusinessException("未找到指定的消息，ID: " + messageId));
 
-        return Result.success(MessageVo.fromEntity(entity));
+        MessageVo vo = MessageVo.fromEntity(entity);
+
+        // 运行中的消息回填内存流式缓存（助手思考/正文；工具控制台日志）
+        if (MessageStatus.RUNNING == vo.getStatus() && entity.getCid() != null) {
+            AgentContext ctx = agentEngine.getContextFacade().getActiveContext(entity.getCid());
+            if (ctx != null) {
+                if (MessageRole.ASSISTANT == vo.getRole()) {
+                    String content = ctx.snapshotStreamText(StreamBufferType.CONTENT, vo.getId());
+                    if (content != null && !content.isEmpty()) {
+                        vo.setContent(content);
+                    }
+                    String thought = ctx.snapshotStreamText(StreamBufferType.THINKING, vo.getId());
+                    if (thought != null && !thought.isEmpty()) {
+                        vo.setThought(thought);
+                    }
+                } else if (MessageRole.TOOL == vo.getRole()) {
+                    String logText = ctx.snapshotStreamText(StreamBufferType.TOOL_LOG, vo.getId());
+                    if (logText != null && !logText.isEmpty()) {
+                        vo.setContent(logText);
+                    }
+                }
+            }
+        }
+
+        return Result.success(vo);
     }
 }

@@ -442,7 +442,10 @@ public class CuteChatForOpenAiResponse extends AbstractCuteChat {
                 if (errorObj != null) {
                     String errorMessage = errorObj.getString("message");
                     log.error("OpenAI Response 流式 API 报错: {}", errorMessage);
-                    throw new RuntimeException("OpenAI Response 流式 API 报错: " + errorMessage);
+                    // 错误帧代表上游主动报告调用失败，必须抛专用异常中断流并向上传播，
+                    // 严禁被下方兜底 catch 吞掉：否则失败会被伪装成「正常但空」的响应，
+                    // 进而在上层被误标为 SUCCESS 终态。此处与 OPENAI / ANTHROPIC 两协议写法保持对齐。
+                    throw new SseErrorFrameException("OpenAI Response 流式 API 报错: " + errorMessage);
                 }
 
                 String type = json.getString("type");
@@ -546,6 +549,10 @@ public class CuteChatForOpenAiResponse extends AbstractCuteChat {
                     }
                 }
 
+            } catch (SseErrorFrameException e) {
+                // SSE 错误帧（上游 API 报错）不允许跳过，必须立即中断流并向上传播，
+                // 与外层 catch 的「单帧解析失败可跳过」语义严格区分开（与另两协议实现对齐）
+                throw e;
             } catch (Exception e) {
                 log.error("解析 OpenAI Response SSE 帧失败: data={}, error={}", data, e.getMessage(), e);
             }

@@ -7,6 +7,7 @@ import com.stioc.cute.engine.hook.AgentHookDispatcher;
 import com.stioc.cute.engine.hook.HookPayload;
 import com.stioc.cute.engine.hook.HookType;
 import com.stioc.cute.engine.common.StreamBufferHolder;
+import com.stioc.cute.engine.common.StreamBufferType;
 import com.stioc.cute.engine.tool.DynamicToolProvider;
 import lombok.Data;
 import lombok.Getter;
@@ -268,32 +269,51 @@ public class AgentContext implements BaseAgentContext {
     /**
      * 追加流式内容缓存片段（薄委托至流式缓冲持有器）。
      *
-     * @param isReasoning true=思考流缓存，false=正文流缓存
-     * @param messageId   流式输出归属的 ASSISTANT 消息 ID
-     * @param chunk       增量内容片段
+     * @param type      流类型（思考流/正文流/工具日志流）
+     * @param messageId 流式输出归属的消息 ID
+     * @param chunk     增量内容片段
      */
-    public void appendStreamChunk(boolean isReasoning, Long messageId, String chunk) {
-        streamBufferHolder.appendStreamChunk(isReasoning, messageId, chunk);
+    public void appendStreamChunk(StreamBufferType type, Long messageId, String chunk) {
+        streamBufferHolder.appendStreamChunk(type, messageId, chunk);
     }
 
     /**
-     * 按 messageId 清除流式内容缓存（薄委托至流式缓冲持有器）。
+     * 按 messageId 清除思考流与正文流缓存（薄委托至流式缓冲持有器）。
      *
-     * @param messageId 已完结的消息 ID
+     * @param messageId 已完结的助手消息 ID
      */
     public void clearStreamBuffers(Long messageId) {
         streamBufferHolder.clearStreamBuffers(messageId);
     }
 
     /**
+     * 清除工具日志流缓存并推进水位线（薄委托至流式缓冲持有器）。
+     *
+     * @param messageId 已进入终态的工具消息 ID
+     */
+    public void clearToolLogStream(Long messageId) {
+        streamBufferHolder.clearToolLogStream(messageId);
+    }
+
+    /**
+     * 按 messageId 清除单条流的缓存（薄委托至流式缓冲持有器，供透明重试的清空信号使用）。
+     *
+     * @param type      流类型（思考流/正文流/工具日志流）
+     * @param messageId 目标消息 ID
+     */
+    public void clearStreamChunk(StreamBufferType type, Long messageId) {
+        streamBufferHolder.clearStreamChunk(type, messageId);
+    }
+
+    /**
      * 读取流式内容缓存的当前累积快照（薄委托至流式缓冲持有器）。
      *
-     * @param isReasoning true=思考流缓存，false=正文流缓存
-     * @param messageId   目标消息 ID
+     * @param type      流类型（思考流/正文流/工具日志流）
+     * @param messageId 目标消息 ID
      * @return 累积内容快照，无有效缓存时返回 null
      */
-    public String snapshotStreamText(boolean isReasoning, Long messageId) {
-        return streamBufferHolder.snapshotStreamText(isReasoning, messageId);
+    public String snapshotStreamText(StreamBufferType type, Long messageId) {
+        return streamBufferHolder.snapshotStreamText(type, messageId);
     }
 
     public void registerLlmCall(String llmCallId, Call call, String model) {

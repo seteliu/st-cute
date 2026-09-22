@@ -2,6 +2,7 @@ package com.stioc.cute.engine.testkit;
 
 import com.stioc.cute.engine.common.EngineExecutor;
 import com.stioc.cute.engine.common.EngineLock;
+import com.stioc.cute.engine.common.NotifyExecutor;
 import com.stioc.cute.engine.event.AgentEventDispatcher;
 import com.stioc.cute.engine.event.AgentEventListener;
 import com.stioc.cute.engine.hook.AgentHookDispatcher;
@@ -193,19 +194,33 @@ public final class EngineStubs {
      */
     public static AgentContext agentContext(Long cid) {
         EngineLock lock = engineLock();
-        AgentEventDispatcher eventDispatcher = new AgentEventDispatcher(List.of(), lock);
+        AgentEventDispatcher eventDispatcher = new AgentEventDispatcher(
+                List.of(), lock, new NotifyExecutor(), true);
         AgentHookDispatcher hookDispatcher = new AgentHookDispatcher(Optional.of(List.of()), lock);
         return new AgentContext(cid, eventDispatcher, hookDispatcher);
     }
 
     /**
      * 构造上下文，并指定事件监听器与 Hook 监听器（供事件/Hook 相关用例断言真实分发）
+     * <p>极速模式取引擎默认值（开启）。</p>
      */
     public static AgentContext agentContext(Long cid,
                                             List<AgentEventListener> eventListeners,
                                             List<HookListener> hookListeners,
                                             EngineLock lock) {
-        AgentEventDispatcher eventDispatcher = new AgentEventDispatcher(eventListeners, lock);
+        return agentContext(cid, eventListeners, hookListeners, lock, true);
+    }
+
+    /**
+     * 构造上下文，显式指定通知层极速模式（供断言两种分发模式的用例使用）
+     */
+    public static AgentContext agentContext(Long cid,
+                                            List<AgentEventListener> eventListeners,
+                                            List<HookListener> hookListeners,
+                                            EngineLock lock,
+                                            boolean notifyFastMode) {
+        AgentEventDispatcher eventDispatcher = new AgentEventDispatcher(
+                eventListeners, lock, new NotifyExecutor(), notifyFastMode);
         AgentHookDispatcher hookDispatcher = new AgentHookDispatcher(Optional.of(hookListeners), lock);
         return new AgentContext(cid, eventDispatcher, hookDispatcher);
     }

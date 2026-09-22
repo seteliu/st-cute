@@ -13,7 +13,11 @@ import java.util.concurrent.ExecutorService;
  * 引擎线程模型已下放宿主（见 EngineExecutor），本实现按需选择虚拟线程池，
  * 承载 ReAct 循环拉起、子智能体执行、只读工具并发批等阻塞性长任务。
  * 云化宿主可替换为受管线程池实现。另暴露静态 submit 便捷方法供宿主自身异步任务使用，
- * 与引擎共用同一执行器（原引擎 AgentEngineCommonThread#submit 的宿主落点）。
+ * 与引擎共用同一执行器。
+ * </p>
+ * <p>
+ * 注意：引擎通知层（第三层事件投递）不走本执行器——其顺序语义属引擎自身契约，
+ * 由引擎自建的按会话保序车道执行器承载，故不在本类的供血范围内。
  * </p>
  */
 @Component

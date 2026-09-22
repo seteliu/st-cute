@@ -2,6 +2,7 @@ package com.stioc.cute.engine;
 
 import com.stioc.cute.engine.common.EngineExecutor;
 import com.stioc.cute.engine.common.EngineLock;
+import com.stioc.cute.engine.common.NotifyExecutor;
 import com.stioc.cute.engine.event.AgentEventDispatcher;
 import com.stioc.cute.engine.event.AgentEventListener;
 import com.stioc.cute.engine.event.EngineCacheSyncListener;
@@ -83,30 +84,125 @@ public class AgentEngine {
 
     /**
      * AgentEngine 流式装配构建器。
+     * <p>
+     * 供血项分四区：必需供血（缺一不可，build 前校验）、扩展挂点（实现引擎契约注入行为）、
+     * 可选增强（缺省用引擎内置默认）、通知层调优。各项职责见字段分区注释，
+     * 契约的完整语义在对应接口上，此处只阐述用途与默认行为。
+     * </p>
      */
     public static final class Builder {
 
-        // 必需供血接口（校验不可为空）
+        // ──────────────────────────────────────────────
+        // 一、必需供血契约（缺一不可，build 时校验）
+        // ──────────────────────────────────────────────
+
+        /**
+         * 会话存储：会话实体的持久化读写出口
+         */
         private ConversationStore conversationStore;
+
+        /**
+         * 消息存储：消息实体的持久化读写出口
+         */
         private MessageStore messageStore;
+
+        /**
+         * 供应商解析器：按会话上下文解析当前可用的大模型供应商配置
+         */
         private ProviderResolver providerResolver;
+
+        /**
+         * 工具守卫：工具执行前的权限裁决入口（Allow / Deny / Ask）
+         */
         private ToolGuard toolGuard;
+
+        /**
+         * 引擎锁：引擎全部并发临界区的锁来源（会话数据锁、循环锁、命名锁、写工具锁）
+         */
         private EngineLock lockProvider;
+
+        /**
+         * 引擎执行器：循环拉起、工具批执行等异步任务的线程来源
+         */
         private EngineExecutor executorProvider;
 
-        // 可选供血接口 / 插件扩展（支持多值或可选单个）
+        // ──────────────────────────────────────────────
+        // 二、扩展挂点（多值注册，宿主按需实现引擎契约注入行为）
+        // ──────────────────────────────────────────────
+
+        /**
+         * 事件监听器：订阅引擎事件（落库、缓存回填之后的第三层广播）
+         */
         private final List<AgentEventListener> eventListeners = new ArrayList<>();
+
+        /**
+         * Hook 监听器：生命周期同步拦截（工具调用前后，抛异常即阻断）
+         */
         private final List<HookListener> hookListeners = new ArrayList<>();
+
+        /**
+         * 上下文初始化器：会话创建/恢复/热重载时装载宿主专属资产（技能、规则、MCP 等）
+         */
         private final List<AgentContextInitializer> contextInitializers = new ArrayList<>();
+
+        /**
+         * 提示词贡献者：向系统提示词注入分段内容（人设、规约、环境信息等）
+         */
         private final List<SystemPromptContributor> promptContributors = new ArrayList<>();
+
+        /**
+         * 静态工具：引擎启动即注册的工具清单
+         */
         private final List<CuteTool> staticTools = new ArrayList<>();
+
+        /**
+         * 全局动态工具提供者：按会话动态暴露工具（如 MCP 客户端）
+         */
         private final List<DynamicToolProvider> globalToolProviders = new ArrayList<>();
+
+        /**
+         * 消息拦截器：消息进出上下文窗口时的变换钩子（如附件装载、时间戳注入）
+         */
         private final List<MessageInterceptor> messageInterceptors = new ArrayList<>();
 
+        // ──────────────────────────────────────────────
+        // 三、可选增强（缺省时引擎按内置默认行为运行）
+        // ──────────────────────────────────────────────
+
+        /**
+         * 大模型 HTTP 日志器：记录请求/响应完整载荷，用于排查与审计
+         */
         private LlmHttpLogger llmHttpLogger;
+
+        /**
+         * 重试策略：大模型调用失败的重试次数与间隔
+         */
         private RetryPolicyProvider retryPolicyProvider;
+
+        /**
+         * 审批规则写入器：人在回路选「总是放行」时持久化授信规则
+         */
         private ApprovalRuleWriter approvalRuleWriter;
+
+        /**
+         * 新会话默认标题
+         */
         private String defaultConversationTitle = "新对话";
+
+        // ──────────────────────────────────────────────
+        // 四、通知层调优（第三层事件投递行为）
+        // ──────────────────────────────────────────────
+
+        /**
+         * 通知层并行车道数：同会话事件恒落同车道保序，不同会话分车道并行。默认 8
+         */
+        private int notifyLaneCount = NotifyExecutor.DEFAULT_LANE_COUNT;
+
+        /**
+         * 极速模式：开启（默认）时流式事件全部异步投递车道，吞吐优先；
+         * 关闭时思考流/正文流改同步直调，换取端到端背压（慢客户端让产出一并变慢）
+         */
+        private boolean notifyFastMode = true;
 
         private Builder() {}
 
@@ -260,6 +356,16 @@ public class AgentEngine {
             return this;
         }
 
+        public Builder notifyLaneCount(int notifyLaneCount) {
+            this.notifyLaneCount = notifyLaneCount > 0 ? notifyLaneCount : NotifyExecutor.DEFAULT_LANE_COUNT;
+            return this;
+        }
+
+        public Builder notifyFastMode(boolean notifyFastMode) {
+            this.notifyFastMode = notifyFastMode;
+            return this;
+        }
+
         public void validate() {
             List<String> missing = new ArrayList<>();
             if (conversationStore == null) {
@@ -329,7 +435,8 @@ public class AgentEngine {
             allEventListeners.add(cacheSyncListener);
             allEventListeners.add(notificationListener);
             allEventListeners.addAll(eventListeners);
-            return new AgentEventDispatcher(allEventListeners, lockProvider);
+            NotifyExecutor notifyExecutor = new NotifyExecutor(notifyLaneCount);
+            return new AgentEventDispatcher(allEventListeners, lockProvider, notifyExecutor, notifyFastMode);
         }
 
         private CuteChatFactory createChatFactory() {

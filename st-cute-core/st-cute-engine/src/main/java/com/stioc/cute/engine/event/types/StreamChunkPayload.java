@@ -19,39 +19,47 @@ import lombok.NoArgsConstructor;
 public class StreamChunkPayload {
 
     /**
-     * 目标实体标识：助手消息流为 Long messageId，工具日志流为 String toolCallId
+     * 目标消息 ID：思考流/正文流为 ASSISTANT 消息 ID，工具日志流为 TOOL 消息 ID。
+     * <p>
+     * 工具日志流历史上承载 toolCallId 字符串，与助手流模型不统一，前端需两套定位逻辑；
+     * 现统一为消息 ID，三条流共用同一套「按消息 ID 归属」模型。
+     * </p>
      */
-    private Object id;
+    private Long id;
 
     /**
      * 流式增量文本内容
      */
     private String text;
 
+    /**
+     * 切片语义类型：{@code null}（默认）表示常规增量内容；非空时为流控制信号（如清空重放）。
+     * <p>
+     * 为 {@code null} 时不参与序列化（宿主外推未启用 WriteNulls），常规 chunk 报文与引入前一致。
+     * </p>
+     */
+    private StreamChunkType type;
+
     public StreamChunkPayload(Long messageId, String text) {
         this.id = messageId;
         this.text = text;
     }
 
-    public StreamChunkPayload(String toolCallId, String text) {
-        this.id = toolCallId;
-        this.text = text;
+    /**
+     * 构造一个「清空」控制信号载荷（无文本）
+     *
+     * @param messageId 目标消息 ID
+     */
+    public static StreamChunkPayload clear(Long messageId) {
+        StreamChunkPayload payload = new StreamChunkPayload(messageId, null);
+        payload.type = StreamChunkType.CLEAR;
+        return payload;
     }
 
     /**
-     * 获取解析后的消息 ID（用于助手流式处理）
+     * 是否为「清空」控制信号
      */
-    public Long getMessageId() {
-        if (id instanceof Number n) {
-            return n.longValue();
-        }
-        if (id instanceof String s) {
-            try {
-                return Long.parseLong(s);
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
+    public boolean isClear() {
+        return type == StreamChunkType.CLEAR;
     }
 }

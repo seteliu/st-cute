@@ -440,8 +440,10 @@ public class ToolExecutionEngine {
         }
 
         try {
-            // 核心真正执行
-            ToolExecutionContext execContext = new ToolExecutionContext(context, toolCallId);
+            // 核心真正执行：解析本工具对应的 TOOL 消息 ID，供工具日志流按消息 ID 归属
+            // （工具执行上下文是日志事件载荷的 ID 来源，此处解析一次即可）
+            Long toolMessageId = resolveToolMessageId(context, toolCallId);
+            ToolExecutionContext execContext = new ToolExecutionContext(context, toolCallId, toolMessageId);
             result = tool.execute(args, execContext);
             attachmentsJson = execContext.getAttachments();
             // 统一错误契约判定：仅顶层含 error 字段的标准错误 JSON 判为失败，
@@ -487,6 +489,27 @@ public class ToolExecutionEngine {
 
     private void notifyToolCompleted(AgentContext context, String toolCallId) {
         agentLoopCoordinator.notifyToolCompleted(context, toolCallId);
+    }
+
+    /**
+     * 解析工具调用对应的 TOOL 消息 ID（工具消息在创建时即以 callId 与 toolCallId 建立关联）。
+     * <p>
+     * 供工具日志流按消息 ID 归属使用；消息尚未落库时返回 null，此时不推送日志流。
+     * </p>
+     *
+     * @param context    当前会话上下文
+     * @param toolCallId 工具调用 ID
+     * @return TOOL 消息 ID，未找到返回 null
+     */
+    private Long resolveToolMessageId(AgentContext context, String toolCallId) {
+        if (context == null || StringUtils.isBlank(toolCallId)) {
+            return null;
+        }
+        Message toolMsg = messageStore.getByQuery(MessageQuery.builder()
+                .cid(context.getCid())
+                .callId(toolCallId)
+                .build());
+        return toolMsg != null ? toolMsg.getId() : null;
     }
 
     private void cancelRemainingTools(AgentContext context, List<CuteToolCall> batch) {

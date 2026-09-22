@@ -64,7 +64,8 @@ public class FakeLlmServer implements AutoCloseable {
         STREAM_OK,
 
         /**
-         * 流中途抛错误帧（OPENAI / ANTHROPIC 支持；OPENAI_RESPONSE 的错误帧会被其自身实现吞掉）
+         * 流中途抛错误帧（三协议一致：客户端均抛 {@link com.stioc.cute.engine.llm.SseErrorFrameException} 中断流）。
+         * <p>零产出即失败：一帧内容都不给，重试重发不构成重复，用于验证「重试能力本身」。</p>
          */
         STREAM_ERROR_FRAME,
 
@@ -76,7 +77,19 @@ public class FakeLlmServer implements AutoCloseable {
         /**
          * 写完部分帧后直接断流（不发结束标记）：客户端按 EOF 正常收尾并告警，不触发重试
          */
-        STREAM_TRUNCATE
+        STREAM_TRUNCATE,
+
+        /**
+         * 已产出部分内容后再注入错误帧：先正常推送若干片思考/正文，再写入错误帧中断本次调用。
+         * <p>
+         * 与 {@link #STREAM_ERROR_FRAME} 的关键差异：后者一帧内容都不产出即失败，重试重发不构成重复；
+         * 本模式是「流已产出可见内容后失败」——生产环境中上游限流切断、连接被中断（日志里的
+         * {@code OpenAI 流式 API 报错: terminated}）即属此类，是验证「透明重试重发已推送内容」
+         * 是否安全的关键形态。选用错误帧而非强杀连接：前者是确定性异常传播，后者受容器
+         * 响应完成语义影响、时序不可控。
+         * </p>
+         */
+        STREAM_ERROR_AFTER_PARTIAL
     }
 
     /**
@@ -409,8 +422,8 @@ public class FakeLlmServer implements AutoCloseable {
                     // 故意不写结束标记：客户端按读尽 EOF 收尾
                     return;
                 }
-                if (turn.mode == Mode.STREAM_ERROR_FRAME) {
-                    // 错误帧写完后直接结束，客户端解析该帧时抛异常
+                if (turn.mode == Mode.STREAM_ERROR_FRAME || turn.mode == Mode.STREAM_ERROR_AFTER_PARTIAL) {
+                    // 错误帧（或内容后的错误帧）写完后直接结束，客户端解析该帧时抛异常
                     out.flush();
                     return;
                 }
@@ -453,6 +466,7 @@ public class FakeLlmServer implements AutoCloseable {
         frames.add(openAiData("{\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}"));
 
         if (turn.mode == Mode.STREAM_ERROR_FRAME) {
+            // 零产出即失败：一帧内容都不给
             frames.add(openAiData("{\"error\":{\"message\":\"假服务端注入的流中错误帧\",\"type\":\"server_error\"}}"));
             return frames;
         }
@@ -465,6 +479,7 @@ public class FakeLlmServer implements AutoCloseable {
             frames.add(openAiData("{\"choices\":[{\"index\":0,\"delta\":{\"content\":\""
                     + escape(piece) + "\"}}]}"));
         }
+
         // 工具调用：首片带 id/name，参数切两片以真实走通客户端的分片追加逻辑
         int toolIndex = 0;
         for (CuteToolCall call : turn.toolCalls) {
@@ -491,6 +506,14 @@ public class FakeLlmServer implements AutoCloseable {
             usage.put("prompt_tokens_details", details);
         }
         frames.add(openAiData("{\"choices\":[],\"usage\":" + usage.toJSONString() + "}"));
+
+        if (turn.mode == Mode.STREAM_ERROR_AFTER_PARTIAL) {
+            // 内容与工具调用参数均已产出后再失败：本帧之后客户端抛 SseErrorFrameException，
+            // 触发透明重试并重发以上全部内容，覆盖思考/正文/工具参数三个累加器的复位语义
+            frames.add(openAiData("{\"error\":{\"message\":\"假服务端在内容产出后中断流\",\"type\":\"server_error\"}}"));
+            return frames;
+        }
+
         frames.add("data: [DONE]\n\n");
         return frames;
     }
@@ -501,7 +524,7 @@ public class FakeLlmServer implements AutoCloseable {
     private List<String> renderOpenAiResponse(Turn turn) {
         List<String> frames = new ArrayList<>();
         if (turn.mode == Mode.STREAM_ERROR_FRAME) {
-            // 与真实实现一致：错误帧会被 Responses 客户端自身的 try/catch 吞掉（仅记日志）
+            // 三协议一致：错误帧交由客户端抛 SseErrorFrameException 中断流（不再被静默吞掉）
             frames.add(openAiResponseEvent("error",
                     "{\"type\":\"error\",\"error\":{\"message\":\"假服务端注入的流中错误帧\"}}"));
             return frames;
@@ -538,6 +561,14 @@ public class FakeLlmServer implements AutoCloseable {
         }
         frames.add(openAiResponseEvent("response.completed",
                 "{\"type\":\"response.completed\",\"response\":{\"usage\":" + usage.toJSONString() + "}}"));
+
+        if (turn.mode == Mode.STREAM_ERROR_AFTER_PARTIAL) {
+            // 内容与工具参数均已产出后再失败（与 OpenAI 侧同源语义），触发透明重试
+            frames.add(openAiResponseEvent("error",
+                    "{\"type\":\"error\",\"error\":{\"message\":\"假服务端在内容产出后中断流\"}}"));
+            return frames;
+        }
+
         frames.add("data: [DONE]\n\n");
         return frames;
     }
@@ -606,6 +637,14 @@ public class FakeLlmServer implements AutoCloseable {
                 "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\""
                         + (turn.toolCalls.isEmpty() ? "end_turn" : "tool_use") + "\"},\"usage\":"
                         + deltaUsage.toJSONString() + "}"));
+
+        if (turn.mode == Mode.STREAM_ERROR_AFTER_PARTIAL) {
+            // 内容与工具参数均已产出后再失败（与另两协议同源语义）：不发 message_stop，直接注入 error 帧
+            frames.add(anthropicEvent("error",
+                    "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"假服务端在内容产出后中断流\"}}"));
+            return frames;
+        }
+
         frames.add(anthropicEvent("message_stop", "{\"type\":\"message_stop\"}"));
         return frames;
     }

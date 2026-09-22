@@ -84,7 +84,7 @@ class AgentEventFactoryTest {
         assertEquals(AgentEventType.AGENT_THINKING_STREAM, event.getType());
         StreamChunkPayload payload = assertInstanceOf(StreamChunkPayload.class, event.getPayload());
         assertEquals("思考中", payload.getText());
-        assertEquals(7L, payload.getMessageId(), "载荷应可解析出归属的助手消息 ID");
+        assertEquals(7L, payload.getId(), "载荷应可解析出归属的助手消息 ID");
     }
 
     /**
@@ -97,19 +97,19 @@ class AgentEventFactoryTest {
         assertEquals(AgentEventType.AGENT_CONTENT_STREAM, event.getType());
         StreamChunkPayload payload = assertInstanceOf(StreamChunkPayload.class, event.getPayload());
         assertEquals("正文增量", payload.getText());
-        assertEquals(8L, payload.getMessageId());
+        assertEquals(8L, payload.getId());
     }
 
     /**
-     * 工具日志流事件：载荷以 toolCallId 作为标识关联到具体工具调用
+     * 工具日志流事件：载荷以「工具消息 ID」作为归属标识（与助手流统一为消息 ID 模型）
      */
     @Test
     void createsToolLogStreamEvent() {
-        AgentEvent event = AgentEventFactory.createToolLogStream(context, "call_1", "命令输出行");
+        AgentEvent event = AgentEventFactory.createToolLogStream(context, 9L, "命令输出行");
 
         assertEquals(AgentEventType.TOOL_LOG_STREAM, event.getType());
         StreamChunkPayload payload = assertInstanceOf(StreamChunkPayload.class, event.getPayload());
         assertEquals("命令输出行", payload.getText());
-        assertEquals("call_1", payload.getId(), "工具日志流的标识应为 toolCallId 字符串");
+        assertEquals(9L, payload.getId(), "工具日志流的归属标识应为 TOOL 消息 ID");
     }
 }

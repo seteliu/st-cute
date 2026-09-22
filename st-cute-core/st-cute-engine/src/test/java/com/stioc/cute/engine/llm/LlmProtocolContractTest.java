@@ -356,32 +356,25 @@ class LlmProtocolContractTest {
     }
 
     /**
-     * 流中错误帧：OPENAI 与 ANTHROPIC 会抛出错误帧异常，RESPONSES 协议的实现会吞掉该帧
-     * （这是三协议的真实差异，此处以断言固化下来，避免被误当成同一行为）
+     * 流中错误帧：三协议行为必须一致——均抛出 {@link SseErrorFrameException} 中断流。
+     * <p>
+     * 严禁被各协议自身的解析兜底 catch 吞掉：一旦吞掉，上游报错会被伪装成「正常但空」的响应，
+     * 进而在上层被误标为 SUCCESS 终态（这正是 {@link SseErrorFrameException} 文档警告的场景）。
+     * </p>
+     * <p>
+     * 历史沿革：RESPONSES 协议曾把该错误帧吞掉并仅记日志，当时以断言固化为「三协议差异」；
+     * 该行为已修正为与另两协议统一，本用例随之收紧为「三协议一致」。
+     * </p>
      */
-    @Test
-    void streamErrorFrameBehaviorDiffersByProtocol() throws IOException {
-        // OPENAI：错误帧上抛
-        try (FakeLlmServer server = FakeLlmServer.start(ProviderProtocol.OPENAI)) {
+    @ParameterizedTest
+    @EnumSource(ProviderProtocol.class)
+    void streamErrorFrameAlwaysThrows(ProviderProtocol protocol) throws IOException {
+        try (FakeLlmServer server = FakeLlmServer.start(protocol)) {
             server.enqueue(FakeLlmServer.Turn.text("x").mode(FakeLlmServer.Mode.STREAM_ERROR_FRAME));
-            assertThrows(SseErrorFrameException.class,
-                    () -> consumeStream(clientFor(server, ProviderProtocol.OPENAI), "错误帧"));
-        }
 
-        // ANTHROPIC：错误帧上抛
-        try (FakeLlmServer server = FakeLlmServer.start(ProviderProtocol.ANTHROPIC)) {
-            server.enqueue(FakeLlmServer.Turn.text("x").mode(FakeLlmServer.Mode.STREAM_ERROR_FRAME));
             assertThrows(SseErrorFrameException.class,
-                    () -> consumeStream(clientFor(server, ProviderProtocol.ANTHROPIC), "错误帧"));
-        }
-
-        // OPENAI_RESPONSE：错误帧被其自身实现捕获并仅记日志，流正常结束、不抛异常
-        try (FakeLlmServer server = FakeLlmServer.start(ProviderProtocol.OPENAI_RESPONSE)) {
-            server.enqueue(FakeLlmServer.Turn.text("x").mode(FakeLlmServer.Mode.STREAM_ERROR_FRAME));
-            List<CuteChatResponse> received = consumeStream(
-                    clientFor(server, ProviderProtocol.OPENAI_RESPONSE), "错误帧");
-            assertTrue(received.stream().noneMatch(r -> r.getContent() != null && r.getContent().contains("x")),
-                    "Responses 协议的错误帧被吞掉，不应产出正文");
+                    () -> consumeStream(clientFor(server, protocol), "错误帧"),
+                    protocol + " 的错误帧必须上抛 SseErrorFrameException，不得被静默吞掉");
         }
     }
 
