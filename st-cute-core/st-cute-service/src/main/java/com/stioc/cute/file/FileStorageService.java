@@ -115,24 +115,25 @@ public class FileStorageService {
         try {
             if (shouldCompress) {
                 byte[] rawBytes = file.getBytes();
-                // 上传链路压缩按平台统一规格执行（ImageProcessUtils 集中维护），大于原始体积时自动保留原字节
-                byte[] processedBytes = ImageProcessUtils.compressAndResize(rawBytes, extension,
-                        ImageProcessUtils.MAX_DIMENSION, ImageProcessUtils.COMPRESS_QUALITY);
-                if (processedBytes != null && processedBytes.length > 0) {
-                    compressed = processedBytes.length < rawBytes.length;
-                    if (compressed) {
-                        // 压缩转码可能改变真实格式（如无透明 png/bmp 转 JPEG），探测真实格式同步存储后缀，
-                        // 保证落盘文件后缀、实际字节编码、对外的 MIME 三者一致
-                        String realFormat = ImageProcessUtils.detectImageFormat(processedBytes);
-                        if (StringUtils.hasText(realFormat) && !realFormat.equalsIgnoreCase(extension)) {
-                            extension = realFormat;
-                            newFilename = String.format("%s%s", FileStorageService.stripExt(newFilename),
-                                    StringUtils.hasText(extension) ? "." + extension : "");
-                            targetFile = new File(cidDir, newFilename);
-                        }
-                        try (FileOutputStream fos = new FileOutputStream(targetFile)) {
-                            fos.write(processedBytes);
-                        }
+                // 上传与读取共用同一压缩决策入口（ImageProcessUtils 集中维护规格与跳过策略）：
+                // 分辨率达标且体积可控的图直接跳过，避免对已压产物二次有损；
+                // 需压缩时统一按平台规格（MAX_DIMENSION + COMPRESS_QUALITY）处理。
+                // 注意：不可用「产物更小」判定是否采用——分辨率超标的图会强制采用压缩结果
+                // （缩放带来的 token 收益优先，体积可能略增），故按引用比对识别「是否真的压缩过」
+                byte[] processedBytes = ImageProcessUtils.compressIfNeeded(rawBytes, extension);
+                if (processedBytes != null && processedBytes != rawBytes) {
+                    compressed = true;
+                    // 压缩转码可能改变真实格式（如无透明 png/bmp 转 JPEG），探测真实格式同步存储后缀，
+                    // 保证落盘文件后缀、实际字节编码、对外的 MIME 三者一致
+                    String realFormat = ImageProcessUtils.detectImageFormat(processedBytes);
+                    if (StringUtils.hasText(realFormat) && !realFormat.equalsIgnoreCase(extension)) {
+                        extension = realFormat;
+                        newFilename = String.format("%s%s", FileStorageService.stripExt(newFilename),
+                                StringUtils.hasText(extension) ? "." + extension : "");
+                        targetFile = new File(cidDir, newFilename);
+                    }
+                    try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+                        fos.write(processedBytes);
                     }
                 }
             }

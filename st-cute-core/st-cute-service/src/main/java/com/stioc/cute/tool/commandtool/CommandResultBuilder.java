@@ -32,6 +32,15 @@ public final class CommandResultBuilder {
     public static final int OUTPUT_DISPLAY_LIMIT = 100_000;
 
     /**
+     * 单次返回给模型的输出行数上限：超过则压缩为头尾保留 + 中间省略摘要。
+     * <p>
+     * 与字符上限互补：字符闸门挡不住「换行密集但总量未超」的输出（如 5 万行短日志仅几十万字符，
+     * 未触发字符压缩却足以淹没上下文的行号坐标感）。行数闸门以更贴近"可阅读量"的维度兜底。
+     * </p>
+     */
+    public static final int OUTPUT_DISPLAY_LINE_LIMIT = 10_000;
+
+    /**
      * 输出压缩时保留的开头字符数
      */
     public static final int OUTPUT_HEAD_KEEP = 32_000;
@@ -40,6 +49,16 @@ public final class CommandResultBuilder {
      * 输出压缩时保留的结尾字符数
      */
     public static final int OUTPUT_TAIL_KEEP = 32_000;
+
+    /**
+     * 输出压缩时保留的开头行数（行数超限场景）
+     */
+    public static final int OUTPUT_HEAD_LINE_KEEP = 5_000;
+
+    /**
+     * 输出压缩时保留的结尾行数（行数超限场景）
+     */
+    public static final int OUTPUT_TAIL_LINE_KEEP = 5_000;
 
     private CommandResultBuilder() {
     }
@@ -77,14 +96,116 @@ public final class CommandResultBuilder {
      * 也能看到结尾（结论与退出码上下文），中间重复内容不占上下文
      */
     public static String compactOutputIfNeeded(String output) {
-        if (output == null || output.length() <= OUTPUT_DISPLAY_LIMIT) {
+        if (output == null) {
+            return null;
+        }
+        int originalLines = countLines(output);
+        // 先按行数闸门压缩（更贴近"可阅读量"的维度），再按字符闸门兜底
+        String lineCompacted = compactByLineLimit(output);
+        if (lineCompacted.length() <= OUTPUT_DISPLAY_LIMIT) {
+            return lineCompacted;
+        }
+        String head = lineCompacted.substring(0, OUTPUT_HEAD_KEEP);
+        String tail = lineCompacted.substring(lineCompacted.length() - OUTPUT_TAIL_KEEP);
+        // 摘要以「原始输出的行数与字符数」为口径：两处压缩可能叠加，
+        // 若只报当前字符数，行数信息会被行数闸门写入的中段省略提示一并切掉，模型无从判断输出规模。
+        // 省略量不单列：行压缩后的省略字符数与原始总量对不上账（两数并排易被误读），
+        // 由「原始总量 - 首尾保留量」即可推断省略规模
+        return head + "\n... [输出过长已压缩：原输出共 " + originalLines + " 行、" + output.length()
+                + " 字符，本次保留首尾各 " + OUTPUT_HEAD_KEEP + " 字符。"
+                + "如需完整内容可重定向到文件后用 read_file 分段读取] ...\n" + tail;
+    }
+
+    /**
+     * 按展示口径统计行数：末尾换行符视为最后一行的终止符、不额外计行。
+     * <p>与 read_file 的计数口径保持一致（同一份内容在不同工具中标注的行数应相同）。</p>
+     */
+    private static int countLines(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        int lines = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                lines++;
+            }
+        }
+        // 末尾无换行符时，最后一行尚未计入
+        return text.charAt(text.length() - 1) == '\n' ? lines : lines + 1;
+    }
+
+    /**
+     * 行数超限压缩：超过 {@link #OUTPUT_DISPLAY_LINE_LIMIT} 行时保留头尾各
+     * {@link #OUTPUT_HEAD_LINE_KEEP} / {@link #OUTPUT_TAIL_LINE_KEEP} 行，中间以省略摘要替代。
+     * <p>
+     * 未超限时原样返回，不做任何复制。单遍扫描定位边界，不按行切分为数组
+     * （输出上限 200 万字符，切分可能产生百万级数组元素，徒增内存峰值）。
+     * </p>
+     */
+    private static String compactByLineLimit(String output) {
+        // 第一遍：统计总行数（口径与展示一致——末尾换行符属最后一行的终止符，不额外计行）
+        int totalLines = countLines(output);
+        if (totalLines <= OUTPUT_DISPLAY_LINE_LIMIT) {
             return output;
         }
-        String head = output.substring(0, OUTPUT_HEAD_KEEP);
-        String tail = output.substring(output.length() - OUTPUT_TAIL_KEEP);
-        int omitted = output.length() - OUTPUT_HEAD_KEEP - OUTPUT_TAIL_KEEP;
-        return head + "\n... [输出过长已压缩：共 " + output.length() + " 字符，中间省略 " + omitted
-                + " 字符。如需中段内容可重定向到文件后用 read_file 分段读取] ...\n" + tail;
+
+        // 第二遍：定位头部保留边界（前 HEAD_LINE_KEEP 行的最后一行行尾换行符之后）
+        int headEnd = headEndOffset(output, OUTPUT_HEAD_LINE_KEEP);
+
+        // 第三遍：定位尾部保留边界（倒数第 TAIL_LINE_KEEP 行的行首偏移）
+        int tailStart = tailStartOffset(output, OUTPUT_TAIL_LINE_KEEP, headEnd);
+
+        // 保留区间重叠说明文件总行数不足两段之和（理论上不会发生，防线兜底）
+        if (tailStart <= headEnd) {
+            return output;
+        }
+
+        int omittedLines = totalLines - OUTPUT_HEAD_LINE_KEEP - OUTPUT_TAIL_LINE_KEEP;
+        return output.substring(0, headEnd)
+                + "... [输出行数过多已压缩：共 " + totalLines + " 行，中间省略 " + omittedLines
+                + " 行。如需完整输出可重定向到文件后用 read_file 分段读取] ...\n"
+                + output.substring(tailStart);
+    }
+
+    /**
+     * 计算前 N 行内容结束后的偏移（即第 N 行行尾换行符之后的位置）。
+     * <p>不足 N 行时返回内容长度。</p>
+     */
+    private static int headEndOffset(String output, int lines) {
+        int counted = 0;
+        for (int i = 0; i < output.length(); i++) {
+            if (output.charAt(i) == '\n') {
+                counted++;
+                if (counted == lines) {
+                    return i + 1;
+                }
+            }
+        }
+        return output.length();
+    }
+
+    /**
+     * 计算最后 N 行的起始偏移（即倒数第 N 行的行首）。
+     * <p>
+     * 末尾换行符先跳过——它只是最后一行的终止符，不构成新行；随后从后向前数满
+     * N 个换行符，其后即为倒数第 N 行的行首。不足 N 行时返回下界 {@code lowerBound}。
+     * </p>
+     */
+    private static int tailStartOffset(String output, int lines, int lowerBound) {
+        int scanEnd = output.length();
+        if (scanEnd > lowerBound && output.charAt(scanEnd - 1) == '\n') {
+            scanEnd--;
+        }
+        int newlines = 0;
+        for (int i = scanEnd - 1; i >= lowerBound; i--) {
+            if (output.charAt(i) == '\n') {
+                newlines++;
+                if (newlines == lines) {
+                    return i + 1;
+                }
+            }
+        }
+        return lowerBound;
     }
 
     /**

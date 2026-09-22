@@ -22,7 +22,8 @@
 
     <!-- 原生日志文件输出：按天 + 20MB 双维度轮换，保留 7 天 -->
     <appender name="SERVICE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_DIR}/service_%d{yyyy-MM-dd}.0.log</file>
+        <!-- 注意：不配置 <file>，让激活文件名直接由下方 fileNamePattern 推导（service_当天日期.序号.log）。
+             <file> 是纯字面量文件名，写 %d 占位符不会被解析，会生成字面 "service_%d{...}.log" 的乱名字文件 -->
         <encoder>
             <pattern>${LOG_PATTERN}</pattern>
             <charset>UTF-8</charset>

@@ -16,7 +16,8 @@ import java.util.List;
 /**
  * 图片文件解码器
  * 将 jpg/jpeg/png/webp/gif/bmp 图片转为 base64 多模态附件；
- * 压缩策略统一走 ImageProcessUtils.compressIfNeeded（小文件跳过，大图按平台统一规格压缩并转码 JPEG，GIF 取首帧）；
+ * 压缩策略统一走 ImageProcessUtils.compressIfNeeded 三档决策（分辨率超标强制压缩、
+ * 达标且体积可控跳过、体积超标按收益试压），压缩产物统一转码 JPEG，GIF 取首帧；
  * 非多模态模型（allowImage=false）返回占位文本说明
  */
 @Slf4j
@@ -46,7 +47,7 @@ public class ImageFileDecoder implements FileDecoder {
         byte[] raw = Files.readAllBytes(file.toPath());
         String ext = FileStorageService.getFileExtension(file.getName());
 
-        // 智能压缩：GIF 与小文件（含上传链路已压产物）自动跳过，仅大图按统一规格压缩
+        // 智能压缩：统一走三档决策（分辨率超标强制缩放压缩、达标且体积可控跳过、体积超标按收益试压）
         byte[] data = ImageProcessUtils.compressIfNeeded(raw, ext);
         if (data == null || data.length == 0) {
             data = raw;

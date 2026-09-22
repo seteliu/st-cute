@@ -15,7 +15,7 @@ public record ReadFileArgs(
 ) {
     public static final int DEFAULT_START_LINE = 1;
     public static final int DEFAULT_LINE_COUNT = 1000;
-    public static final int MAX_LINE_COUNT_LIMIT = 10000;
+    public static final int MAX_LINE_COUNT_LIMIT = 5000;
     public static final String DEFAULT_ENCODING = "auto";
 
     public static ReadFileArgs from(Map<String, Object> arguments) {

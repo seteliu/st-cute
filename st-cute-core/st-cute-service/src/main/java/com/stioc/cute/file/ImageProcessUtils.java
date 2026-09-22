@@ -66,7 +66,17 @@ public class ImageProcessUtils {
      * 【平台统一规格】跳过压缩的文件大小阈值：不超过该体积的图片直接原样使用。
      * 上传链路已压缩过的产物通常在几百 KB 内，跳过可避免二次有损压缩造成画质世代损失
      */
-    public static final int SKIP_COMPRESS_THRESHOLD_BYTES = 1024 * 1024;
+    public static final int SKIP_COMPRESS_THRESHOLD_BYTES = 512 * 1024;
+
+    /**
+     * 【平台统一规格】压缩收益下限（比例）：体积压缩收益不足该值时放弃压缩结果、保留原图。
+     * <p>
+     * 用于「分辨率已达标但体积偏大」的试压场景：这类图重编码只能省下有限字节，
+     * 收益过小则不值得付出一次有损重编码的画质代价（JPEG 逐代劣化不可逆）。
+     * 0.05 表示至少省下 5% 体积才采用压缩结果。
+     * </p>
+     */
+    public static final double MIN_COMPRESS_GAIN_RATIO = 0.05;
 
     /**
      * 【平台统一规格】缩略图最长边上限
@@ -89,22 +99,64 @@ public class ImageProcessUtils {
     }
 
     /**
-     * 按需智能压缩（全平台统一入口）：
-     * 不超过 {@link #SKIP_COMPRESS_THRESHOLD_BYTES} 的图片跳过压缩（已压过或本身体积可控，避免二次有损）；
-     * 其余大图按平台统一规格（{@link #MAX_DIMENSION} + {@link #COMPRESS_QUALITY}）压缩并统一转码为 JPEG。
-     * GIF 压缩时仅取首帧（ImageIO 解码动画 GIF 天然只读首帧）
+     * 按需智能压缩（全平台统一入口，上传与读取共用）。
+     * <p>
+     * 三档决策：
+     * <ol>
+     *   <li><b>长边 &gt; {@link #MAX_DIMENSION}</b>：强制缩放压缩，直接采用压缩结果——
+     *       分辨率是视觉 token 成本的主因，必须降到目标规格，即便重编码后体积略增也接受；</li>
+     *   <li><b>长边 ≤ 目标 且 体积 ≤ {@link #SKIP_COMPRESS_THRESHOLD_BYTES}</b>：原样返回，
+     *       避免对已压产物二次有损；</li>
+     *   <li><b>长边 ≤ 目标 且 体积超阈值</b>：试压一次，体积收益达到
+     *       {@link #MIN_COMPRESS_GAIN_RATIO} 才采用压缩结果，否则保留原图
+     *       （此类图无分辨率收益，仅能省字节，收益过小不值得付出有损重编码代价）。</li>
+     * </ol>
+     * </p>
      *
-     * @return 处理后的字节数组；跳过场景返回原字节
+     * @return 处理后的字节数组；跳过或收益不足时返回原字节
      */
     public static byte[] compressIfNeeded(byte[] inputBytes, String extension) {
         if (inputBytes == null || inputBytes.length == 0) {
             return inputBytes;
         }
-        // 小文件跳过压缩：避免对已压缩产物二次有损
-        if (inputBytes.length <= SKIP_COMPRESS_THRESHOLD_BYTES) {
+        // 读取头部声明的尺寸：仅解析元数据不解码全图，开销极低；一次解析同时供
+        // 像素炸弹预检与档位判定复用，下游解码执行体不再重复解析头部
+        int[] size = readSizeByHeader(inputBytes);
+        // 像素炸弹预检（与 compressAndResize 解码前预检同一口径）：超大分辨率解码即巨额堆分配，提前拦截
+        if (isPixelBomb(size, extension)) {
             return inputBytes;
         }
-        return compressAndResize(inputBytes, extension, MAX_DIMENSION, COMPRESS_QUALITY);
+        int maxSide = Math.max(size[0], size[1]);
+        boolean oversize = maxSide > MAX_DIMENSION;
+
+        // 档位二：分辨率已达标且体积可控，直接跳过（小图最常见路径，零解码开销）
+        if (!oversize && inputBytes.length <= SKIP_COMPRESS_THRESHOLD_BYTES) {
+            return inputBytes;
+        }
+
+        byte[] processed = doCompressAndResize(inputBytes, MAX_DIMENSION, COMPRESS_QUALITY);
+        if (processed == null || processed.length == 0) {
+            return inputBytes;
+        }
+
+        // 档位一：分辨率超标的图强制采用压缩结果——缩放带来的 token 收益优先于体积波动
+        if (oversize) {
+            if (processed.length >= inputBytes.length) {
+                log.info("图片压缩：分辨率 {} 缩放至 {} 后体积略增（{} → {} bytes），仍采用压缩结果以保证 token 可控",
+                        maxSide, MAX_DIMENSION, inputBytes.length, processed.length);
+            }
+            return processed;
+        }
+
+        // 档位三：分辨率已达标，仅按收益决定取舍
+        double gainRatio = 1.0 - (double) processed.length / inputBytes.length;
+        if (gainRatio < MIN_COMPRESS_GAIN_RATIO) {
+            log.info("图片压缩：收益不足（原 {} bytes，压缩后 {} bytes，收益 {}% < {}%），保留原图",
+                    inputBytes.length, processed.length, Math.round(gainRatio * 100),
+                    Math.round(MIN_COMPRESS_GAIN_RATIO * 100));
+            return inputBytes;
+        }
+        return processed;
     }
 
     /**
@@ -161,6 +213,13 @@ public class ImageProcessUtils {
         if (isTooLargeByHeader(inputBytes, extension)) {
             return inputBytes;
         }
+        return doCompressAndResize(inputBytes, maxDimension, quality);
+    }
+
+    /**
+     * 解码、缩放与重编码执行体（像素炸弹预检由调用方完成，此处直接解码）。
+     */
+    private static byte[] doCompressAndResize(byte[] inputBytes, int maxDimension, float quality) {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(inputBytes)) {
             BufferedImage originalImage = ImageIO.read(bais);
             if (originalImage == null) {
@@ -199,7 +258,9 @@ public class ImageProcessUtils {
             writeJpegWithQuality(targetImage, baos, quality);
             byte[] outputBytes = baos.toByteArray();
 
-            // 防反向膨胀保护：若无需缩小分辨率且压缩后体积反弹变大，则直接保留原图
+            // 防反向膨胀保护：仅在「未缩放」时保留原图——此时压缩无分辨率收益，
+            // 若重编码反而变大则纯属损失；缩放场景一律采用压缩结果（分辨率收益优先，
+            // 体积波动由调用方的收益闸门判定），故不加此回退
             if (!needResize && outputBytes.length >= inputBytes.length) {
                 log.info("图片原图已最简（原大小: {} bytes, 重新编码后: {} bytes），自动保留原始数据", inputBytes.length, outputBytes.length);
                 return inputBytes;
@@ -239,33 +300,61 @@ public class ImageProcessUtils {
      * @return true 表示分辨率超限，应跳过压缩处理
      */
     private static boolean isTooLargeByHeader(byte[] inputBytes, String extension) {
+        return isPixelBomb(readSizeByHeader(inputBytes), extension);
+    }
+
+    /**
+     * 依据头部声明的尺寸预判是否为「超大分辨率图片」（像素炸弹）。
+     * <p>
+     * 仅凭头部元数据判定，不进行整图解码；尺寸未知（{0, 0}）时按未超标放行，
+     * 由后续解码流程自行处理。
+     * </p>
+     *
+     * @param size      头部解析出的 [宽, 高]
+     * @param extension 图片后缀（仅用于日志）
+     * @return true 表示像素总数超限，应跳过解码
+     */
+    private static boolean isPixelBomb(int[] size, String extension) {
+        if (size[0] <= 0 || size[1] <= 0) {
+            return false;
+        }
+        long pixelCount = (long) size[0] * (long) size[1];
+        if (pixelCount > MAX_PIXEL_COUNT) {
+            log.warn("图片分辨率超限，跳过解码以规避 OOM: ext={}, 像素数={}（约 {} 亿像素），上限 {} 亿像素",
+                    extension, pixelCount, pixelCount / 100_000_000.0, MAX_PIXEL_COUNT / 100_000_000.0);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 从图片头部元数据读取宽高（不进行整图解码）。
+     * <p>
+     * 头部探测失败不影响正常流程，交由后续解码路径处理：返回 {0, 0} 表示尺寸未知，
+     * 调用方应按「未超标」保守处理。
+     * </p>
+     *
+     * @return 长度为 2 的数组 [宽, 高]；无法解析时返回 {0, 0}
+     */
+    private static int[] readSizeByHeader(byte[] inputBytes) {
         try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(inputBytes))) {
             if (iis == null) {
-                return false;
+                return new int[]{0, 0};
             }
             Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
             if (!readers.hasNext()) {
-                return false;
+                return new int[]{0, 0};
             }
             ImageReader reader = readers.next();
             try {
                 reader.setInput(iis, true, true);
-                int width = reader.getWidth(0);
-                int height = reader.getHeight(0);
-                long pixels = (long) width * (long) height;
-                if (pixels > MAX_PIXEL_COUNT) {
-                    log.warn("图片分辨率超限，跳过解码以规避 OOM: ext={}, 尺寸={}x{}（约 {} 亿像素），上限 {} 亿像素",
-                            extension, width, height, pixels / 100_000_000.0, MAX_PIXEL_COUNT / 100_000_000.0);
-                    return true;
-                }
-                return false;
+                return new int[]{reader.getWidth(0), reader.getHeight(0)};
             } finally {
                 reader.dispose();
             }
         } catch (Exception e) {
-            // 头部探测失败不影响正常流程：交由解码路径处理
-            log.debug("图片头部尺寸探测失败，继续常规解码流程: ext={}, 原因={}", extension, e.getMessage());
-            return false;
+            log.debug("图片头部尺寸探测失败，继续常规解码流程: {}", e.getMessage());
+            return new int[]{0, 0};
         }
     }
 

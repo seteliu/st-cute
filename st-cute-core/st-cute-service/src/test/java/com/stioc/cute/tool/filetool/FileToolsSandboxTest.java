@@ -1,6 +1,6 @@
 package com.stioc.cute.tool.filetool;
 
-import com.alibaba.fastjson2.JSON;
+import com.stioc.cute.engine.common.JsonKit;
 import com.alibaba.fastjson2.JSONObject;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.tool.types.ToolExecutionContext;
@@ -111,7 +111,7 @@ class FileToolsSandboxTest {
                     "content", code
             ), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertNotNull(json);
             assertTrue(json.getBooleanValue("success"));
 
@@ -148,7 +148,7 @@ class FileToolsSandboxTest {
                     "content", "trample"
             ), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.containsKey("error"));
             assertTrue(json.getString("error").contains("拒绝覆写"));
             // 物理文件内容未被破坏
@@ -166,7 +166,7 @@ class FileToolsSandboxTest {
                     "content", "fresh"
             ), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.getBooleanValue("success"));
             assertEquals("fresh", Files.readString(file));
         }
@@ -179,7 +179,7 @@ class FileToolsSandboxTest {
             // 2. 紧接着覆写（写后哈希已登记，应放行而非被自己的门禁拦截）
             String resultJson = writeFileTool.execute(Map.of("path", "chain.txt", "content", "second"), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.getBooleanValue("success"));
             assertEquals("second", Files.readString(tempDir.resolve("chain.txt")));
         }
@@ -200,7 +200,7 @@ class FileToolsSandboxTest {
                     "content", "v2"
             ), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.containsKey("error"));
             assertTrue(json.getString("error").contains("已发生变化"));
             // 物理文件保持外部修改后的内容
@@ -246,12 +246,126 @@ class FileToolsSandboxTest {
         }
 
         @Test
+        @DisplayName("未截断读取：尾部标注文件总行数")
+        void readWholeFileReportsTotalLines() throws IOException {
+            Path file = tempDir.resolve("total.txt");
+            Files.writeString(file, "l1\nl2\nl3\nl4\n");
+
+            String content = readFileTool.execute(Map.of("path", "total.txt"), execContext);
+            assertTrue(content.contains("4: l4"));
+            assertTrue(content.contains("[文件共 4 行]"), "实际返回:\n" + content);
+        }
+
+        @Test
+        @DisplayName("被行数上限截断：续读计数后返回精确总行数")
+        void truncatedReadReportsExactTotalLines() throws IOException {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i <= 250; i++) {
+                sb.append("row").append(i).append('\n');
+            }
+            Path file = tempDir.resolve("many.txt");
+            Files.writeString(file, sb.toString());
+
+            String content = readFileTool.execute(Map.of(
+                    "path", "many.txt",
+                    "startLine", 1,
+                    "lineCount", 100
+            ), execContext);
+
+            // 本次只返回前 100 行内容
+            assertTrue(content.contains("100: row100"));
+            assertFalse(content.contains("101: row101"));
+            // 截断提示给出精确总行数 250，而非「总行数未知」
+            assertTrue(content.contains("文件共 250 行"), "实际返回尾部:\n"
+                    + content.substring(Math.max(0, content.length() - 300)));
+        }
+
+        @Test
+        @DisplayName("起始行超界：空结果提示携带精确总行数")
+        void outOfRangeStartLineReportsTotalLines() throws IOException {
+            Path file = tempDir.resolve("short.txt");
+            Files.writeString(file, "a\nb\nc\n");
+
+            String content = readFileTool.execute(Map.of(
+                    "path", "short.txt",
+                    "startLine", 99
+            ), execContext);
+
+            assertTrue(content.contains("读取范围无内容"), "实际返回:\n" + content);
+            assertTrue(content.contains("文件共 3 行"), "实际返回:\n" + content);
+        }
+
+        @Test
         @DisplayName("读取不存在的文件返回明确错误")
         void readNonExistentFileReturnsError() {
             String resultJson = readFileTool.execute(Map.of("path", "missing.txt"), execContext);
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.containsKey("error"));
             assertTrue(json.getString("error").contains("文件不存在"));
+        }
+
+        @Test
+        @DisplayName("内容体积闸门：单次读取内容超过 1MB 字符即停，超限行整体丢弃不返回半行")
+        void contentSizeGateStopsBeforeLimitLine() throws IOException {
+            // 构造 3 行，每行 500KB：前 2 行累计约 1MB，第 3 行加入后会超限，应被整体丢弃
+            String bigLine = "x".repeat(500 * 1024);
+            Path file = tempDir.resolve("huge-lines.txt");
+            Files.writeString(file, bigLine + "\n" + bigLine + "\n" + bigLine + "\n");
+
+            String content = readFileTool.execute(Map.of(
+                    "path", "huge-lines.txt",
+                    "lineCount", 5000
+            ), execContext);
+
+            // 前两行被返回（带行号标注）
+            assertTrue(content.contains("1: x"), "首行应被返回");
+            assertTrue(content.contains("2: x"), "第二行应被返回");
+            // 第三行超限被整体丢弃：不得出现 "3: " 的行号前缀
+            assertFalse(content.contains("3: x"), "超限行应整体丢弃，不返回半行。实际内容尾部:\n"
+                    + content.substring(Math.max(0, content.length() - 400)));
+            // 提示说明停读原因
+            assertTrue(content.contains("本次返回内容已达单次读取上限"), "应给出内容超限说明");
+        }
+
+        @Test
+        @DisplayName("行数上限：lineCount 超过 5000 被钳制到 5000")
+        void lineCountClampedToUpperLimit() throws IOException {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i <= 5200; i++) {
+                sb.append("row").append(i).append('\n');
+            }
+            Path file = tempDir.resolve("clamp.txt");
+            Files.writeString(file, sb.toString());
+
+            String content = readFileTool.execute(Map.of(
+                    "path", "clamp.txt",
+                    "lineCount", 99999
+            ), execContext);
+
+            // 钳制到 5000 行
+            assertTrue(content.contains("5000: row5000"), "应读到第 5000 行");
+            assertFalse(content.contains("5001: row5001"), "不得超过钳制上限 5000 行");
+            assertTrue(content.contains("已达到单次读取行数限制 5000 行"), "截断提示应回显钳制后的行数");
+        }
+
+        @Test
+        @DisplayName("首行即超限：内容闸门在纳入首行前触发，返回专属受限提示而非误导性空结果")
+        void oversizedFirstLineReturnsDedicatedHint() throws IOException {
+            // 构造首行就超过 1MB 字符上限的文件（minified JS / 单行压缩 JSON 的典型形态）
+            String hugeLine = "x".repeat(1024 * 1024 + 100);
+            Path file = tempDir.resolve("single-huge-line.txt");
+            Files.writeString(file, hugeLine + "\n");
+
+            String content = readFileTool.execute(Map.of("path", "single-huge-line.txt"), execContext);
+
+            // 必须返回专属超长行提示，而非「文件共 0 行，起始行超出末尾」的误导性空结果
+            assertTrue(content.contains("读取受限"), "应返回读取受限专属提示。实际返回:\n" + content);
+            assertTrue(content.contains("第 1 行为超长行"), "应指明超长行行号。实际返回:\n" + content);
+            assertTrue(content.contains("无法跳过此限制"), "应说明调整 startLine 无效。实际返回:\n" + content);
+            assertTrue(content.contains("execute_command"), "应给出命令行拆分的可行路径。实际返回:\n" + content);
+            // 不得落入误导性空结果分支
+            assertFalse(content.contains("超出文件末尾"), "不得误报起始行超出文件末尾。实际返回:\n" + content);
+            assertFalse(content.contains("文件共 0 行"), "不得误报文件共 0 行。实际返回:\n" + content);
         }
     }
 
@@ -272,7 +386,7 @@ class FileToolsSandboxTest {
                     "newContent", "int v = 2;"
             ), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.getBooleanValue("success"));
             assertEquals("public class Guard { int v = 2; }", Files.readString(file));
         }
@@ -294,7 +408,7 @@ class FileToolsSandboxTest {
                     "newContent", "String name = \"new\";"
             ), execContext);
 
-            JSONObject json = JSON.parseObject(editResult);
+            JSONObject json = JsonKit.parseObject(editResult);
             assertTrue(json.getBooleanValue("success"));
 
             // 3. 校验物理文件内容已被精准替换
@@ -317,7 +431,7 @@ class FileToolsSandboxTest {
                     "endLine", 6
             ), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.getBooleanValue("success"));
             // message 中附注窗口外另一处孪生的行号
             assertTrue(json.getString("message").contains("另有 1 处相同内容位于第 1 行"));
@@ -340,7 +454,7 @@ class FileToolsSandboxTest {
                     "newContent", "int y = 20;"
             ), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.getBooleanValue("success"));
             assertFalse(json.getString("message").contains("相同内容位于第"));
         }
@@ -369,11 +483,11 @@ class FileToolsSandboxTest {
                     "newContent", newSb.toString()
             ), execContext);
 
-            JSONObject json = JSON.parseObject(resultJson);
+            JSONObject json = JsonKit.parseObject(resultJson);
             assertTrue(json.getBooleanValue("success"));
             String context = json.getString("context");
-            // 省略提示存在，中间 6 行不回显
-            assertTrue(context.contains("省略 6 行"));
+            // 省略提示存在（以真实行号表述），中间 6 行不回显
+            assertTrue(context.contains("省略第 6-11 行，共 6 行"), "实际输出:\n" + context);
             assertFalse(context.contains("fresh line 3"));
             assertTrue(context.contains("fresh line 1"));
             assertTrue(context.contains("fresh line 10"));
