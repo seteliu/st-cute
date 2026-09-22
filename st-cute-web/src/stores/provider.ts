@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getProviders, saveProvider, deleteProvider } from '@/api/provider'
 import { Provider } from '@/types'
@@ -149,3 +149,8 @@ export const useProviderStore = defineStore('provider', () => {
     resetForm
   }
 })
+
+// 启用 Pinia store 热更新：dev 热替换时复用原 store 实例，避免新旧实例并存导致组件状态分裂、刷新链断裂
+if (import.meta.hot) {
+  acceptHMRUpdate(useProviderStore, import.meta.hot)
+}

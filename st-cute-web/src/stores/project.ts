@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getProjects, saveProject, deleteProjectById, updateProjectExpanded, setActiveProject } from '@/api/project'
 import { Project } from '@/types'
@@ -96,3 +96,8 @@ export const useProjectStore = defineStore('project', () => {
     handleUpdateExpanded
   }
 })
+
+// 启用 Pinia store 热更新：dev 热替换时复用原 store 实例，避免新旧实例并存导致组件状态分裂、刷新链断裂
+if (import.meta.hot) {
+  acceptHMRUpdate(useProjectStore, import.meta.hot)
+}

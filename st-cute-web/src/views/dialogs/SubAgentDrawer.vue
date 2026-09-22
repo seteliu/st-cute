@@ -127,73 +127,12 @@
           :messages="filteredMessages"
           :is-sub-agent="true"
           :cid="Number(agentStore.activeSubAgent?.cid)"
+          :running="agentStore.activeSubAgent?.status === 'running'"
         />
-      </div>
-
-      <!-- 独立人在回路（HITL）审批区 -->
-      <div
-        v-if="agentStore.activeSubAgent.pendingPermissionReq"
-        style="padding: 12px; background-color: #2b1f1f; border: 1px solid #d03050; border-radius: 6px; margin-top: auto;"
-      >
-        <div
-          style="font-weight: bold; color: #d03050; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;"
-        >
-          <span>⚠️</span> <span>人在回路审批拦截</span>
-        </div>
-        <div style="font-size: 12px; margin-bottom: 8px;">
-          子代理请求执行敏感工具:
-          <strong style="color: var(--status-warning);">{{
-            agentStore.activeSubAgent.pendingPermissionReq.toolName
-          }}</strong>
-          <div
-            style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;"
-          >
-            <span style="color: #a0a0a5; font-size: 11px;">参数信息:</span>
-            <n-switch
-              v-model:value="agentStore.activeSubAgent.pendingPermissionReq.isEditingArgs"
-              size="small"
-            >
-              <template #checked>编辑参数</template>
-              <template #unchecked>开启编辑</template>
-            </n-switch>
-          </div>
-          <div>
-            <n-input
-              v-if="agentStore.activeSubAgent.pendingPermissionReq.isEditingArgs"
-              v-model:value="agentStore.activeSubAgent.pendingPermissionReq.editedArgumentsJson"
-              type="textarea"
-              placeholder="请输入修改后的参数 (JSON格式)"
-              :autosize="{ minRows: 2, maxRows: 6 }"
-              style="font-family: monospace; font-size: 11px; background-color: #101014; border-color: #2d2d30; color: #fff;"
-              maxlength="10000"
-            />
-            <pre
-              v-else
-              style="background-color: #101014; padding: 6px; border: 1px solid #2d2d30; border-radius: 4px; font-size: 11px; color: #a0a0a5; max-height: 100px; overflow-y: auto; margin-top: 4px; white-space: pre-wrap;"
-              >{{
-                formatArgumentsJson(agentStore.activeSubAgent.pendingPermissionReq.arguments)
-              }}</pre
-            >
-          </div>
-        </div>
-        <div style="display: flex; justify-content: flex-end; gap: 8px;">
-          <n-button
-            size="small"
-            type="error"
-            @click="agentStore.handleSubPermissionDecision(agentStore.activeSubAgent, 'DENY')"
-            >拒绝 (Deny)</n-button
-          >
-          <n-button
-            size="small"
-            type="primary"
-            @click="agentStore.handleSubPermissionDecision(agentStore.activeSubAgent, 'ALLOW')"
-            >允许 (Allow)</n-button
-          >
-        </div>
       </div>
     </div>
   </n-card>
-</n-modal>
+  </n-modal>
 </template>
 
 <script setup lang="ts">
@@ -293,15 +232,6 @@ const filteredMessages = computed<RenderItem[]>(() => {
   return result;
 });
 
-const formatArgumentsJson = (argsStr: string | undefined) => {
-  if (!argsStr) return ''
-  try {
-    const parsed = JSON.parse(argsStr)
-    return JSON.stringify(parsed, null, 2)
-  } catch (e) {
-    return argsStr
-  }
-}
 const messageListFlowRef = ref<any>(null)
 
 const scrollToBottom = (smooth = true) => {

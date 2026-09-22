@@ -12,7 +12,8 @@
           : message.role === 'compressed'
           ? 'compressed-message'
           : 'assistant-message',
-        'status-' + (message.status || 'SUCCESS').toLowerCase()
+        'status-' + (message.status || 'SUCCESS').toLowerCase(),
+        { 'is-conv-running': running }
       ]"
     >
       <template v-if="message.role !== 'system'">
@@ -20,23 +21,28 @@
         <div v-if="appStore.showMessageAvatar" class="avatar">{{ avatarLabel }}</div>
         <div class="msg-content-wrapper">
           <div 
-            v-if="message.content || message.thought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || ((message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !message.thought)" 
+            v-if="message.content || hasThought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || ((message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !hasThought)" 
             class="msg-content"
           >
             <!-- 附件区域展示 -->
             <message-attachments v-if="message.attachments" :attachments="message.attachments" />
 
-            <!-- 思考过程单行精简展示 -->
-            <div v-if="message.thought" class="thought-row">
+            <!-- 思考过程单行精简展示（仅当清洗后仍有内容时渲染，避免纯空白思考产出空行） -->
+            <div v-if="hasThought" class="thought-row">
               <span class="thought-prefix">思考过程:</span>
               <span class="thought-text-fixed">{{ cleanThoughtText }}</span>
               <span class="thought-count-tag">(共 {{ thoughtCharCount }} 字)</span>
+              <!-- 抽屉传参必须是「原始 thought 全文」而非 cleanThoughtText：
+                   折叠详情等场景的消息来自范围查询的组件局部状态（折叠时已从响应式列表物理删除），
+                   抽屉前两级按 ID 查列表必然落空，只能走快照兜底。若此处传清洗后的单行文本，
+                   兜底内容里的换行与缩进已被压成空格，思考全文会堆叠成一行。
+                   清洗文本仅用于本行内单行精简展示与字数统计，不可外泄给详情抽屉 -->
               <n-button
                 size="tiny"
                 quaternary
                 type="primary"
                 class="thought-detail-btn"
-                @click="appStore.openThoughtDetail(message.thought, message.id)"
+                @click="appStore.openThoughtDetail(message.thought || '', message.id)"
               >
                 {{ t('chat.viewThoughtDetail') }}
               </n-button>
@@ -68,9 +74,7 @@
               v-if="message.role !== 'compressed' && isStreamingRunning && !message.content"
               class="thinking-animation"
             >
-              <span class="thinking-dot"></span>
-              <span class="thinking-dot"></span>
-              <span class="thinking-dot"></span>
+              <thinking-dots />
             </div>
 
             <!-- 取消/失败/等待等文字标志 -->
@@ -98,6 +102,8 @@
               :parent-message-id="message.id"
               :tools="tools"
               :cid="cid !== undefined && cid !== null ? cid : conversationStore.activeCid"
+              :show-tail-dots="showTailDots"
+              :running="running"
             />
           </div>
 
@@ -194,26 +200,49 @@ import { useConversationStore } from '@/stores/conversation'
 import { renderMarkdownSafe } from '@/utils/markdown'
 import { Message } from '@/types'
 import { t } from '@/i18n'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import ToolGroupCard from './ToolGroupCard.vue'
 import MessageAttachments from './MessageAttachments.vue'
+import ThinkingDots from '@/components/ThinkingDots.vue'
 
 const props = defineProps<{
   message: Message
   tools?: Message[]
   isSubAgent?: boolean
   cid?: number | null
+  /**
+   * 该消息挂载的工具批次是否处于「末批且尚未收口」状态。
+   * 由父级 MessageListFlow 统一判定，本组件仅负责把结果透传给内嵌的 ToolGroupCard 渲染三点指示。
+   */
+  showTailDots?: boolean
+  /**
+   * 所属会话是否处于运行中。必传——由各调用点按自身语义显式表态（主会话传全局 loopRunning，
+   * 子会话抽屉传子代理运行态，折叠详情传 false），刻意不提供内部回退。
+   *
+   * 该属性作为本消息全部「活跃态视觉」的统一守卫（正文末尾打字光标、思考中三点、边框脉冲）：
+   * 会话已停时，任何未达终态的消息都是残留态，不应再呈现推进中的动效。
+   */
+  running: boolean
 }>()
 
 const appStore = useAppStore()
 const conversationStore = useConversationStore()
 
-// 思考过程纯文本清洗与实时字数统计
+// 思考过程纯文本清洗：折叠连续空白并去掉首尾空白。
+// 大模型偶发只产出空白字符的思考片段，需按「清洗后是否还有内容」判定是否存在，
+// 否则会渲染出「思考过程:」前缀却没有任何内容的空行
 const cleanThoughtText = computed(() => {
   return (props.message.thought || '').replace(/\s+/g, ' ').trim()
 })
 
+// 是否存在有效思考内容（清洗后非空才算）
+const hasThought = computed(() => {
+  return cleanThoughtText.value.length > 0
+})
+
+// 思考过程字数：按清洗后的文本统计，与用户实际看到的展示内容一致
 const thoughtCharCount = computed(() => {
-  return (props.message.thought || '').length
+  return cleanThoughtText.value.length
 })
 
 const avatarLabel = computed(() => {
@@ -223,11 +252,16 @@ const avatarLabel = computed(() => {
   return 'A'
 })
 
-// 消息是否处于流式执行/活跃中
+// 消息是否处于流式执行/活跃中。
+// 追加会话运行态守卫：仅消息状态为 RUNNING/PENDING 还不够——子智能体被系统重置清理时，
+// 其向父会话投递的 BRANCH 报告消息以 PENDING 落库，若父会话未能跑起收口轮次
+// （如进程重启导致 loopRunning 归零），该消息会永久停在 PENDING，导致边框脉冲与
+// 打字光标常亮。故要求所属会话确实在运行，才认定为活跃态。
 const isStreamingRunning = computed(() => {
   return props.message.role !== 'compressed' &&
     props.message.role !== 'user' &&
-    (props.message.status === 'RUNNING' || props.message.status === 'PENDING')
+    (props.message.status === 'RUNNING' || props.message.status === 'PENDING') &&
+    props.running
 })
 
 // 只允许最后一个用户消息之后的消息可以重试，防止历史消息中重试导致上下文错乱
@@ -268,15 +302,16 @@ const formattedContent = computed(() => {
   }
 })
 
-const handleCopy = () => {
+const handleCopy = async () => {
   const text = props.message.content || ''
-  navigator.clipboard.writeText(text).then(() => {
-    if ((window as any).$message) {
+  const ok = await copyTextToClipboard(text)
+  if ((window as any).$message) {
+    if (ok) {
       (window as any).$message.success('消息内容已复制')
+    } else {
+      (window as any).$message.error(t('chat.copiedFailed'))
     }
-  }).catch((e) => {
-    console.error('复制失败:', e)
-  })
+  }
 }
 
 const handleRollback = async () => {
@@ -353,42 +388,9 @@ const displayTime = computed(() => {
 .thinking-animation {
   display: flex;
   align-items: center;
-  gap: 6px;
   padding: 6px 4px;
   margin-top: 4px;
   margin-bottom: 4px;
-}
-
-.thinking-dot {
-  width: 7px;
-  height: 7px;
-  background-color: var(--primary-color);
-  border-radius: 50%;
-  opacity: 0.4;
-  animation: thinking-bounce 1.4s infinite both;
-}
-
-.thinking-dot:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.thinking-dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.thinking-dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes thinking-bounce {
-  0%, 80%, 100% {
-    transform: scale(0.6);
-    opacity: 0.35;
-  }
-  40% {
-    transform: scale(1.1);
-    opacity: 0.85;
-  }
 }
 
 .message {
@@ -398,6 +400,12 @@ const displayTime = computed(() => {
 
 .status-pending {
   opacity: 0.65;
+}
+
+/* 未完成态的边框脉冲：仅当所属会话确实在运行时才播放。
+   否则残留的 PENDING 消息（如子智能体被系统重置清理时投递、父会话未跑起收口轮次的
+   BRANCH 报告）会因状态永不变更而持续闪烁，误导用户以为仍在推进 */
+.status-pending.is-conv-running {
   animation: pulse-pending 2s infinite ease-in-out;
 }
 

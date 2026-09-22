@@ -121,11 +121,6 @@
             :cached-tokens="sub.cachedTokens"
             label-prefix="Tokens: "
           />
-
-          <!-- 待审批提示 -->
-          <div v-if="sub.pendingPermissionReq" style="color: #f64c5d; font-weight: bold; display: flex; align-items: center; gap: 4px;">
-            <span class="pulse-red-dot"></span>🚨 {{ t('subAgent.statusPendingPermission') }}
-          </div>
         </div>
       </div>
 
@@ -261,6 +256,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
 import { useMessage } from 'naive-ui'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import { t } from '@/i18n'
 import { useAgentStore } from '@/stores/agent'
 import { useProjectStore } from '@/stores/project'
@@ -389,22 +385,24 @@ onUnmounted(() => {
   stopPollingLlmCalls()
 })
 
-const handleCopyPath = (path: string) => {
+const handleCopyPath = async (path: string) => {
   if (!path) return
-  navigator.clipboard.writeText(path).then(() => {
+  const ok = await copyTextToClipboard(path)
+  if (ok) {
     message.success('项目物理路径已复制到剪贴板')
-  }).catch(() => {
-    message.error('物理路径复制失败')
-  })
+  } else {
+    message.error('物理路径复制失败：当前环境不支持自动复制')
+  }
 }
 
-const handleCopyBranch = (branch: string) => {
+const handleCopyBranch = async (branch: string) => {
   if (!branch) return
-  navigator.clipboard.writeText(branch).then(() => {
+  const ok = await copyTextToClipboard(branch)
+  if (ok) {
     message.success('Git 分支名已复制到剪贴板')
-  }).catch(() => {
-    message.error('Git 分支名复制失败')
-  })
+  } else {
+    message.error('Git 分支名复制失败：当前环境不支持自动复制')
+  }
 }
 
 const currentProject = computed(() => {

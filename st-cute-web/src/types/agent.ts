@@ -47,13 +47,6 @@ export interface SubAgent {
   outputTokens: number
   cachedTokens?: number
   truncated?: boolean
-  pendingPermissionReq?: {
-    id: string
-    toolName: string
-    arguments: string
-    isEditingArgs?: boolean
-    editedArgumentsJson?: string
-  }
 }
 
 export interface AgentRule {

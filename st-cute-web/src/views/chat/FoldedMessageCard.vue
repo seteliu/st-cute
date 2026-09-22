@@ -66,11 +66,13 @@
             <div v-else-if="detailError" class="detail-error">
               {{ detailError }}
             </div>
+            <!-- 折叠详情为静态历史区间（已终结的中间步骤），显式传 false 确保不显示末批运行指示 -->
             <message-list-flow
               v-else
               :messages="detailRenderItems"
               :is-sub-agent="true"
               :cid="cid"
+              :running="false"
             />
           </div>
         </div>

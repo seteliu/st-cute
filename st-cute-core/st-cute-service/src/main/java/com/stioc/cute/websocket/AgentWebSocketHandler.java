@@ -21,7 +21,11 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        log.info("WebSocket 物理连接已建立, wsSessionId: {}", session.getId());
+        // 连接建立即登记进全量连接集：未绑定任何 cid 的连接也能天然接收全局广播
+        // （会话列表增删、项目/配置变更等），后续按需通过 PING 帧绑定具体会话
+        WebSocketSessionManager.trackConnection(session);
+        log.info("WebSocket 物理连接已建立, wsSessionId: {}, 当前全量连接数: {}",
+                session.getId(), WebSocketSessionManager.allSessionsSize());
     }
 
     @Override
@@ -36,7 +40,12 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            // 动态关联并绑定物理连接到业务会话 cid 上
+            // 动态关联并绑定物理连接到业务会话 cid 上（累积绑定：一个连接可同时归属多个 cid）。
+            // 是否在切换时解绑旧会话由前端决策：PING 帧可携带可选的 unbindCid 先解绑再绑定，
+            // 防止切走会话的流式帧继续推给本连接形成洪峰；多会话并行场景省略 unbindCid 即可保留多个绑定
+            if (event.getUnbindCid() != null && event.getUnbindCid() != 0L) {
+                WebSocketSessionManager.unbindSession(event.getUnbindCid(), session);
+            }
             if (event.getCid() != null && event.getCid() != 0L) {
                 WebSocketSessionManager.registerSession(event.getCid(), session);
             }

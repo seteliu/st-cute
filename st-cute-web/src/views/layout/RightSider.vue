@@ -11,9 +11,7 @@
     <n-tabs type="line" justify-content="space-evenly" class="inspector-tabs">
       <n-tab-pane name="overview">
         <template #tab>
-          <n-badge dot :show="hasPendingApprovals" processing>
-            {{ t('inspector.overview') }}
-          </n-badge>
+          {{ t('inspector.overview') }}
         </template>
         <overview-pane />
       </n-tab-pane>
@@ -96,14 +94,6 @@ const appStore = useAppStore()
 const agentStore = useAgentStore()
 const conversationStore = useConversationStore()
 const isReloading = ref(false)
-
-const hasPendingApprovals = computed(() => {
-  const activeCid = conversationStore.activeCid
-  if (!activeCid) return false
-  return agentStore.subAgents.some(
-    sub => String(sub.parentCid) === String(activeCid) && sub.pendingPermissionReq !== undefined
-  )
-})
 
 // 热重载按钮的最小 loading 保底时长（毫秒）：本机请求往往几十毫秒内完成，
 // 转圈一闪而过毫无感知，保底展示让用户确认「重载已生效」

@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { wsService } from '@/services/websocket'
 import {
@@ -20,7 +20,7 @@ import { useProviderStore } from './provider'
 import { useProjectStore } from './project'
 import { useAgentStore } from './agent'
 import { useGitStore } from './git'
-import { Message, Conversation } from '@/types'
+import { Message, Conversation, StagedFile } from '@/types'
 
 export const useConversationStore = defineStore('conversation', () => {
   const conversationList = ref<Conversation[]>([])
@@ -35,8 +35,45 @@ export const useConversationStore = defineStore('conversation', () => {
   const outputTokens = ref(0)
   const cachedTokens = ref(0)
 
+  // 按会话吸附的输入框草稿：切换会话时交割（旧会话暂存、新会话取回），
+  // 无记录的会话视为空草稿，不预建条目避免无谓增长
+  const draftMap = ref<Record<number, string>>({})
+  // 按会话吸附的暂存附件：条目内持有 File 对象与预览 ObjectURL 引用，
+  // 切换会话仅隐藏不销毁，切回即原样恢复；仅发送成功与会话删除时才真正释放
+  const stagedFilesMap = ref<Record<number, StagedFile[]>>({})
+
   const appStore = useAppStore()
   const projectStore = useProjectStore()
+
+  /**
+   * 会话切换时的草稿交割：把当前输入框内容记到旧会话名下，再把新会话草稿回填输入框。
+   * 由 ChatInput 在 activeCid 变更前调用（oldCid 交割来源、newCid 取回目标）
+   */
+  const switchDraftContext = (oldCid: number | null, newCid: number) => {
+    if (oldCid !== null) {
+      const prev = appStore.userInput || ''
+      if (prev) {
+        draftMap.value[oldCid] = prev
+      } else {
+        delete draftMap.value[oldCid]
+      }
+    }
+    appStore.userInput = draftMap.value[newCid] || ''
+  }
+
+  /**
+   * 释放指定会话的暂存附件：逐个回收图片预览 ObjectURL 并删除 map 条目。
+   * 触发时机：该会话发送成功、该会话被删除（单个/批量）、全局清空环境
+   */
+  const disposeStagedFiles = (cid: number) => {
+    const list = stagedFilesMap.value[cid]
+    if (list) {
+      list.forEach(item => {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+      })
+      delete stagedFilesMap.value[cid]
+    }
+  }
 
   const clearContext = () => {
     const agentStore = useAgentStore()
@@ -49,12 +86,26 @@ export const useConversationStore = defineStore('conversation', () => {
     inputTokens.value = 0
     outputTokens.value = 0
     cachedTokens.value = 0
+    // 清空环境的同时清掉全部按会话草稿与暂存附件，防止脏数据滞留
+    draftMap.value = {}
+    Object.keys(stagedFilesMap.value).forEach(key => {
+      disposeStagedFiles(Number(key))
+    })
+    appStore.userInput = ''
   }
 
+  // 静默加载失败后的自动重试参数：最多 2 次，间隔 1.5 秒。
+  // 重连瞬间的网络抖动是消息加载失败的主因，幂等 GET 重试零副作用；
+  // 重试期间保持静默（不弹全局错误），全部耗尽才降级为一次性提示
+  const SILENT_RETRY_TIMES = 2
+  const SILENT_RETRY_INTERVAL = 1500
+  const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
   // 加载会话列表
-  const loadConversations = async () => {
+  // silent: 静默模式（断线重连强刷场景）——HTTP 层不弹全局错误提示，失败仅记 console
+  const loadConversations = async (silent = false) => {
     try {
-      const data = await getConversations()
+      const data = await getConversations(silent)
       // 过滤出绑定了有效项目的会话，防止历史孤儿脏数据干扰
       // （workspaceId 为项目 ID 字符串，与项目列表 id 数值比对需弱等转换）
       const validConversations = data.filter(s =>
@@ -141,32 +192,68 @@ export const useConversationStore = defineStore('conversation', () => {
       cachedTokens.value = 0
     }
 
+    let lastError: any = null
     try {
-      const res = await getConversationMessages(id)
-      truncated.value = res.truncated || false
-      const list = res.messages || []
-      
-      messages.value = list.map((msg) => {
-        const roleLower = msg.role ? (msg.role.toLowerCase() as any) : 'assistant'
-        return {
-          ...msg,
-          role: roleLower
+      // 失败自动重试：重连瞬间或弱网下的失败多为瞬时抖动，幂等 GET 重试零副作用；
+      // 重试期间保持静默不弹全局错误，全部耗尽才在 finally 之后降级为一次性提示
+      for (let attempt = 0; attempt <= SILENT_RETRY_TIMES; attempt++) {
+        if (attempt > 0) {
+          await sleep(SILENT_RETRY_INTERVAL)
+          // 等待期间用户已切走：不再对旧会话做无意义的重试（新会话会自行触发加载）
+          if (activeCid.value !== id) return
         }
-      })
+        try {
+          const res = await getConversationMessages(id, undefined, silent)
+          // 回包守卫：加载期间用户已切走到其他会话则整体中止，
+          // 避免旧会话慢响应（含重试链拉长的窗口）污染新会话已就绪的消息列表
+          if (activeCid.value !== id) return
+          truncated.value = res.truncated || false
+          const list = res.messages || []
+
+          messages.value = list.map((msg) => {
+            const roleLower = msg.role ? (msg.role.toLowerCase() as any) : 'assistant'
+            return {
+              ...msg,
+              role: roleLower
+            }
+          })
+          lastError = null
+          break
+        } catch (e) {
+          lastError = e
+          console.error(`加载历史消息与会话状态失败(第 ${attempt + 1} 次尝试):`, e)
+        }
+      }
     } catch (e) {
+      // 外层兜底（重试循环自身异常，理论上不会进入）
+      lastError = e
       console.error('加载历史消息与会话状态失败:', e)
-      ;(window as any).$message?.error('加载历史消息与会话状态失败，请检查网络或后端连接')
     } finally {
       // 先摘除尚未触发的静默延迟定时器（快速重连场景：请求已在 1 秒内完成，转圈从未出现过）
       if (spinnerDelayTimer !== null) {
         clearTimeout(spinnerDelayTimer)
         spinnerDelayTimer = null
       }
-      isMessageLoading.value = false
-      // 150ms 后停止转轮背景，保持首屏灵敏度
-      setTimeout(() => {
-        isMessageSpinning.value = false
-      }, 150)
+      // 转圈收起守卫：加载期间用户已切走时，新会话正在展示自己的加载态，
+      // 旧会话的慢响应（含重试链）不得提前掐灭新会话的转圈标志
+      if (activeCid.value === id) {
+        isMessageLoading.value = false
+        // 150ms 后停止转轮背景，保持首屏灵敏度
+        setTimeout(() => {
+          isMessageSpinning.value = false
+        }, 150)
+      }
+    }
+
+    // 重试耗尽后的一次性降级提示：此刻距重连已过数秒、转圈早已收起，不再抢跑首屏观感；
+    // 且能走到这一步说明网络大概率确实不通，提示是必要的用户感知而非打扰。
+    // 静默（重连强刷）与普通（手动切换会话）模式文案区分，便于用户区分场景定位问题；
+    // 已切走到其他会话则不再打扰（新会话会自行加载并反馈自己的结果）
+    if (lastError !== null && activeCid.value === id) {
+      const hint = silent
+        ? '重连后恢复会话消息失败，请检查网络或刷新重试'
+        : '加载历史消息与会话状态失败，请检查网络或后端连接'
+      ;(window as any).$message?.error(hint)
     }
 
         // 环境资产静默加载：消息列表就绪后执行，独立 try 且不阻塞本函数返回，全程不触发转圈。
@@ -174,7 +261,7 @@ export const useConversationStore = defineStore('conversation', () => {
     // 守卫：回包时若已切走到其他会话则整体中止，避免旧会话慢响应污染新会话状态（新会话会自行触发加载）
     const loadEnvAssets = async () => {
       try {
-        const envInfo = await getContextInfoApi(id)
+        const envInfo = await getContextInfoApi(id, silent)
         if (activeCid.value !== id) return
         const agentStore = useAgentStore()
         agentStore.skillsList = envInfo.skills || []
@@ -199,7 +286,8 @@ export const useConversationStore = defineStore('conversation', () => {
         await gitStore.fetchBranches(true)
       } catch (e) {
         console.error('加载会话环境上下文信息失败:', e)
-        ;(window as any).$message?.error('加载会话环境上下文信息失败，请检查网络或后端连接')
+        // 静默化处理：环境资产（技能/权限模式/Token/git）非关键路径，失败不打扰用户，
+        // 后续会话切换或 git 轮询会自然重拉自愈；此处保留 error 日志便于排查
       }
     }
     loadEnvAssets()
@@ -264,6 +352,9 @@ export const useConversationStore = defineStore('conversation', () => {
     try {
       await deleteConversationById(id)
       conversationList.value = conversationList.value.filter(s => s.id !== id)
+      // 会话已删除，同步清理其草稿与暂存附件记录，防止滞留造成内存与状态残留
+      delete draftMap.value[id]
+      disposeStagedFiles(id)
 
       if (activeCid.value === id) {
         activeCid.value = null
@@ -299,6 +390,11 @@ export const useConversationStore = defineStore('conversation', () => {
     try {
       await batchDeleteConversationsApi(ids)
       conversationList.value = conversationList.value.filter(s => !ids.includes(s.id))
+      // 批量删除的会话同步清理草稿与暂存附件记录
+      ids.forEach(mid => {
+        delete draftMap.value[mid]
+        disposeStagedFiles(mid)
+      })
 
       if (activeCid.value !== null && ids.includes(activeCid.value)) {
         activeCid.value = null
@@ -388,11 +484,17 @@ export const useConversationStore = defineStore('conversation', () => {
     appStore.currentIteration = 0
     
     const oldInput = appStore.userInput
+    // 发送前暂存本会话草稿：发送成功后清除，失败时保留供输入框原样恢复
+    draftMap.value[id] = oldInput
     appStore.userInput = ''
     appStore.loopRunning = true
     
     sendMessageApi(id, { text, attachments }).then(() => {
-      // 成功发送后无需手动在此处更新，等待 WebSocket 推送 S2C_MESSAGE_CREATED 事件后自动追加
+      // 成功发送后无需手动在此处更新，等待 WebSocket 推送 S2C_MESSAGE_CREATED 事件后自动追加。
+      // 发送成功：彻底释放本会话暂存附件（回收预览 ObjectURL 与 map 记录）并清除草稿暂存；
+      // 发送失败：两者均原样保留，供用户重试
+      disposeStagedFiles(id)
+      delete draftMap.value[id]
     }).catch(err => {
       console.error('发送消息失败:', err)
       appStore.loopRunning = false
@@ -544,9 +646,17 @@ export const useConversationStore = defineStore('conversation', () => {
     resetToMessage,
     reloadProjectAssets,
     renameConversation,
-    handleBatchDelete
+    handleBatchDelete,
+    draftMap,
+    stagedFilesMap,
+    switchDraftContext
   }
 })
+
+// 启用 Pinia store 热更新：dev 热替换时复用原 store 实例，避免新旧实例并存导致组件状态分裂、刷新链断裂
+if (import.meta.hot) {
+  acceptHMRUpdate(useConversationStore, import.meta.hot)
+}
 
 export function trimMessagesArray(messages: any[], limit: number): { list: any[]; truncated: boolean } {
   if (messages.length <= limit) {

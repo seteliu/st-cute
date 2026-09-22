@@ -42,6 +42,7 @@ import { useAppStore } from '@/stores/app'
 import { useConversationStore } from '@/stores/conversation'
 import { useAgentStore } from '@/stores/agent'
 import { useResponsive } from '@/utils/useResponsive'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import { t } from '@/i18n'
 
 const { isMobile } = useResponsive()
@@ -79,26 +80,28 @@ const width = computed(() => {
   return isMobile.value ? '100%' : 650
 })
 
-// 响应式解析当前查看的思考内容（支持主会话与子代理流式实时同步）
+// 响应式解析当前查看的思考内容（支持主会话与子代理流式实时同步）。
+// 首尾空白在此统一去除：大模型偶发产出纯空白片段，不去除会在抽屉里显示为空白内容。
+// 仅去首尾、不折叠内部空白，保留思考全文的原始换行与缩进结构
 const currentThoughtText = computed(() => {
   const targetId = appStore.currentViewThoughtMessageId
   if (targetId) {
     // 1. 先在主会话消息列表中查找
     const mainMsg = conversationStore.messages.find(m => m.id === targetId)
     if (mainMsg && mainMsg.thought !== undefined) {
-      return mainMsg.thought
+      return mainMsg.thought.trim()
     }
     // 2. 在当前激活的子代理消息列表中查找
     const subAgent = agentStore.activeSubAgent
     if (subAgent && subAgent.messages) {
       const subMsg = subAgent.messages.find((m: any) => m.id === targetId)
       if (subMsg && subMsg.thought !== undefined) {
-        return subMsg.thought
+        return subMsg.thought.trim()
       }
     }
   }
   // 3. 兜底返回快照内容
-  return appStore.thoughtDetailContent || ''
+  return (appStore.thoughtDetailContent || '').trim()
 })
 
 const charCountText = computed(() => {
@@ -133,15 +136,16 @@ watch(
   }
 )
 
-const handleCopy = () => {
+const handleCopy = async () => {
   const text = currentThoughtText.value || ''
-  navigator.clipboard.writeText(text).then(() => {
-    if ((window as any).$message) {
+  const ok = await copyTextToClipboard(text)
+  if ((window as any).$message) {
+    if (ok) {
       (window as any).$message.success(t('chat.copiedSuccess'))
+    } else {
+      (window as any).$message.error(t('chat.copiedFailed'))
     }
-  }).catch((e) => {
-    console.error('复制思考内容失败:', e)
-  })
+  }
 }
 </script>
 

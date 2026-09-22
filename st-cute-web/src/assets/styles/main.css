@@ -584,12 +584,6 @@ body.sider-resizing .tool-calls-container {
   max-width: 250px;
 }
 
-.tool-status-text {
-  color: var(--status-warning);
-  font-size: 0.75rem;
-  margin-left: auto;
-}
-
 .tool-result-summary {
   color: var(--text-color-muted);
   font-size: 0.8rem;
@@ -753,6 +747,19 @@ body.sider-resizing .tool-calls-container {
 }
 
 .n-popconfirm__action .n-button {
+  margin: 0 !important;
+}
+
+/* 命令式确认框（useDialog）沿用同一顺序约定：
+   组件默认渲染 negative（取消）在前、positive（确认）在后，此处反转以与全站统一 */
+.n-dialog__action {
+  display: flex !important;
+  flex-direction: row-reverse !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+}
+
+.n-dialog__action .n-button {
   margin: 0 !important;
 }
 

@@ -1,19 +1,21 @@
 import request from '@/utils/request'
 import { Message, Conversation, LimitMessageDto } from '@/types'
 
-export const getConversations = async (): Promise<Conversation[]> => {
-  return request.get('/api/conversation/list')
+// silent=true 标识后台静默请求（断线重连强刷场景）：失败时拦截器不弹全局错误提示，由调用方兜底
+export const getConversations = async (silent = false): Promise<Conversation[]> => {
+  return request.get('/api/conversation/list', { silent })
 }
 
 export const getConversationMessages = async (
   cid: number,
-  options?: { folded?: boolean; minId?: number; maxId?: number }
+  options?: { folded?: boolean; minId?: number; maxId?: number },
+  silent = false
 ): Promise<LimitMessageDto> => {
   const folded = options?.folded !== undefined ? options.folded : true
   let url = `/api/message/list?cid=${cid}&folded=${folded}`
   if (options?.minId !== undefined) url += `&minId=${options.minId}`
   if (options?.maxId !== undefined) url += `&maxId=${options.maxId}`
-  return request.get(url)
+  return request.get(url, { silent })
 }
 
 export const deleteConversationById = async (cid: number): Promise<any> => {

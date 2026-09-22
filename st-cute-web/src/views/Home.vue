@@ -20,7 +20,6 @@
     </n-drawer>
 
     <!-- 全局弹窗与抽屉 -->
-    <permission-modal />
     <raw-log-drawer />
     <sub-agent-drawer />
     <thought-detail-drawer />
@@ -31,7 +30,6 @@
 import { onMounted, onUnmounted, computed, watch } from 'vue'
 import { initResponsive, useResponsive } from '@/utils/useResponsive'
 import { wsService } from '@/services/websocket'
-import { getConversationMessages } from '@/api/conversation'
 import { Message, StreamChunkPayload } from '@/types'
 import {
   appendIncomingMessage,
@@ -55,7 +53,6 @@ import ChatContainer from '@/views/chat/ChatContainer.vue'
 import RightSider from '@/views/layout/RightSider.vue'
 
 // 弹框/抽屉组件引入
-import PermissionModal from '@/views/dialogs/PermissionModal.vue'
 import RawLogDrawer from '@/views/dialogs/RawLogDrawer.vue'
 import SubAgentDrawer from '@/views/dialogs/SubAgentDrawer.vue'
 import ThoughtDetailDrawer from '@/views/dialogs/ThoughtDetailDrawer.vue'
@@ -144,12 +141,13 @@ onMounted(async () => {
       // 再静默后台全量刷新会话列表（移动端列表通常隐藏，优先级低且不该阻塞详情刷新）。
       // 离线期间错过的 S2C_CONVERSATION_UPDATED 广播会让列表中的 loopRunning 转圈残留旧值，
       // 后台重拉一次以数据库真值对齐全部会话状态，避免"发送按钮已停转、列表仍在转圈"的分裂观感
-      // 会话详情强刷走静默模式：快速重连（1 秒内完成）全程无转圈无动画，超时才降级显示加载态
+      // 会话详情强刷走静默模式：快速重连（1 秒内完成）全程无转圈无动画，超时才降级显示加载态；
+      // HTTP 层同步静默（不弹网络错误弹窗），消息加载失败会自动重试，耗尽后才一次性提示
       if (conversationStore.activeCid !== null) {
         conversationStore.selectConversation(conversationStore.activeCid, true, true)
       }
-      conversationStore.loadConversations().catch(e => {
-        console.error('断线重连后会话列表刷新失败:', e)
+      conversationStore.loadConversations(true).catch(e => {
+        console.error('断线重连后会话列表静默刷新失败:', e)
       })
     }
     isFirstWsOpen = false
@@ -178,6 +176,22 @@ onMounted(async () => {
       // 主会话：只在消息的 cid 和当前活动主会话的 activeCid 完全一致时才处理
       return Number(cid) === conversationStore.activeCid
     }
+  }
+
+  /**
+   * 工具日志流内容的最大保留长度（字符），与引擎侧 StreamBufferHolder.TOOL_LOG_KEEP_LENGTH 口径一致。
+   * 命令输出上限受后端保护阀约束（可达 200 万字符），前端仅保留尾部（结论通常在末尾），
+   * 防止失控刷屏输出撑爆虚拟列表 DOM。
+   */
+  const TOOL_LOG_KEEP_LENGTH = 100000
+
+  /**
+   * 判定服务端下发的字段是否为「空」（null/undefined/空串）。
+   * 用于消息更新时区分「服务端尚未产出该字段」与「服务端下发了真实内容」：
+   * 前者需保留前端流式累积，后者须以后端为准覆盖。
+   */
+  const isBlankField = (value: any): boolean => {
+    return value === null || value === undefined || value === ''
   }
 
   // 监听大局会话创建事件，实现子 Agent 创建 of 即时卡片渲染
@@ -319,19 +333,28 @@ onMounted(async () => {
       const isFoldedTarget = isInFoldedRange(targetMessages, payload.id)
       if (!isFoldedTarget) {
         if (target) {
-          // 如果本地消息正在运行或服务端下发空内容（常见于工具调用或取消事件），则保留本地累积的 content 和 thought
-          const isLocalRunning = target.status === 'RUNNING'
-          const serverSentEmptyContent = (payload.content === null || payload.content === undefined || payload.content === '')
-          const localHasContent = target.content && target.content.length > 0
+          // MESSAGE_UPDATE 载荷是后端按消息 ID 查库后的完整实体快照：非空字段即库中真值，一律以后端为准；
+          // 仅当服务端该字段为空（流式期间正文尚未落库）时才保留本地流式累积，防止过程中内容被清空。
+          // PENDING 为重试/重置信号（后端 resetAssistantMessage / resetUserMessageAndTruncateSubsequent），
+          // 必须无条件覆盖（含清空），否则旧内容清不掉，新一轮内容会与旧内容拼接。
           const isPending = payload.status === 'PENDING'
 
-          if (!isPending && (isLocalRunning || (serverSentEmptyContent && localHasContent))) {
-            // 运行中或服务端给空内容：只更新非内容字段（状态、id、role等），保留本地累积的 content 和 thought
-            const { content, thought, ...restPayload } = payload
-            Object.assign(target, restPayload)
-          } else {
-            // 正常情况：完全覆盖
+          if (isPending) {
+            // 重试/重置：无条件全量覆盖，保证服务端清空语义生效
             Object.assign(target, payload)
+          } else {
+            // 以字段为单位判定：服务端为空则剔除该字段以保留本地累积；非空则覆盖。
+            // 工具消息前端零本地累积，其结果正文完全依赖此处落地（曾因"本地运行中就跳过 content"
+            // 导致实时视图只有入参没有出参，折叠详情/刷新又正常）
+            const patch = { ...payload }
+            if (isBlankField(patch.content)) {
+              delete patch.content
+            }
+            // thought 与 content 各自独立判定，避免其中一个为空时连带剥离另一个
+            if (isBlankField(patch.thought)) {
+              delete patch.thought
+            }
+            Object.assign(target, patch)
           }
 
           // D2 工具转 WAITING_APPROVAL：所在小组起外露，之前小组并入折叠块
@@ -414,6 +437,26 @@ onMounted(async () => {
     const cid = event.cid
 
     const msgId = Number(payload.id)
+
+    // 清空信号（后端透明重试重放前发出）：丢弃该消息已累积的本条流内容，随后重放内容从零累加。
+    // 判定必须前置于下方的空文本过滤——清空信号本身不携带 text，否则会被静默跳过而继续累加致重复。
+    // 此处刻意不创建新消息：清空只对有既有内容的消息有意义，找不到说明本就没有可清之物。
+    if (payload.type === 'CLEAR') {
+      if (!msgId) return
+      const targetMessages = isSubConversation(parentCid)
+        ? (agentStore.getTargetAgent(Number(cid))?.messages || [])
+        : conversationStore.messages
+      const target = targetMessages.find((m: any) => m.id === msgId)
+      if (target) {
+        if (isReasoning) {
+          target.thought = ''
+        } else {
+          target.content = ''
+        }
+      }
+      return
+    }
+
     const chunkText = payload.text
     if (!msgId || !chunkText) return
 
@@ -476,6 +519,38 @@ onMounted(async () => {
     handleChatStream(event, false)
   })
 
+  /**
+   * 工具控制台日志流（command 类工具执行过程中由子进程 stdout 逐行产出）。
+   * <p>
+   * 与助手流的关键差异：终态时后端会把结果 JSON 全量写入 content（含完整 output），
+   * 故此处仅在 RUNNING 期间做增量追加；一旦进入终态即停止追加，
+   * 避免在结果 JSON 之后继续拼接日志（刷新后又消失，前后端不一致）。
+   * </p>
+   * <p>
+   * 载荷 id 为工具消息 ID（与助手流统一模型），直接按 m.id 定位即可。
+   * 截断口径与引擎侧缓存一致：仅保留尾部 10 万字符，防止命令失控刷屏撑爆虚拟列表 DOM。
+   * </p>
+   */
+  const handleToolLogStream = (event: any) => {
+    if (!shouldProcessEvent(event)) return
+    const payload = event.payload as StreamChunkPayload
+    const msgId = Number(payload.id)
+    const text = payload.text
+    if (!msgId || !text) return
+
+    const targetMessages = isSubConversation(event.parentCid)
+      ? (agentStore.getTargetAgent(Number(event.cid))?.messages || [])
+      : conversationStore.messages
+
+    const tool = targetMessages.find((m: any) => m.id === msgId)
+    // 仅 RUNNING 期间追加：终态（含 PENDING/WAITING_APPROVAL）不接收，与后端终态清缓存口径对齐
+    if (!tool || tool.status !== 'RUNNING') return
+
+    const merged = (tool.content || '') + text
+    tool.content = merged.length > TOOL_LOG_KEEP_LENGTH ? merged.slice(-TOOL_LOG_KEEP_LENGTH) : merged
+  }
+  wsService.on('S2C_TOOL_LOG_STREAM', handleToolLogStream)
+
   // 监听大局历史消息物理删除事件
   wsService.on('S2C_MESSAGE_DELETED', (event) => {
     if (!shouldProcessEvent(event)) return
@@ -534,15 +609,17 @@ onMounted(async () => {
   })
 
   // 监听系统配置更新事件，保障多客户端/多窗口实时同步
+  // 载荷字段一律「有值才覆盖」：后端存在部分广播（如仅变更密码时只带 passwordSet，
+  // 其余字段为 null），若按"缺失即取默认值"赋值，会把用户已设置的其他项重置回默认值
   wsService.on('S2C_CONFIG_UPDATED', (event) => {
-    if (event.payload) {
-      appStore.newlineKey = event.payload.newlineKey || 'enter'
-      appStore.httpLog = event.payload.httpLog || false
-      appStore.httpLogDays = event.payload.httpLogDays !== undefined ? event.payload.httpLogDays : 7
-      // 密码广播不再携带密码值，仅同步状态标记；本地输入态保持不动
-      appStore.passwordSet = event.payload.passwordSet || false
-      appStore.minimalSkillMode = event.payload.minimalSkillMode || false
-    }
+    const payload = event.payload
+    if (!payload) return
+    if (payload.newlineKey !== undefined) appStore.newlineKey = payload.newlineKey
+    if (payload.httpLog !== undefined) appStore.httpLog = payload.httpLog
+    if (payload.httpLogDays !== undefined) appStore.httpLogDays = payload.httpLogDays
+    // 密码广播不携带密码值，仅同步"是否已设置"状态标记
+    if (payload.passwordSet !== undefined) appStore.passwordSet = payload.passwordSet
+    if (payload.minimalSkillMode !== undefined) appStore.minimalSkillMode = payload.minimalSkillMode
   })
 
   // 监听供应商配置更新事件，保障多客户端/多窗口实时同步
@@ -561,64 +638,9 @@ onMounted(async () => {
     }
   })
 
-  // 10. 大模型会话生成错误拦截
-  wsService.on('S2C_CHAT_ERROR', (event) => {
-    const payload = event.payload
-
-    appStore.loopRunning = false
-
-    const errMsg = payload.errorMsg || '大模型对话发生未知异常'
-    if ((window as any).$message) {
-      ;(window as any).$message.error(`[对话异常] ${errMsg}`)
-    } else {
-      console.error(`[对话异常] ${errMsg}`)
-    }
-
-    const activeCid = conversationStore.activeCid
-    if (activeCid !== null) {
-      getConversationMessages(activeCid).then(res => {
-        const list = res.messages || []
-        conversationStore.truncated = res.truncated || false
-        conversationStore.messages = list.map(msg => {
-          if (msg.role) msg.role = msg.role.toLowerCase() as any
-          return msg
-        })
-      }).catch(err => {
-        console.error('自愈刷新消息列表失败:', err)
-      })
-    }
-  })
-
-  // 15. 人在回路权限审批询问
-  wsService.on('S2C_PERMISSION_REQUEST', (event) => {
-    const payload = event.payload
-    const parentCid = event.parentCid
-    const cid = event.cid
-
-    if (isSubConversation(parentCid)) {
-      const sub = agentStore.getTargetAgent(Number(cid))
-      if (sub) {
-        sub.pendingPermissionReq = {
-          id: payload.id,
-          toolName: payload.toolName,
-          arguments: payload.arguments,
-          isEditingArgs: false,
-          editedArgumentsJson: appStore.formatArgumentsJson(payload.arguments)
-        }
-      }
-      return
-    }
-
-    appStore.currentPermissionReq = {
-      id: payload.id,
-      toolName: payload.toolName,
-      arguments: payload.arguments
-    }
-    appStore.isEditingArgs = false
-    appStore.editedArgumentsJson = appStore.formatArgumentsJson(payload.arguments)
-    appStore.alwaysAllowChecked = false
-    appStore.showPermissionModal = true
-  })
+  // 注：历史遗留的 S2C_CHAT_ERROR 与 S2C_PERMISSION_REQUEST 监听已删除——
+  // 后端推送通道（mapToWsType 定向 + WebSocketBroadcast 广播枚举 + PONG）从未包含这两个类型，二者为死代码。
+  // 对话异常经 S2C_MESSAGE_UPDATED 终态消息自愈展示；权限审批由 WAITING_APPROVAL 工具消息的就地面板（ToolGroupCard）承担。
 })
 
 onUnmounted(() => {

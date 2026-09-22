@@ -126,6 +126,7 @@
           ref="messageListFlowRef"
           :messages="aggregatedMessages"
           :cid="conversationStore.activeCid"
+          :running="appStore.loopRunning"
           :class="[
             'chat-flow-wrapper',
             (!appStore.isInitialized || conversationStore.isMessageLoading || conversationStore.isMessageSpinning) ? 'chat-flow-loading' : ''

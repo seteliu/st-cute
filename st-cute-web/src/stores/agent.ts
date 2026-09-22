@@ -1,10 +1,10 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { wsService } from '@/services/websocket'
 import { getContextInfoApi } from '@/api/agent-context'
 import { useConversationStore, trimMessagesArray } from './conversation'
 import { useAppStore } from './app'
-import { cancelConversationApi, approveConversationPermissionApi, getConversationMessages } from '@/api/conversation'
+import { cancelConversationApi, getConversationMessages } from '@/api/conversation'
 import {
   SubAgent,
   Skill,
@@ -99,40 +99,6 @@ export const useAgentStore = defineStore('agent', () => {
       role: 'system',
       content: '🚨 发送 CANCEL_LOOP 信号强杀会话！'
     })
-  }
-
-  const handleSubPermissionDecision = (subAgent: SubAgent, decision: 'ALLOW' | 'DENY') => {
-    if (!subAgent.pendingPermissionReq) return
-
-    let customArgOverride: string | undefined = undefined
-    if (decision === 'ALLOW' && subAgent.pendingPermissionReq.isEditingArgs) {
-      // 编辑过参数时必须提供合法 JSON：解析失败直接拦截提交并提示，
-      // 禁止把乱七八糟的原文静默透传给后端执行层（与主会话审批口径一致）
-      try {
-        const parsed = JSON.parse(subAgent.pendingPermissionReq.editedArgumentsJson || '{}')
-        customArgOverride = JSON.stringify(parsed)
-      } catch (e) {
-        if ((window as any).$message) {
-          ;(window as any).$message.error('参数不是合法的 JSON，请修正后再允许执行')
-        } else {
-          console.error('子代理审批参数 JSON 解析失败，已拦截提交:', e)
-        }
-        return
-      }
-    }
-
-    approveConversationPermissionApi(Number(subAgent.cid), {
-      id: subAgent.pendingPermissionReq.id,
-      decision: decision,
-      alwaysAllow: false,
-      toolName: subAgent.pendingPermissionReq.toolName,
-      contentPattern: '',
-      customArgOverride: customArgOverride
-    }).catch(err => {
-      console.error('审批子代理权限失败:', err)
-    })
-
-    subAgent.pendingPermissionReq = undefined
   }
 
   const deleteSubAgent = async (cid: number) => {
@@ -245,8 +211,12 @@ export const useAgentStore = defineStore('agent', () => {
     getTargetAgent,
     handleKillMember,
     deleteSubAgent,
-    handleSubPermissionDecision,
     syncSubAgents,
     loadContextAssets
   }
 })
+
+// 启用 Pinia store 热更新：dev 热替换时复用原 store 实例，避免新旧实例并存导致组件状态分裂、刷新链断裂
+if (import.meta.hot) {
+  acceptHMRUpdate(useAgentStore, import.meta.hot)
+}

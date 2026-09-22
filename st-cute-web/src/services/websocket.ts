@@ -2,6 +2,12 @@ export interface WebSocketEvent {
   eventId: string;
   cid: number | null;
   parentCid?: number | null;
+  /**
+   * 本次绑定时请求后端顺带解绑的旧会话 ID（可选，前端决策）。
+   * 后端天然支持一个连接同时绑定多个 cid（多会话并行订阅）；
+   * 单会话视图切换会话时默认传旧 cid 解绑，防止切走会话的流式帧继续推给本连接。
+   */
+  unbindCid?: number | null;
   timestamp: number;
   type: string;
   payload: any;
@@ -164,7 +170,7 @@ class WebSocketService {
     }
   }
 
-  public send(type: string, payload: any = {}, parentCid?: number | null, customCid?: number | null) {
+  public send(type: string, payload: any = {}, parentCid?: number | null, customCid?: number | null, unbindCid?: number | null) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       console.warn('[WS] 连接未开启, 放弃发送消息:', type);
       return;
@@ -180,6 +186,7 @@ class WebSocketService {
       eventId: this.generateUUID(),
       cid: targetCid,
       parentCid,
+      unbindCid: unbindCid ?? null,
       timestamp: Date.now(),
       type,
       payload
@@ -231,10 +238,14 @@ class WebSocketService {
   }
 
   public setCid(id: number) {
+    // 切换绑定：记住旧 cid，绑定新 cid 的 PING 默认携带 unbindCid 解绑旧会话
+    // （后端天然支持多会话并行订阅；单会话视图切换时解绑旧 cid，防止切走会话的
+    // 流式帧继续推给本连接形成洪峰。未来多会话并行场景显式传参解除即可保留绑定）
+    const prevCid = this.cid;
     this.cid = id;
-    console.log(`[WS] 切换当前会话ID为: ${id}`);
+    console.log(`[WS] 切换当前会话ID为: ${id}${prevCid !== null && prevCid !== id ? ` (解绑旧会话: ${prevCid})` : ''}`);
     if (this.isConnected) {
-      this.send('PING', {});
+      this.send('PING', {}, undefined, undefined, prevCid !== null && prevCid !== id ? prevCid : undefined);
     }
   }
 

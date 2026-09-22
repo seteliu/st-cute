@@ -137,7 +137,7 @@
             :value="activeConversationProviderValue"
             :options="providerOptions"
             :placeholder="t('sider.groupSelect')"
-            :disabled="appStore.loopRunning"
+            :disabled="isConfigSelectDisabled"
             size="small"
             class="provider-select"
             @update:value="handleProviderChange"
@@ -148,7 +148,7 @@
             <n-select
               :value="appStore.permissionMode"
               :options="appStore.permissionModeOptions"
-              :disabled="appStore.loopRunning"
+              :disabled="isConfigSelectDisabled"
               @update:value="appStore.handlePermissionModeChange"
               size="small"
               class="permission-select"
@@ -194,8 +194,8 @@
         <div class="input-buttons" style="display: flex; gap: 8px;">
           <n-button
             type="primary"
-            :class="{ 'send-btn-active': !appStore.loopRunning && (appStore.userInput || stagedFiles.length > 0) && !isInputDisabled }"
-            :disabled="!appStore.loopRunning && ((!appStore.userInput && stagedFiles.length === 0) || isInputDisabled || isUploading)"
+            :class="{ 'send-btn-active': !appStore.loopRunning && (appStore.userInput || stagedFiles.length > 0) && !isSendBlocked }"
+            :disabled="!appStore.loopRunning && ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)"
             @click="appStore.loopRunning ? appStore.cancelLoop() : executeSend()"
           >
             <template v-if="appStore.loopRunning || isUploading" #icon>
@@ -225,7 +225,7 @@
             :value="activeConversationProviderValue"
             :options="providerOptions"
             :placeholder="t('sider.groupSelect')"
-            :disabled="appStore.loopRunning"
+            :disabled="isConfigSelectDisabled"
             size="small"
             style="width: 100%;"
             @update:value="handleProviderChange"
@@ -259,7 +259,7 @@
             <n-select
               :value="appStore.permissionMode"
               :options="appStore.permissionModeOptions"
-              :disabled="appStore.loopRunning"
+              :disabled="isConfigSelectDisabled"
               @update:value="appStore.handlePermissionModeChange"
               size="small"
               style="width: 100%;"
@@ -269,8 +269,8 @@
           <n-button
             type="primary"
             size="small"
-            :class="{ 'send-btn-active': !appStore.loopRunning && (appStore.userInput || stagedFiles.length > 0) && !isInputDisabled }"
-            :disabled="!appStore.loopRunning && ((!appStore.userInput && stagedFiles.length === 0) || isInputDisabled || isUploading)"
+            :class="{ 'send-btn-active': !appStore.loopRunning && (appStore.userInput || stagedFiles.length > 0) && !isSendBlocked }"
+            :disabled="!appStore.loopRunning && ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)"
             @click="appStore.loopRunning ? appStore.cancelLoop() : executeSend()"
           >
             <template v-if="appStore.loopRunning || isUploading" #icon>
@@ -306,6 +306,7 @@ import { updateConversationProviderApi } from '@/api/conversation'
 import { getSlashListApi } from '@/api/slash'
 import type { SlashGroupItem, SlashItem } from '@/api/slash'
 import { uploadFile } from '@/api/file'
+import type { StagedFile } from '@/types'
 import { t } from '@/i18n'
 
 const { isMobile } = useResponsive()
@@ -317,20 +318,29 @@ const providerStore = useProviderStore()
 const inputInstRef = ref<any>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-// 暂存文件结构
-interface StagedFile {
-  id: string
-  file: File
-  name: string
-  size: number
-  isImage: boolean
-  previewUrl?: string
-  status: 'idle' | 'uploading' | 'success' | 'error'
-  uploadedPath?: string
-  mimeType?: string
-}
+// 暂存文件结构 StagedFile 已上移至 src/types/chat.ts（供 store 与视图共用）
 
-const stagedFiles = ref<StagedFile[]>([])
+// 暂存附件按会话吸附：读侧直接映射 store 中当前会话的暂存列表，
+// 切换会话自动隐藏、切回自动恢复；写侧统一经 ensureStagedList 取真实数组操作，
+// 避免 computed 求值期间产生副作用。无附件时不预建条目，统一复用空数组常量
+const EMPTY_STAGED_LIST: StagedFile[] = []
+const stagedFiles = computed<StagedFile[]>(() => {
+  const cid = conversationStore.activeCid
+  if (cid === null) return EMPTY_STAGED_LIST
+  return conversationStore.stagedFilesMap[cid] || EMPTY_STAGED_LIST
+})
+
+// 获取当前会话的暂存列表（不存在则初始化空数组），仅写入路径使用；无活跃会话时返回 null
+const ensureStagedList = (): StagedFile[] | null => {
+  const cid = conversationStore.activeCid
+  if (cid === null) return null
+  let list = conversationStore.stagedFilesMap[cid]
+  if (!list) {
+    list = []
+    conversationStore.stagedFilesMap[cid] = list
+  }
+  return list
+}
 const isDragging = ref(false)
 const isUploading = ref(false)
 
@@ -495,6 +505,9 @@ const addFilesToStaging = (files: File[]) => {
     return
   }
 
+  const list = ensureStagedList()
+  if (!list) return
+
   for (const f of files) {
     if (f.size > 10 * 1024 * 1024) {
       const msg = `${f.name}: ${t('chat.attachmentSizeLimit') || '单文件大小不能超过 10MB'}`
@@ -518,7 +531,7 @@ const addFilesToStaging = (files: File[]) => {
 
     const previewUrl = isImg ? URL.createObjectURL(f) : undefined
 
-    stagedFiles.value.push({
+    list.push({
       id: 'staged_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       file: f,
       name: f.name,
@@ -531,19 +544,23 @@ const addFilesToStaging = (files: File[]) => {
 }
 
 const removeStagedFile = (id: string) => {
-  const idx = stagedFiles.value.findIndex(item => item.id === id)
+  const list = ensureStagedList()
+  if (!list) return
+  const idx = list.findIndex(item => item.id === id)
   if (idx >= 0) {
-    const item = stagedFiles.value[idx]
+    const item = list[idx]
     if (item.previewUrl) {
       URL.revokeObjectURL(item.previewUrl)
     }
-    stagedFiles.value.splice(idx, 1)
+    list.splice(idx, 1)
   }
 }
 
 // 执行发送前上传流程与发消息联动
 const executeSend = async () => {
   if (appStore.loopRunning || isUploading.value) return
+  // 发送链路兜底：未连接服务端时静默拦截（按钮与 Enter 均已置灰，此处防程序化调用的漏网场景）
+  if (!appStore.isConnected) return
   const text = appStore.userInput.trim()
   if (!text && stagedFiles.value.length === 0) return
 
@@ -592,13 +609,8 @@ const executeSend = async () => {
         mimeType: item.mimeType
       }))
 
-      // 清理本地临时 previewUrl 并重置
-      stagedFiles.value.forEach(item => {
-        if (item.previewUrl) {
-          URL.revokeObjectURL(item.previewUrl)
-        }
-      })
-      stagedFiles.value = []
+      // 此处不再清空暂存附件：统一改由 store 在发送成功后 dispose 释放，
+      // 发送失败时保留暂存（含已上传成功的 uploadedPath），用户重试不丢附件
       isUploading.value = false
 
       // 携带附件数据发送消息
@@ -640,16 +652,14 @@ const insertNewline = () => {
   }
 }
 
-// 监听活跃会话发生改变，自动聚焦输入框
+// 监听活跃会话发生改变，自动聚焦输入框并做草稿/暂存附件交割
 watch(
   () => conversationStore.activeCid,
-  (newVal) => {
+  (newVal, oldVal) => {
     if (newVal) {
-      // 切换会话时清空暂存区
-      stagedFiles.value.forEach(item => {
-        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
-      })
-      stagedFiles.value = []
+      // 草稿与暂存附件交割：旧会话草稿存档、新会话草稿取回输入框；
+      // 暂存附件仅隐藏不销毁，File 对象与预览 ObjectURL 均保持有效，切回即原样恢复
+      conversationStore.switchDraftContext(oldVal ?? null, newVal)
       // 切换会话时同步关闭 slash 补全下拉；仅当当前输入仍以 / 开头（存在进行中的补全文本）
       // 时才进入豁免期防止继续输入时重开；输入框为空/非 / 开头时不打豁免，
       // 保证切换后首次输入 / 可正常触发（豁免在光标前文本离开 / 形态后自动复位）
@@ -737,10 +747,8 @@ watch(
 
 const isInputDisabled = computed(() => {
   return (
-    // WebSocket 未连接时整体禁用输入与发送（含按钮与 Enter 两条路径）：
-    // 回显与流式内容全靠 WS 推送，断线期间发送只会导致"发了没反应"的半死状态
-    !appStore.isConnected ||
-    appStore.loopRunning ||
+    // 环境缺失（无项目 / 无活动项目 / 无会话 / 无供应商）时输入框禁用：
+    // 这些前提下后端无从承载本轮对话，输入内容没有落点
     projectStore.projectList.length === 0 ||
     !projectStore.activeProjectId ||
     !conversationStore.activeCid ||
@@ -748,8 +756,20 @@ const isInputDisabled = computed(() => {
   )
 })
 
+// 发送动作的拦截条件：输入框允许在「连接中」与「运行中」先行编辑草稿，
+// 但真正触发发送（发送按钮 / Enter 提交）仍须满足：
+// ① 已连接服务端——消息体虽走 HTTP，但回显与流式内容全靠 WS 推送，断线期间发送会陷入"发了没反应"的半死状态；
+// ② 其它环境缺失项沿用 isInputDisabled 口径
+const isSendBlocked = computed(() => !appStore.isConnected || isInputDisabled.value)
+
+// 模型 / 权限配置下拉的统一禁用条件：未连接服务端时不允许选择
+// （两者切换都会调用后端接口写回会话配置，断线期间选择只会造成前后端状态不一致，用户却以为已生效），
+// 循环执行中同样锁定，避免中途变更影响进行中的回合
+const isConfigSelectDisabled = computed(() => !appStore.isConnected || appStore.loopRunning)
+
 const inputPlaceholder = computed(() => {
-  // 未连接 WS 时优先提示连接状态（此时输入框整体禁用，用户需要知道原因）
+  // 未连接 WS 时优先提示连接状态：输入框此时仍可编辑草稿，但发送动作被拦截，
+  // 需明确告知用户「连接成功后即可发送」，避免误以为消息已发出
   if (!appStore.isConnected) {
     return t('chat.inputPlaceholderDisconnected')
   }
@@ -915,6 +935,9 @@ watch(
     }
 
     if (!slashVisible.value) {
+      // 未连接服务端时不弹出补全下拉：选项需从后端实时拉取，断线期间请求必然失败并弹错误提示；
+      // 连接恢复后用户重新输入 / 可正常触发
+      if (!appStore.isConnected) return
       // 触发瞬间：弹出下拉并实时拉取后端列表
       slashVisible.value = true
       slashHighlightIndex.value = 0
@@ -1000,7 +1023,9 @@ const handleEnterKey = (e: KeyboardEvent) => {
     return
   }
 
-  if (e.key !== 'Enter' || isInputDisabled.value) {
+  // 运行中（loopRunning）发送能力已被"取消回合"占用，Enter 不承担发送语义，
+  // 原样放行给输入框换行，便于用户提前编辑下一条消息草稿
+  if (e.key !== 'Enter' || isSendBlocked.value || appStore.loopRunning) {
     return
   }
 

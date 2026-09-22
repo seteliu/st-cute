@@ -7,13 +7,15 @@
     class="message-flow-list"
     :style="{ '--avatar-indent': appStore.showMessageAvatar ? '52px' : '0px' }"
   >
-    <template #default="{ item }">
+    <template #default="{ item, index }">
       <message-item
         v-if="item.type === 'message'"
         :message="item.data"
         :tools="item.tools"
         :is-sub-agent="isSubAgent"
         :cid="cid"
+        :show-tail-dots="index === lastPendingBatchIndex"
+        :running="running"
       />
       <div
         v-else-if="item.type === 'tool_group'"
@@ -23,6 +25,8 @@
           :parent-message-id="item.parentMessageId"
           :tools="item.tools"
           :cid="cid"
+          :show-tail-dots="index === lastPendingBatchIndex"
+          :running="running"
         />
       </div>
       <div
@@ -65,13 +69,59 @@ export type RenderItem =
   | { type: 'folded'; folded: Message }
   | { type: 'truncated_tip' }
 
-defineProps<{
+const props = defineProps<{
   messages: RenderItem[]
   isSubAgent?: boolean
   cid?: number | null
+  /**
+   * 该消息列表所属会话是否处于运行中。必传——由各调用点按自身语义显式表态：
+   * 主会话传全局 loopRunning，子会话抽屉传子代理运行态，折叠详情传 false（静态历史）。
+   * 刻意不提供内部回退：回退到全局态在子会话场景本身就是错误语义，且会让调用方
+   * 忘记传值时静默拿到错误结果；改为必传后由编译器强制表态。
+   */
+  running: boolean
 }>()
 
 const virtualScrollerRef = ref<any>(null)
+
+/**
+ * 末批工具组是否「尚未收口」：命中时返回该批所在渲染条目下标，否则返回 -1。
+ *
+ * 判定条件（三者同时成立）：
+ * 1. 渲染序列末项是一批工具——助手消息携带 tools，或无父孤儿 tool_group；
+ * 2. 该会话当前仍在运行（running）；
+ * 3. 该批工具细则均已成功（无 RUNNING/PENDING/WAITING_APPROVAL 等未完成态）。
+ *
+ * 语义：工具都跑完了、批次仍停在消息列表末尾、而整个回合尚未收口 —— 此时模型正在
+ * 消耗这批工具的产出做下一步推理（含等待子智能体回投结论后的汇总轮），故在卡片底部
+ * 显示三点指示表示"这一批还在跑"。一旦模型产出下一轮消息，本批不再是末项，指示自然消失；
+ * 运行态兼作守卫：用户取消回合或异常中断后立即熄灭，避免三点常亮误导。
+ */
+const lastPendingBatchIndex = computed(() => {
+  const items = props.messages
+  if (!items || items.length === 0) return -1
+  if (!props.running) return -1
+
+  const lastIndex = items.length - 1
+  const lastItem = items[lastIndex]
+
+  let batchTools: Message[] | undefined
+  if (lastItem.type === 'message' && lastItem.tools && lastItem.tools.length > 0) {
+    batchTools = lastItem.tools
+  } else if (lastItem.type === 'tool_group') {
+    batchTools = lastItem.tools
+  }
+
+  // 末项不是工具批次（如新增助手正文、折叠卡片等）时不显示
+  if (!batchTools) return -1
+
+  // 批内工具细则是否全部成功：任一条未达 SUCCESS（执行中/待审批/失败/取消）即不算收口。
+  // 状态归一为大小写不敏感，避免后端字段大小写差异导致误判
+  const allToolsSucceeded = batchTools.every(
+    tool => (tool.status || '').toUpperCase() === 'SUCCESS'
+  )
+  return allToolsSucceeded ? lastIndex : -1
+})
 
 const scrollToBottom = (smooth = true) => {
   if (virtualScrollerRef.value) {
