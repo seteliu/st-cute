@@ -46,19 +46,16 @@ public class ConfigController {
     }
 
     /**
-     * 保存并应用新的系统基础配置。
-     * <p>password 字段语义：空/缺省 = 不修改；非空 = 前端已计算的 SHA-256(原文) 传输摘要，加盐后落盘。</p>
+     * 保存并应用新的系统基础配置（不含密码：密码走专用接口 {@link #savePassword}）
      */
     @PostMapping("/save")
     public Result<Boolean> saveConfig(@RequestBody BasicConfigDto body) {
-        // 日志脱敏：DTO 含密码传输摘要，只打印非敏感字段的保存摘要，杜绝敏感值落日志
-        log.info("请求保存基础设置: language={}, httpLog={}, httpLogDays={}, passwordChanged={}, passwordClear={}",
-                body.getLanguage(), body.getHttpLog(), body.getHttpLogDays(), StringUtils.hasText(body.getPassword()), Boolean.TRUE.equals(body.getPasswordClear()));
+        log.info("请求保存基础设置: language={}, httpLog={}, httpLogDays={}",
+                body.getLanguage(), body.getHttpLog(), body.getHttpLogDays());
         String language = body.getLanguage();
         String newlineKey = body.getNewlineKey();
         Boolean httpLog = body.getHttpLog();
         Integer httpLogDays = body.getHttpLogDays();
-        String password = body.getPassword();
         Boolean pathSandboxEnabled = body.getPathSandboxEnabled();
         Boolean minimalSkillMode = body.getMinimalSkillMode();
         Boolean loadAllUserAttachments = body.getLoadAllUserAttachments();
@@ -71,9 +68,29 @@ public class ConfigController {
         boolean finalMinimalSkillMode = minimalSkillMode != null ? minimalSkillMode : false;
         boolean finalLoadAllUserAttachments = loadAllUserAttachments != null ? loadAllUserAttachments : true;
 
-        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays, password,
-                Boolean.TRUE.equals(body.getPasswordClear()),
+        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays,
                 finalPathSandboxEnabled, finalMinimalSkillMode, finalLoadAllUserAttachments, body.getMaxViewHistoryLimit());
+        return Result.success(true);
+    }
+
+    /**
+     * 设置 / 修改 / 清除安全访问密码（独立于基础配置保存）。
+     * <p>
+     * 之所以独立成接口而非并入 /save：密码值一旦与常驻表单同进同出，浏览器自动填充就可能把
+     * 存储摘要回填进输入框并被前端二次摘要，导致密码静默失效。独立接口只接受用户现输现算的
+     * 传输摘要，从根上杜绝该误伤。
+     * </p>
+     *
+     * @param body password 为 SHA-256(原文) 传输摘要；passwordLength 为原文长度；
+     *             passwordClear=true 表示清除密码（优先级高于 password）
+     */
+    @PostMapping("/password")
+    public Result<Boolean> savePassword(@RequestBody BasicConfigDto body) {
+        // 日志脱敏：只打印是否携带摘要与清除标记，杜绝摘要值落日志
+        log.info("请求更新安全访问码: passwordChanged={}, clear={}",
+                StringUtils.hasText(body.getPassword()), Boolean.TRUE.equals(body.getPasswordClear()));
+        providerService.savePassword(body.getPassword(),
+                body.getPasswordLength(), Boolean.TRUE.equals(body.getPasswordClear()));
         return Result.success(true);
     }
 }

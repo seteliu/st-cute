@@ -23,6 +23,18 @@ public final class PasswordDigestKit {
     private static final int SALT_LENGTH = 16;
 
     /**
+     * SHA-256 摘要字节长度
+     */
+    private static final int SHA256_LENGTH = 32;
+
+    /**
+     * 原文最大长度（与访问码安全策略 {@link PasswordPolicy#MAX_LENGTH} 同口径）。
+     * <p>保留该常量作为「存储值原文长度」语义的单点出口，供需要按原文口径做长度判断的
+     * 调用方引用（如 {@link #isDigested} 的格式识别说明）</p>
+     */
+    public static final int MAX_RAW_LENGTH = PasswordPolicy.MAX_LENGTH;
+
+    /**
      * 摘要与盐的拼接分隔符
      */
     private static final String SEPARATOR = ":";
@@ -77,7 +89,13 @@ public final class PasswordDigestKit {
     }
 
     /**
-     * 判定存储值是否为摘要形态（含分隔符且两段均可 Base64 解码）
+     * 判定存储值是否为摘要形态
+     * <p>
+     * 按本工具自身的生成格式做严格校验：盐段须为 {@link #SALT_LENGTH} 字节 Base64（24 字符）、
+     * 摘要段须为 SHA-256 的 32 字节 Base64（44 字符）。刻意不做「含冒号 + 可 Base64 解码」的宽松判定——
+     * 用户在 config.json 手写形如 {@code abcd:efgh} 的明文密码时，
+     * 宽松判定会把它误认为摘要形态而走质询链路，导致登录失败且提示语义错乱
+     * </p>
      *
      * @param storedValue 存储的密码值
      * @return 摘要形态返回 true；历史明文或空值返回 false
@@ -90,10 +108,61 @@ public final class PasswordDigestKit {
         if (idx <= 0) {
             return false;
         }
+        String saltSegment = storedValue.substring(0, idx);
+        String digestSegment = storedValue.substring(idx + 1);
+        return isExpectedSegment(saltSegment, SALT_LENGTH) && isExpectedSegment(digestSegment, SHA256_LENGTH);
+    }
+
+    /**
+     * 判断 Base64 段解码后的字节长度是否为期望值（长度不符或解码失败均返回 false）
+     *
+     * @param segment        Base64 编码段
+     * @param expectedLength 期望的原始字节长度
+     * @return 符合期望格式返回 true
+     */
+    private static boolean isExpectedSegment(String segment, int expectedLength) {
+        if (segment == null || segment.isEmpty()) {
+            return false;
+        }
         try {
-            Base64.getDecoder().decode(storedValue.substring(0, idx));
-            Base64.getDecoder().decode(storedValue.substring(idx + 1));
-            return true;
+            return Base64.getDecoder().decode(segment).length == expectedLength;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 登录质询应答校验：使用存储摘要作为密钥材料，重算期望证明值并与客户端应答做恒定时间比对。
+     * <p>
+     * 协议约定：客户端先经质询接口取得服务端签发的一次性质询值 nonce 与盐，本地计算
+     * {@code D = Base64(SHA-256(salt + X))}（X 为 SHA-256(原文) 十六进制摘要，D 应与存储摘要一致），
+     * 再计算证明 {@code proof = SHA-256hex(D + ":" + nonce)} 提交；服务端以自身存储的
+     * 摘要段与 nonce 重算同一表达式比对。证明值将 freshness 材料（nonce）绑定进摘要，
+     * 抓包重放或伪造任意 nonce 均无法通过校验。
+     * </p>
+     *
+     * @param storedStored 存储的密码值（须为摘要形态 salt:digest）
+     * @param nonce        服务端签发并被消费的一次性质询值
+     * @param proof        客户端提交的证明摘要（小写十六进制）
+     * @return 校验通过返回 true
+     */
+    public static boolean verifyChallengeProof(String storedStored, String nonce, String proof) {
+        if (nonce == null || proof == null || storedStored == null) {
+            return false;
+        }
+        int idx = storedStored.indexOf(SEPARATOR);
+        if (idx <= 0) {
+            return false;
+        }
+        try {
+            // 盐段与摘要段均须可 Base64 解码，畸形存储值直接按校验失败处理
+            Base64.getDecoder().decode(storedStored.substring(0, idx));
+            String digestBase64 = storedStored.substring(idx + 1);
+            Base64.getDecoder().decode(digestBase64);
+            String expected = sha256Hex(digestBase64 + SEPARATOR + nonce);
+            return MessageDigest.isEqual(
+                    expected.getBytes(StandardCharsets.UTF_8),
+                    proof.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             return false;
         }

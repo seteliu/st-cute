@@ -129,3 +129,18 @@ export async function sha256Hex(text: string): Promise<string> {
   }
   return hex
 }
+
+/**
+ * 计算字节数组的 SHA-256 摘要并返回 Base64 编码，与后端 PasswordDigestKit.hash 的摘要段同算法。
+ * <p>用于登录质询-应答协议中重算存储摘要 D（服务端存储形态为 Base64(salt:digest)）</p>
+ * @param bytes 输入字节（盐字节 + 原文摘要的 UTF-8 字节）
+ * @returns Base64 编码的摘要字符串
+ */
+export function sha256Base64(bytes: Uint8Array): string {
+  const digest = sha256Bytes(bytes)
+  let bin = ''
+  for (const byte of digest) {
+    bin += String.fromCharCode(byte)
+  }
+  return btoa(bin)
+}

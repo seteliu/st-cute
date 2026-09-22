@@ -595,7 +595,7 @@
                 />
               </div>
 
-              <div class="setting-item-col">
+              <div class="setting-item-row">
                 <div class="setting-item-label">
                   <span>{{ t('settings.password') }}</span>
                   <n-tooltip trigger="hover" placement="top-start">
@@ -609,23 +609,42 @@
                       </span>
                     </template>
                     <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                      {{ t('settings.passwordTooltip') }}
+                      <div>{{ appStore.passwordSet ? t('settings.passwordStatusSet') : t('settings.passwordStatusUnset') }}</div>
+                      <div style="margin-top: 4px; color: var(--text-color-muted);">{{ t('settings.passwordTooltip') }}</div>
                     </div>
                   </n-tooltip>
                 </div>
+                <!--
+                  密码刻意不设常驻输入框：常驻输入框会被浏览器自动填充回填既有值，
+                  后续保存其它设置时夹带提交会污染密码。改为按钮 + 独立弹窗现输现提。
+                -->
                 <div class="setting-password-wrapper">
-                  <n-input
-                    v-model:value="appStore.password"
-                    type="password"
-                    show-password-on="click"
-                    :placeholder="appStore.passwordSet ? '已设置密码，输入新密码可更换' : '不启用安全密码'"
+                  <n-button
+                    v-if="!appStore.passwordSet"
+                    type="primary"
                     size="small"
-                    class="setting-item-control password-input"
-                    maxlength="64"
-                  />
-                  <n-button type="primary" size="small" @click="appStore.saveBasicConfig">
-                    保存
+                    @click="openPasswordModal"
+                  >
+                    {{ t('settings.passwordSetBtn') }}
                   </n-button>
+                  <template v-else>
+                    <n-button
+                      type="primary"
+                      size="small"
+                      secondary
+                      @click="openPasswordModal"
+                    >
+                      {{ t('settings.passwordModifyBtn') }}
+                    </n-button>
+                    <n-button
+                      type="error"
+                      size="small"
+                      secondary
+                      @click="handleClearPassword"
+                    >
+                      {{ t('settings.passwordClearBtn') }}
+                    </n-button>
+                  </template>
                 </div>
               </div>
             </div>
@@ -708,6 +727,41 @@
       </div>
     </n-modal>
 
+    <!--
+      安全访问密码独立弹窗：现输现提，不与其它设置同批提交。
+      密码值不进任何常驻表单状态，杜绝浏览器自动填充污染
+    -->
+    <n-modal
+      v-model:show="showPasswordModal"
+      preset="card"
+      :title="appStore.passwordSet ? t('settings.passwordModifyTitle') : t('settings.passwordSetTitle')"
+      style="width: 420px; max-width: 92vw;"
+      :bordered="false"
+    >
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <!-- 明文显示：密码为本地新设置，不做遮蔽，便于用户核对输入；不做二次确认 -->
+        <n-input
+          v-model:value="passwordInput"
+          :placeholder="t('settings.passwordInputPlaceholder')"
+          size="medium"
+          maxlength="32"
+          autocomplete="new-password"
+          @keydown.enter.prevent="handleSavePassword"
+        />
+        <div style="font-size: 0.75rem; color: var(--text-color-muted); line-height: 1.5;">
+          {{ t('settings.passwordPolicyHint') }}
+        </div>
+      </div>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <n-button type="primary" size="small" :loading="passwordSaving" @click="handleSavePassword">
+            {{ t('common.confirm') }}
+          </n-button>
+          <n-button size="small" @click="closePasswordModal">{{ t('common.cancel') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
+
     <!-- 自定义拖拽边框条 -->
     <div 
       v-if="!isMobile"
@@ -732,7 +786,7 @@ const collapsed = computed(() => {
 const width = computed(() => {
   return isMobile.value ? '100%' : appStore.leftSiderWidth
 })
-import { useMessage } from 'naive-ui'
+import { useMessage, useDialog } from 'naive-ui'
 import { useConversationStore } from '@/stores/conversation'
 import { useProjectStore } from '@/stores/project'
 import { useAppStore } from '@/stores/app'
@@ -740,6 +794,7 @@ import { useProviderStore } from '@/stores/provider'
 import { t, setLanguage } from '@/i18n'
 
 const message = useMessage()
+const dialog = useDialog()
 const conversationStore = useConversationStore()
 const projectStore = useProjectStore()
 const appStore = useAppStore()
@@ -748,6 +803,52 @@ const providerStore = useProviderStore()
 const onLanguageChange = (val: 'zh-CN' | 'en-US') => {
   setLanguage(val)
   appStore.saveBasicConfig()
+}
+
+// ── 安全访问密码弹窗 ──
+// 密码仅在弹窗中现输现提：状态不经过任何常驻表单，避免浏览器自动填充污染密码值
+const showPasswordModal = ref(false)
+const passwordInput = ref('')
+const passwordSaving = ref(false)
+
+const openPasswordModal = () => {
+  passwordInput.value = ''
+  showPasswordModal.value = true
+}
+
+const closePasswordModal = () => {
+  // 关闭即丢弃输入，密文不在内存中留存
+  passwordInput.value = ''
+  showPasswordModal.value = false
+}
+
+const handleSavePassword = async () => {
+  if (passwordSaving.value) return
+  passwordSaving.value = true
+  try {
+    const success = await appStore.savePassword(passwordInput.value)
+    if (success) {
+      closePasswordModal()
+    }
+  } finally {
+    passwordSaving.value = false
+  }
+}
+
+/**
+ * 清除密码：二次确认后执行。
+ * 清除后系统回到未启用密码保护的状态（仅本机来源可访问），故必须显式确认
+ */
+const handleClearPassword = () => {
+  dialog.warning({
+    title: t('settings.passwordClearConfirmTitle'),
+    content: t('settings.passwordClearConfirmContent'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      await appStore.clearPassword()
+    }
+  })
 }
 
 const showAddProjectModal = ref(false)
@@ -931,6 +1032,30 @@ const saveProviderAndReturn = async () => {
   isAddingOrEditingProvider.value = false
 }
 
+/**
+ * 平滑滚动侧边栏容器，使当前活跃项目居中展现在视野视口内。
+ * <p>
+ * 必须声明在下方两条 watch 之前：其中「项目列表变动」那条带 immediate，
+ * 回调会在 setup 执行期间同步触发，若本函数以 const 声明于其后，
+ * 则命中 TDZ（暂时性死区）抛出 ReferenceError: Cannot access 'scrollToActiveProject'
+ * before initialization，导致组件 setup 崩溃、整个侧边栏无法渲染
+ * （移动端由抽屉懒挂载，恰好总在项目列表就绪后挂载，故表现为「点菜单弹不出来」）。
+ * </p>
+ */
+const scrollToActiveProject = () => {
+  nextTick(() => {
+    setTimeout(() => {
+      const activeId = projectStore.activeProjectId
+      if (activeId !== null) {
+        const el = document.getElementById(`project-item-${activeId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }
+    }, 150)
+  })
+}
+
 // 监听项目列表变动，忠实根据数据库中各项目的 expanded 字段初始化展开/折叠状态
 watch(
   () => projectStore.projectList,
@@ -945,20 +1070,6 @@ watch(
   },
   { immediate: true }
 )
-
-const scrollToActiveProject = () => {
-  nextTick(() => {
-    setTimeout(() => {
-      const activeId = projectStore.activeProjectId
-      if (activeId !== null) {
-        const el = document.getElementById(`project-item-${activeId}`)
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }
-      }
-    }, 150)
-  })
-}
 
 // 监听当前活跃项目变化，自动平滑滚动侧边栏容器使活跃项目居中展现在视野视口内
 watch(

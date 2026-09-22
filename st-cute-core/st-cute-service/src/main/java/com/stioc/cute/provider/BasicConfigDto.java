@@ -41,6 +41,13 @@ public class BasicConfigDto {
     private Boolean passwordSet;
 
     /**
+     * password 字段传输摘要对应的原文长度。
+     * <p>原文不落库不回传，仅在设置新密码时随摘要附带，供服务端兜底校验访问码复杂度策略
+     * （长度区间见 {@link PasswordPolicy}）；字段可缺省，缺省按不合法处理。</p>
+     */
+    private Integer passwordLength;
+
+    /**
      * 显式清除密码标记：true 时清除已设置的访问密码（优先级高于 password 字段）。
      * <p>因 password 字段"空=不修改"的语义无法表达关闭密码保护，需经本标记显式声明。</p>
      */

@@ -408,7 +408,7 @@ public class ConversationStoreImpl implements ConversationStore {
         if (query.getSortDirection() != null) {
             boolean isAsc = SortDirection.ASC == query.getSortDirection();
             String field = StringUtils.defaultIfBlank(query.getSortField(), "id");
-            wrapper.orderBy(toUnderlineCase(field), isAsc);
+            wrapper.orderBy(toSafeColumn(field), isAsc);
         }
 
         if (query.getLimit() != null && query.getLimit() > 0) {
@@ -416,6 +416,32 @@ public class ConversationStoreImpl implements ConversationStore {
         }
 
         return wrapper;
+    }
+
+    /**
+     * 排序字段合法列名白名单（下划线形态）。
+     * <p>
+     * MyBatis-Flex 的 {@code orderBy(String, boolean)} 会把字符串直接拼进 SQL 片段，
+     * 而排序字段来自 {@link ConversationQuery} 的字符串载荷。当前全部调用点均为代码内硬编码，
+     * 尚未发现 HTTP 参数绑定路径，但不构成可以省略白名单的理由——
+     * 一旦将来新增外部可控的排序入口，缺失白名单即等价于 SQL 注入。
+     * 此处按纵深防御收敛：仅放行已知列名，其余一律回退到主键排序。
+     * </p>
+     */
+    private static final Set<String> ALLOWED_SORT_COLUMNS = Set.of(
+            "id", "title", "create_time", "update_time", "parent_cid",
+            "workspace_id", "loop_running", "permission_mode", "provider_group"
+    );
+
+    /**
+     * 将外部传入的排序字段转换为安全列名：仅放行白名单内的已知列，其余回退主键。
+     *
+     * @param field 驼峰或下划线形态的字段名
+     * @return 安全的下划线列名
+     */
+    private static String toSafeColumn(String field) {
+        String column = toUnderlineCase(field);
+        return ALLOWED_SORT_COLUMNS.contains(column) ? column : "id";
     }
 
     private static String toUnderlineCase(String camelCase) {

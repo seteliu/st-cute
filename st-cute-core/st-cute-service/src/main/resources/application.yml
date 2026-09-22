@@ -4,6 +4,13 @@ server:
     session:
       cookie:
         name: st-cute-token
+        # 会话 Cookie 纵深加固：禁止前端 JS 读取以防 XSS 窃取，Lax 模式限制跨站请求携带以防 CSRF
+        http-only: true
+        same-site: lax
+  # 反代场景关键配置：激活 Tomcat RemoteIpValve（NATIVE 策略），让后端正确识别
+  # X-Forwarded-Proto / X-Forwarded-For——反代终结 HTTPS 时会话 Cookie 才会被自动标记 Secure，
+  # 防爆破计数也才能拿到真实客户端 IP。
+  forward-headers-strategy: NATIVE
 
 spring:
   application:
@@ -41,6 +48,13 @@ logging:
 st-cute:
   # 应用版本号（构建时由 Maven 资源过滤注入 pom 的 project.version）
   version: @project.version@
+  # Web 安全过滤配置（部署级静态配置，不参与 config.json 合并）
+  security:
+    # 跨源来源白名单：常态下无需配置。
+    # 同源校验依据「Origin 与 Host 是否一致」自适应任意域名/IP/端口/协议，
+    # 桌面壳固定来源 tauri.localhost 已内置放行，故仅在特殊部署形态下才需追加条目。
+    # 条目支持「主机名」或「主机名:端口」两种写法（如 example.com 或 example.com:8443）
+    trusted-origins: []
   llm-log:
     # 原始 HTTP 日志默认关闭（如需排查 LLM 交互报文可手动改为 true）
     http-log: false
@@ -49,6 +63,7 @@ st-cute:
       # SearXNG 聚合搜索服务基地址（不含 /search 路径，宿主层联网搜索工具数据源）
       base-url: http://61jun.com:9201
       # 访问令牌（部署级静态配置，不参与全局系统设置 config.json 的合并）
+      # 注意，内置的为 61jun.com 公有搜索服务，token 并非忘记抹去敏感信息，而是此功能为系统内置，已获得授权允许提交并公开
       token: st-searxng-gogogo
       # 搜索请求读取超时（秒）
       timeout-seconds: 15

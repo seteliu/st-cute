@@ -53,9 +53,17 @@ public class MessageService {
             limit = 2000;
         }
 
-        // 折叠详情范围查询：闭区间平铺返回，不做 limit 截断（区间本身即折叠块边界，天然有界）
+        // 折叠详情范围查询：闭区间平铺返回，不做 limit 截断（区间本身即折叠块边界，天然有界）。
+        // 但 minId/maxId 来自 HTTP 参数，调用方可能传入极宽区间（如 minId=1&maxId=Long.MAX_VALUE）
+        // 从而绕过 maxViewHistoryLimit 全量拉取。故对区间跨度设硬上限，超限则按 id 升序截取前 N 条
         boolean rangeQuery = !folded && minId != null && maxId != null;
         if (rangeQuery) {
+            long span = maxId - minId;
+            if (span > limit) {
+                log.warn("折叠详情范围查询跨度 {} 超过上限 {}，已截断至区间前 {} 条: cid={}, minId={}, maxId={}",
+                        span, limit, limit, cid, minId, maxId);
+                maxId = minId + limit;
+            }
             MessageQuery query = MessageQuery.builder()
                     .cid(cid)
                     .minId(minId)
@@ -63,6 +71,7 @@ public class MessageService {
                     .visibleToUser(true)
                     .sortField("id")
                     .sortDirection(SortDirection.ASC)
+                    .limit(limit)
                     .build();
             List<Message> list = messageStore.listByQuery(query);
             List<MessageVo> dtos = new ArrayList<>();
@@ -88,7 +97,6 @@ public class MessageService {
         if (descList == null || descList.isEmpty()) {
             return new LimitMessageDto(new ArrayList<>(), false);
         }
-
         // 常规查询为倒序，反转为升序
         List<Message> lightList = new ArrayList<>(descList);
         Collections.reverse(lightList);

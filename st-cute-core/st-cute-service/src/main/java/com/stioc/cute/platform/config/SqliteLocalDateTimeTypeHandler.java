@@ -4,6 +4,7 @@ import org.apache.ibatis.type.BaseTypeHandler;
 import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.MappedTypes;
 import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
 
 import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
@@ -21,6 +22,7 @@ import java.time.temporal.ChronoField;
  * 2. 读取 SQLite: 自适应兼容解析包含 'T'、空格、1~9位纳秒/微秒/毫秒或无小数位的各类历史时间字符串。
  * </p>
  */
+@Slf4j
 @Component
 @MappedTypes(LocalDateTime.class)
 public class SqliteLocalDateTimeTypeHandler extends BaseTypeHandler<LocalDateTime> {
@@ -65,11 +67,21 @@ public class SqliteLocalDateTimeTypeHandler extends BaseTypeHandler<LocalDateTim
         if (str == null || str.isBlank()) {
             return null;
         }
+        String trimmed = str.trim();
         try {
-            return LocalDateTime.parse(str.trim(), PARSER);
-        } catch (Exception e) {
-            String sanitized = str.trim().replace('T', ' ');
-            return LocalDateTime.parse(sanitized, PARSER);
+            return LocalDateTime.parse(trimmed, PARSER);
+        } catch (Exception first) {
+            // 二次尝试：把 'T' 归一为空格后再解析（PARSER 已含可选 'T' 分支，
+            // 但历史数据可能存在 'T' 与小数位混排等形态，归一后命中率更高）。
+            // 若二次仍失败，返回 null 而非继续抛异常：单个字段格式异常不应让整个查询中断
+            // （列表类查询一行坏数据即导致整个接口 500，代价远大于该字段为空）
+            try {
+                String sanitized = trimmed.replace('T', ' ');
+                return LocalDateTime.parse(sanitized, PARSER);
+            } catch (Exception second) {
+                log.warn("时间字段解析失败，已按 null 返回（不影响本次查询）: 原值={}", str);
+                return null;
+            }
         }
     }
 }

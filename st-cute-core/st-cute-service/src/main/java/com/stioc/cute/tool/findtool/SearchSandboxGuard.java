@@ -3,6 +3,7 @@ package com.stioc.cute.tool.findtool;
 import com.stioc.cute.engine.loop.core.AgentContext;
 import com.stioc.cute.engine.tool.types.ToolResult;
 import com.stioc.cute.platform.contract.ContractFile;
+import com.stioc.cute.platform.security.DesktopTokenStore;
 import com.stioc.cute.project.ProjectService;
 import lombok.extern.slf4j.Slf4j;
 
@@ -50,6 +51,13 @@ public final class SearchSandboxGuard {
             Path realTempDir = toRealPathSafe(tempDir);
             Path realUserHome = toRealPathSafe(userHomeConfig);
 
+            // 凭证排除：全局配置目录内的敏感凭证文件不因「落在沙箱根内」而放行，
+            // 否则搜索引擎可直接读取 config.json 中的 apiKey 与桌面端停机凭证
+            if (realTarget != null && isCredentialPath(realTarget, realUserHome)) {
+                log.warn("[搜索沙箱纵深防御] {} 命中敏感凭证路径拦截: {}", paramName, targetPath);
+                return ToolResult.error("参数 '" + paramName + "' 指向系统敏感凭证文件，禁止访问: " + targetPath);
+            }
+
             // 真实物理路径判定：软链接展开后的物理落点必须落在沙箱允许根目录之内，杜绝软链接逃逸穿透
             boolean inSandbox = realTarget != null && (
                     realTarget.startsWith(realProjectRoot)
@@ -65,6 +73,30 @@ public final class SearchSandboxGuard {
             log.error("[搜索沙箱纵深防御] 路径校验异常，按越界拒绝: {}", targetPath, e);
             return ToolResult.error("解析搜索路径失败: " + targetPath + ", 原因: " + e.getMessage());
         }
+    }
+
+    /**
+     * 判定目标路径是否命中敏感凭证文件。
+     * <p>
+     * 与 PermissionService 的口径保持一致：仅拦凭证文件本身，
+     * 不整目录封禁（全局目录中还有 skills、rules 等可正常检索的资产）。
+     * </p>
+     *
+     * @param realTarget   已展开的真实物理路径
+     * @param realUserHome 已展开的用户级配置目录物理路径
+     * @return true 表示命中敏感凭证文件
+     */
+    private static boolean isCredentialPath(Path realTarget, Path realUserHome) {
+        if (realUserHome == null) {
+            return false;
+        }
+        Path tokenFile = realUserHome.resolve(DesktopTokenStore.TOKEN_FILE_NAME).normalize();
+        if (realTarget.equals(tokenFile)) {
+            return true;
+        }
+        Path globalConfigFile = toRealPathSafe(
+                ContractFile.getGlobalConfigJsonFile().toPath().toAbsolutePath().normalize());
+        return globalConfigFile != null && realTarget.equals(globalConfigFile);
     }
 
     /**

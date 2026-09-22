@@ -25,7 +25,9 @@ struct PingData {
 }
 
 /// 发起 GET /api/ping 探测请求
-pub fn probe_ping(base_url: &str) -> ProbeResult {
+/// 持有桌面端凭证时通过 X-Desktop-Token 请求头携带，后端据此标记 desktopAuth=required；
+/// None 表示开放探测（attach 复用模式、启动早期凭证未就绪），后端标记 desktopAuth=open
+pub fn probe_ping(base_url: &str, token: Option<&str>) -> ProbeResult {
     let ping_url = format!("{}/api/ping", base_url.trim_end_matches('/'));
 
     let agent = ureq::AgentBuilder::new()
@@ -33,7 +35,12 @@ pub fn probe_ping(base_url: &str) -> ProbeResult {
         .timeout_read(Duration::from_millis(500))
         .build();
 
-    match agent.get(&ping_url).call() {
+    let mut request = agent.get(&ping_url);
+    if let Some(token) = token {
+        request = request.set("X-Desktop-Token", token);
+    }
+
+    match request.call() {
         Ok(response) => {
             if let Ok(api_res) = response.into_json::<ApiResponse<PingData>>() {
                 if api_res.code == 0 {

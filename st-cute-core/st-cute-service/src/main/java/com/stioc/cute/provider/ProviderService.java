@@ -4,6 +4,7 @@ import com.stioc.cute.platform.common.BusinessException;
 import com.stioc.cute.platform.contract.ContractFile;
 import com.stioc.cute.platform.contract.ContractProperty;
 import com.stioc.cute.platform.util.PasswordDigestKit;
+import com.stioc.cute.platform.util.PasswordPolicy;
 import com.stioc.cute.engine.llm.types.Provider;
 import com.stioc.cute.websocket.WebSocketBroadcast;
 import com.stioc.cute.platform.util.ConfigMergeUtils;
@@ -183,27 +184,20 @@ public class ProviderService implements ProviderResolver {
     }
 
     /**
-     * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数、安全密码、路径沙箱保护、极简 Skill 模式、全量用户附件装载）配置
+     * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数、路径沙箱保护、极简 Skill 模式）
      * <p>
-     * 密码安全约定：入参 password 为前端 SHA-256(原文) 传输摘要——空/缺省保持原值不变；
-     * passwordClear=true 时显式清除密码（优先级高于 password）。广播 CONFIG_UPDATED 事件同样不携带密码值（仅 passwordSet 状态标记），
-     * 且广播在写盘成功后发出，失败时本方法直接抛出异常、不广播、并回滚内存状态。
+     * 刻意不含任何密码参数：密码有独立的专用接口 {@link #savePassword}。
+     * 历史上本方法兼管密码，依赖「前端把已设置密码回填进常驻输入框再原样回传」，
+     * 一旦浏览器自动填充把存储摘要塞进输入框，前端会对其二次摘要，导致存进去的凭据
+     * 与原文不再对应、密码静默失效。职责分离后此类误伤从根上消除。
+     * </p>
+     * <p>
      * maxViewHistoryLimit 为可选参数：null 表示保持原值不变（该字段另有独立读取路径）。
+     * loadAllUserAttachments 为可选参数：null 表示保持原值不变（该字段当前无前端设置入口，
+     * 不可因保存其他设置而被重置）。
      * </p>
      */
-    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, String password, boolean passwordClear, boolean pathSandboxEnabled, boolean minimalSkillMode, boolean loadAllUserAttachments, Integer maxViewHistoryLimit) {
-        // 先改内存后落盘，写盘失败时回滚内存，保证内存与磁盘不漂移
-        String originalPassword = contractProperty.getPassword();
-        // 密码处置优先级：passwordClear 显式清除 > password 非空设置新密码 > 均缺省保持原值
-        String newPasswordToStore;
-        if (Boolean.TRUE.equals(passwordClear)) {
-            newPasswordToStore = null;
-        } else if (StringUtils.hasText(password)) {
-            newPasswordToStore = PasswordDigestKit.hash(password);
-        } else {
-            newPasswordToStore = originalPassword;
-        }
-
+    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, boolean pathSandboxEnabled, boolean minimalSkillMode, Boolean loadAllUserAttachments, Integer maxViewHistoryLimit) {
         contractProperty.setLanguage(language);
         contractProperty.setNewlineKey(newlineKey);
         // llmLog 字段可能因配置合并路径未初始化（HttpLogCleanupJob 同款防御），判空兜底
@@ -212,13 +206,67 @@ public class ProviderService implements ProviderResolver {
         }
         contractProperty.getLlmLog().setHttpLog(httpLog);
         contractProperty.getLlmLog().setHttpLogDays(httpLogDays);
-        contractProperty.setPassword(newPasswordToStore);
         contractProperty.setPathSandboxEnabled(pathSandboxEnabled);
         contractProperty.setMinimalSkillMode(minimalSkillMode);
-        contractProperty.setLoadAllUserAttachments(loadAllUserAttachments);
+        // 可缺省字段：null 保持原值，避免无设置入口的字段被保存动作重置为默认值
+        if (loadAllUserAttachments != null) {
+            contractProperty.setLoadAllUserAttachments(loadAllUserAttachments);
+        }
         if (maxViewHistoryLimit != null && maxViewHistoryLimit > 0) {
             contractProperty.setMaxViewHistoryLimit(maxViewHistoryLimit);
         }
+        writeBackGlobalConfig();
+
+        BasicConfigDto dto = new BasicConfigDto();
+        dto.setLanguage(language);
+        dto.setNewlineKey(newlineKey);
+        dto.setHttpLog(httpLog);
+        dto.setHttpLogDays(httpLogDays);
+        // 仅回传状态标记，绝不回传密码值本身
+        dto.setPasswordSet(StringUtils.hasText(contractProperty.getPassword()));
+        dto.setPathSandboxEnabled(pathSandboxEnabled);
+        dto.setMinimalSkillMode(minimalSkillMode);
+        dto.setLoadAllUserAttachments(contractProperty.isLoadAllUserAttachments());
+        webSocketBroadcast.broadcast(WebSocketBroadcast.EventType.CONFIG_UPDATED, dto);
+    }
+
+    /**
+     * 保存（设置 / 修改 / 清除）安全访问密码，与其余系统设置的保存彻底解耦。
+     * <p>
+     * 入参 password 为前端 SHA-256(原文) 传输摘要：服务端再加盐摘要后落盘，
+     * 存储形态恒为 {@code salt:digest}（明文不落盘、摘要不回传）。
+     * </p>
+     * <p>
+     * 密码处置优先级：clear=true 显式清除 &gt; password 非空设置新密码。
+     * 二者同时缺省（clear=false 且 password 为空）视为无有效操作，直接拒绝，
+     * 避免前端误调导致密码被意外清空。
+     * </p>
+     *
+     * @param password       前端计算的 SHA-256(原文) 传输摘要
+     * @param passwordLength 摘要对应的原文长度，用于服务端兜底校验访问码复杂度策略
+     * @param clear          显式清除标记（优先级高于 password）
+     */
+    public void savePassword(String password, Integer passwordLength, boolean clear) {
+        if (!clear && !StringUtils.hasText(password)) {
+            throw new BusinessException("未提供新的访问密码，操作已忽略");
+        }
+
+        String originalPassword = contractProperty.getPassword();
+        String newPasswordToStore;
+        if (clear) {
+            newPasswordToStore = null;
+            log.info("已按请求清除安全访问码，系统将回到未启用密码保护的状态");
+        } else {
+            // 服务端兜底：按传输摘要对应的原文长度校验访问码复杂度策略，不满足直接拒绝保存
+            // （字符集与组成无法在服务端校验：前端仅上传摘要，原文不经过服务端）
+            if (passwordLength == null || passwordLength < PasswordPolicy.MIN_LENGTH
+                    || passwordLength > PasswordPolicy.MAX_LENGTH) {
+                throw new BusinessException("安全访问码不符合安全策略：" + PasswordPolicy.describe());
+            }
+            newPasswordToStore = PasswordDigestKit.hash(password);
+        }
+
+        contractProperty.setPassword(newPasswordToStore);
         try {
             writeBackGlobalConfig();
         } catch (BusinessException e) {
@@ -226,16 +274,10 @@ public class ProviderService implements ProviderResolver {
             contractProperty.setPassword(originalPassword);
             throw e;
         }
+        log.info("安全访问码已更新: passwordSet={}", StringUtils.hasText(newPasswordToStore));
 
         BasicConfigDto dto = new BasicConfigDto();
-        dto.setLanguage(language);
-        dto.setNewlineKey(newlineKey);
-        dto.setHttpLog(httpLog);
-        dto.setHttpLogDays(httpLogDays);
         dto.setPasswordSet(StringUtils.hasText(newPasswordToStore));
-        dto.setPathSandboxEnabled(pathSandboxEnabled);
-        dto.setMinimalSkillMode(minimalSkillMode);
-        dto.setLoadAllUserAttachments(loadAllUserAttachments);
         webSocketBroadcast.broadcast(WebSocketBroadcast.EventType.CONFIG_UPDATED, dto);
     }
 

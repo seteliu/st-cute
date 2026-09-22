@@ -1,12 +1,41 @@
-import { defineStore } from 'pinia'
-import { Message } from '@/types'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { Message } from '@/types'
 import { wsService } from '@/services/websocket'
-import { getConfigApi, saveConfigApi } from '@/api/config'
-import { updateConversationConfigApi, approveConversationPermissionApi, cancelConversationApi, getMessageDetailApi } from '@/api/conversation'
+import { getConfigApi, saveConfigApi, savePasswordApi, clearPasswordApi } from '@/api/config'
+import { updateConversationConfigApi, cancelConversationApi } from '@/api/conversation'
 import { useConversationStore } from './conversation'
 import { useUserStore } from './user'
 import { setLanguage, Language, t } from '@/i18n'
+
+/**
+ * 安全访问码复杂度策略：trim 后 8~32 位、须同时包含英文字母与数字、仅允许常见密码字符。
+ * 与后端 PasswordPolicy 保持同一口径（后端因仅收到摘要，字符集与组成只能在前端校验；
+ * 长度则由后端随摘要附带的 passwordLength 做兜底），保存前本地先校验
+ */
+const PASSWORD_MIN_LENGTH = 8
+const PASSWORD_MAX_LENGTH = 32
+const PASSWORD_ALLOWED_RE = /^[A-Za-z0-9 !"#\$%&'\(\)\*\+,\-.\/:;<=>\?@\[\\\]\^_`\{\|}~]+$/
+
+/**
+ * 校验安全访问码是否满足复杂度策略，不满足时返回具体原因；满足返回 null
+ */
+const validatePasswordPolicy = (raw: string): string | null => {
+  const trimmed = raw.trim()
+  if (trimmed.length < PASSWORD_MIN_LENGTH) {
+    return t('settings.passwordTooShort')
+  }
+  if (trimmed.length > PASSWORD_MAX_LENGTH) {
+    return t('settings.passwordTooLong')
+  }
+  if (!/[A-Za-z]/.test(trimmed) || !/[0-9]/.test(trimmed)) {
+    return t('settings.passwordNeedLetterAndDigit')
+  }
+  if (!PASSWORD_ALLOWED_RE.test(trimmed)) {
+    return t('settings.passwordInvalidChar')
+  }
+  return null
+}
 
 export const useAppStore = defineStore('app', () => {
   const isConnected = ref(false)
@@ -32,39 +61,26 @@ export const useAppStore = defineStore('app', () => {
   const newlineKey = ref<'enter' | 'alt+enter'>('enter')
   const httpLog = ref(false)
   const httpLogDays = ref(7)
-  // 本地输入态：仅承载"本次要设置的新密码"，保存前本地转 SHA-256 摘要发送；后端不回传既有密码
-  const password = ref('')
-  // 服务端密码状态：是否已设置安全访问密码（替代旧的明文回显）
+  // 服务端密码状态：是否已设置安全访问密码（密码值本身全链路不回传，仅此布尔标记）
   const passwordSet = ref(false)
   const maxViewHistoryLimit = ref(2000)
   const pathSandboxEnabled = ref(true)
   // 极简 Skill 模式：开启后技能清单不注入系统提示词以节省 Token，仅按需触发加载
   const minimalSkillMode = ref(false)
-  
+
   // 权限安全配置
   const permissionMode = ref('READ_ONLY')
-  
+
   // 迭代进度
   const currentIteration = ref(0)
-  
-  // 权限审批弹窗相关
-  const showPermissionModal = ref(false)
-  const alwaysAllowChecked = ref(false)
-  const permissionPatternMode = ref<'exact' | 'prefix' | 'all'>('prefix')
-  const currentPermissionReq = ref<{
-    id: string
-    toolName: string
-    arguments: string
-    subAgent?: any
-  } | null>(null)
-  const isEditingArgs = ref(false)
-  const editedArgumentsJson = ref('')
-  
+
   // 原始运行日志抽屉
   const showLogDrawer = ref(false)
-  const rawLogContent = ref('')
-  const currentViewToolCall = ref<any>(null)
-  const currentViewMessage = ref<Message | null>(null)
+  // 当前查看的工具消息 ID：抽屉内容由该 ID 从消息列表实时取，支持流式日志跟随
+  const currentViewToolMessageId = ref<number | null>(null)
+  // 兜底数据源：消息不在任何响应式列表时（如折叠详情弹窗的范围查询结果）由调用方直接传入对象引用。
+  // 存引用而非拷贝，故对象自身仍可保持响应式（折叠详情中的工具均为终态，内容不会再变）
+  const currentViewToolFallback = ref<Message | null>(null)
 
   // 思考过程详情抽屉
   const showThoughtDrawer = ref(false)
@@ -77,104 +93,6 @@ export const useAppStore = defineStore('app', () => {
     { label: t('sider.modeSmart'), value: 'SMART_APPROVAL' },
     { label: t('sider.modeAllAllow'), value: 'ALL_ALLOW' }
   ])
-
-  // 提取命令的第一个单词
-  const commandPrefixPattern = computed(() => {
-    if (!currentPermissionReq.value) return ''
-    try {
-      const args = JSON.parse(currentPermissionReq.value.arguments)
-      const cmd = args.command
-      if (cmd) {
-        const trimmed = cmd.trim()
-        const firstWord = trimmed.split(/\s+/)[0]
-        return firstWord ? `${firstWord} *` : '*'
-      }
-    } catch (e) {
-      // ignore
-    }
-    return '*'
-  })
-
-  // 提取精确命令
-  const commandExactPattern = computed(() => {
-    if (!currentPermissionReq.value) return ''
-    try {
-      const args = JSON.parse(currentPermissionReq.value.arguments)
-      return args.command || '*'
-    } catch (e) {
-      // ignore
-    }
-    return '*'
-  })
-
-  // 提取文件夹路径通配符
-  const fileDirPattern = computed(() => {
-    if (!currentPermissionReq.value) return ''
-    try {
-      const args = JSON.parse(currentPermissionReq.value.arguments)
-      const path = args.path
-      if (path) {
-        const lastSlashIdx = path.lastIndexOf('/')
-        if (lastSlashIdx !== -1) {
-          return `${path.substring(0, lastSlashIdx)}/**`
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-    return '*'
-  })
-
-  // 提取精确文件路径
-  const fileExactPattern = computed(() => {
-    if (!currentPermissionReq.value) return ''
-    try {
-      const args = JSON.parse(currentPermissionReq.value.arguments)
-      return args.path || '*'
-    } catch (e) {
-      // ignore
-    }
-    return '*'
-  })
-
-  // 计算匹配的 glob
-  const calculatedPattern = computed(() => {
-    if (!currentPermissionReq.value) return ''
-    try {
-      const isCmd = currentPermissionReq.value.toolName === 'RunCommandTool' || currentPermissionReq.value.toolName === 'execute_command'
-      if (isCmd) {
-        if (permissionPatternMode.value === 'exact') {
-          return commandExactPattern.value
-        } else if (permissionPatternMode.value === 'prefix') {
-          return commandPrefixPattern.value
-        } else {
-          return '*'
-        }
-      } else {
-        if (permissionPatternMode.value === 'exact') {
-          return fileExactPattern.value
-        } else if (permissionPatternMode.value === 'prefix') {
-          return fileDirPattern.value
-        } else {
-          return '*'
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-    return '*'
-  })
-
-  // 格式化 JSON
-  const formatArgumentsJson = (argsStr: string | undefined) => {
-    if (!argsStr) return ''
-    try {
-      const parsed = JSON.parse(argsStr)
-      return JSON.stringify(parsed, null, 2)
-    } catch (e) {
-      return argsStr
-    }
-  }
 
   // 改变权限安全模式
   const handlePermissionModeChange = (val: string) => {
@@ -195,82 +113,42 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  // 提交审批决定
-  const handlePermissionDecision = (decision: 'ALLOW' | 'DENY') => {
-    if (!currentPermissionReq.value) return
-
-    let customArgOverride: string | undefined = undefined
-    if (decision === 'ALLOW' && isEditingArgs.value) {
-      // 编辑过参数时必须提供合法 JSON：解析失败直接拦截提交并提示，
-      // 禁止把乱七八糟的原文静默透传给后端执行层
-      try {
-        const parsed = JSON.parse(editedArgumentsJson.value)
-        customArgOverride = JSON.stringify(parsed)
-      } catch (e) {
-        if ((window as any).$message) {
-          ;(window as any).$message.error('参数不是合法的 JSON，请修正后再允许执行')
-        } else {
-          console.error('参数 JSON 解析失败，已拦截提交:', e)
-        }
-        return
-      }
-    }
-
-    const conversationStore = useConversationStore()
-    // 如果是子智能体的审批，定向使用其自身的 cid，否则使用主会话的 activeCid
-    const targetCid = currentPermissionReq.value.subAgent
-      ? Number(currentPermissionReq.value.subAgent.cid)
-      : conversationStore.activeCid
-
-    if (targetCid !== null && targetCid !== undefined) {
-      approveConversationPermissionApi(targetCid, {
-        id: currentPermissionReq.value.id,
-        decision: decision,
-        alwaysAllow: decision === 'ALLOW' && alwaysAllowChecked.value,
-        toolName: currentPermissionReq.value.toolName,
-        contentPattern: calculatedPattern.value,
-        customArgOverride: customArgOverride
-      }).then(() => {
-        // 成功后，同步清除该子智能体的局部挂起状态
-        if (currentPermissionReq.value?.subAgent) {
-          currentPermissionReq.value.subAgent.pendingPermissionReq = undefined
-        }
-      }).catch(err => {
-        console.error('发送审批决定失败:', err)
-      })
-    }
-
-    showPermissionModal.value = false
-    currentPermissionReq.value = null
-    alwaysAllowChecked.value = false
-    isEditingArgs.value = false
-    permissionPatternMode.value = 'prefix'
-  }
-
-  // 查看原始工具日志 (升级为根据物理消息 ID 详情查询)
-  const showRawLog = async (messageId: number) => {
-    rawLogContent.value = '正在加载日志...'
+  /**
+   * 查看工具运行日志：记录消息 ID（及可选兜底对象）并打开抽屉。
+   * <p>
+   * 抽屉内容优先由 RawLogDrawer 以该 ID 从响应式消息列表实时取值（参考 ThoughtDetailDrawer 范式），
+   * 故无需请求接口即可跟随日志流刷新。
+   * </p>
+   * <p>
+   * 但折叠详情弹窗的消息来自范围查询（folded=false + minId/maxId）落于组件局部状态，
+   * 不在任何响应式列表中，此时必须由调用方传入消息对象兜底，否则抽屉会空白。
+   * </p>
+   *
+   * @param messageId 工具消息 ID
+   * @param fallback  兜底消息对象（消息不在响应式列表时传入，如折叠详情）
+   */
+  const showRawLog = (messageId: number, fallback?: Message | null) => {
+    currentViewToolMessageId.value = messageId
+    currentViewToolFallback.value = fallback || null
     showLogDrawer.value = true
-    currentViewToolCall.value = null
-    currentViewMessage.value = null
-    try {
-      const detail = await getMessageDetailApi(messageId)
-      if (detail) {
-        currentViewMessage.value = detail
-        currentViewToolCall.value = {
-          name: detail.toolName || '',
-          arguments: detail.toolArguments || '{}'
-        } as any
-        rawLogContent.value = detail.content || '无日志内容'
-      } else {
-        rawLogContent.value = '未找到对应的日志记录'
-      }
-    } catch (e: any) {
-      rawLogContent.value = '加载日志发生错误: ' + e.message
-    }
   }
 
-  // 打开思考详情抽屉 (支持传递静态内容与消息 ID 进行流式响应绑定)
+  /**
+   * 打开思考详情抽屉：绑定目标消息 ID（可选）并记录原文快照兜底。
+   * <p>
+   * 抽屉内容优先由 ThoughtDetailDrawer 以该 ID 从响应式消息列表实时取值，故主会话/子代理场景
+   * 无需传内容即可跟随思考流刷新。
+   * </p>
+   * <p>
+   * 但折叠详情弹窗的消息来自范围查询（folded=false + minId/maxId）落于组件局部状态，
+   * 折叠时已从响应式列表物理删除，按 ID 查列表必然落空；此时必须由调用方传入
+   * <b>原始 thought 全文</b>作为快照兜底，否则抽屉会空白。严禁传清洗成单行的精简文本，
+   * 否则兜底内容丢失换行与缩进，思考全文会堆叠成一行。
+   * </p>
+   *
+   * @param content   兜底快照内容（原始思考全文，保留换行与缩进）
+   * @param messageId 目标消息 ID（命中响应式列表时优先按 ID 实时取值）
+   */
   const openThoughtDetail = (content: string, messageId?: number | string | null) => {
     thoughtDetailContent.value = content || ''
     currentViewThoughtMessageId.value = messageId || null
@@ -298,9 +176,8 @@ export const useAppStore = defineStore('app', () => {
       newlineKey.value = data.newlineKey || 'enter'
       httpLog.value = data.httpLog || false
       httpLogDays.value = data.httpLogDays !== undefined ? data.httpLogDays : 7
-      // 密码状态标记：后端不再回传明文/摘要，本地输入框仅承载"本次要设置的新密码"
+      // 仅取"是否已设置"布尔标记：密码值全链路不回传，界面据此渲染 设置 / 修改+清除 按钮
       passwordSet.value = data.passwordSet || false
-      password.value = ''
       maxViewHistoryLimit.value = data.maxViewHistoryLimit || 2000
       pathSandboxEnabled.value = data.pathSandboxEnabled !== undefined ? data.pathSandboxEnabled : true
       minimalSkillMode.value = data.minimalSkillMode || false
@@ -309,7 +186,7 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  // 保存系统配置
+  // 保存系统配置（不含密码：密码走 savePassword / clearPassword 专用接口）
   const saveBasicConfig = async () => {
     try {
       setLanguage(language.value)
@@ -318,23 +195,73 @@ export const useAppStore = defineStore('app', () => {
         newlineKey: newlineKey.value,
         httpLog: httpLog.value,
         httpLogDays: httpLogDays.value,
-        password: password.value,
-        // 保持既有交互习惯：已设置过密码且本地输入框被清空时，保存即关闭密码保护；
-        // 未设置过密码时清空框就是"保持未启用"，两种情况均无需下发清除标记
-        passwordClear: passwordSet.value && !password.value,
         pathSandboxEnabled: pathSandboxEnabled.value,
         minimalSkillMode: minimalSkillMode.value
       })
-      // 保存成功后清空本地输入态，回到"仅展示 passwordSet 状态"的干净基线
-      password.value = ''
       if ((window as any).$message) {
         ;(window as any).$message.success(t('settings.saveSuccess'))
       }
-      // 立即触发用户信息校验，保障配置密码后立刻强制鉴权
-      const userStore = useUserStore()
-      await userStore.fetchUserInfo()
     } catch (e) {
       console.error(t('settings.saveFailed'), e)
+    }
+  }
+
+  /**
+   * 设置 / 修改安全访问密码。
+   * <p>
+   * 仅在弹窗中现输现提：本地先做复杂度校验（与后端 PasswordPolicy 同口径），
+   * 通过后转 SHA-256 摘要走专用接口。原文不经过网络，也不与其它设置同批提交，
+   * 从根本上避免浏览器自动填充污染密码值。
+   * </p>
+   *
+   * @param rawPassword 用户输入的密码原文
+   * @returns 是否保存成功
+   */
+  const savePassword = async (rawPassword: string): Promise<boolean> => {
+    const policyError = validatePasswordPolicy(rawPassword)
+    if (policyError) {
+      if ((window as any).$message) {
+        ;(window as any).$message.warning(policyError)
+      }
+      return false
+    }
+    try {
+      await savePasswordApi(rawPassword)
+      passwordSet.value = true
+      if ((window as any).$message) {
+        ;(window as any).$message.success(t('settings.passwordSaveSuccess'))
+      }
+      // 密码变更后立即校验用户信息：已配置密码则立刻强制鉴权
+      const userStore = useUserStore()
+      await userStore.fetchUserInfo()
+      return true
+    } catch (e) {
+      console.error(t('settings.saveFailed'), e)
+      return false
+    }
+  }
+
+  /**
+   * 清除安全访问密码（调用方需先行二次确认）。
+   * <p>清除后系统回到未启用密码保护的状态：仅本机来源可访问。</p>
+   *
+   * @returns 是否清除成功
+   */
+  const clearPassword = async (): Promise<boolean> => {
+    try {
+      await clearPasswordApi()
+      passwordSet.value = false
+      if ((window as any).$message) {
+        ;(window as any).$message.success(t('settings.passwordClearSuccess'))
+      }
+      // 清除后立即校验用户信息：系统可能随即收起免密通道（如仅允许本机来源），
+      // 由服务端裁决当前连接是否仍具备访问资格，不通过则统一走 401 跳登录
+      const userStore = useUserStore()
+      await userStore.fetchUserInfo()
+      return true
+    } catch (e) {
+      console.error(t('settings.saveFailed'), e)
+      return false
     }
   }
 
@@ -354,31 +281,19 @@ export const useAppStore = defineStore('app', () => {
     newlineKey,
     httpLog,
     httpLogDays,
-    password,
     passwordSet,
     maxViewHistoryLimit,
     pathSandboxEnabled,
     minimalSkillMode,
     
     permissionMode,
-    currentPermissionReq,
-    isEditingArgs,
-    editedArgumentsJson,
-    calculatedPattern,
-    commandExactPattern,
-    commandPrefixPattern,
-    fileExactPattern,
-    fileDirPattern,
     
     showLogDrawer,
-    rawLogContent,
-    currentViewToolCall,
-    currentViewMessage,
+    currentViewToolMessageId,
+    currentViewToolFallback,
     
     permissionModeOptions,
-    formatArgumentsJson,
     handlePermissionModeChange,
-    handlePermissionDecision,
     showRawLog,
     showThoughtDrawer,
     thoughtDetailContent,
@@ -387,10 +302,14 @@ export const useAppStore = defineStore('app', () => {
     cancelLoop,
     loadBasicConfig,
     saveBasicConfig,
-    currentIteration,
-    showPermissionModal,
-    alwaysAllowChecked,
-    permissionPatternMode
+    savePassword,
+    clearPassword,
+    currentIteration
   }
 
 })
+
+// 启用 Pinia store 热更新：dev 热替换时复用原 store 实例，避免新旧实例并存导致组件状态分裂、刷新链断裂
+if (import.meta.hot) {
+  acceptHMRUpdate(useAppStore, import.meta.hot)
+}

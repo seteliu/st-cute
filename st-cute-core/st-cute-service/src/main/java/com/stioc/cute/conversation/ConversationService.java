@@ -16,8 +16,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 宿主会话管理服务（纯宿主业务 CRUD 与查询面）。
@@ -57,13 +59,33 @@ public class ConversationService {
     @Transactional
     public void deleteConversation(Long id) {
         log.info("物理删除对话会话: {}", id);
-        // 级联查询并递归删除所有子会话
+        // 级联查询并递归删除所有子会话。以 visited 集合防御 parentCid 成环导致的无限递归
+        // （脏数据下若无此保护会直接 StackOverflowError）
+        Set<Long> visited = new HashSet<>();
+        deleteConversationCascade(id, visited);
+    }
+
+    /**
+     * 递归删除单个会话及其子树。
+     * <p>
+     * visited 集合同时承担双重职责：① 阻止环状引用导致的无限递归；
+     * ② 保证同一会话在共享子节点场景下只被删除一次（重复删除会重复登记事务同步回调）。
+     * </p>
+     *
+     * @param id      待删除的会话 ID
+     * @param visited 已处理过的会话 ID 集合
+     */
+    private void deleteConversationCascade(Long id, Set<Long> visited) {
+        if (id == null || !visited.add(id)) {
+            return;
+        }
+
         List<Conversation> subSessions = conversationStore.listByQuery(ConversationQuery.builder()
                 .parentCid(id)
                 .build());
         if (!subSessions.isEmpty()) {
             for (Conversation sub : subSessions) {
-                deleteConversation(sub.getId());
+                deleteConversationCascade(sub.getId(), visited);
             }
         }
 

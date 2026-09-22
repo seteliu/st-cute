@@ -22,6 +22,15 @@ const redirectToLogin = () => {
   }
 }
 
+/**
+ * 判断是否为登录接口的请求。
+ * <p>登录校验失败同样以业务码 401 返回（"密码错误，登录失败"），
+ * 但语义与"会话失效"完全不同：此处必须豁免统一的跳转处理；
+ * 同时登录失败属调用方可预期的普通业务错误，其提示统一由登录页负责展示，
+ * 拦截器不再弹全局提示，否则同一条错误会被弹两次</p>
+ */
+const isLoginRequest = (url?: string): boolean => !!url && url.includes('/api/auth/login')
+
 // HTTP 层错误消息中文化：axios 原生 error.message 为英文（如 Network Error、timeout of xxx ms exceeded），
 // 按场景映射为中文提示；后端有业务消息（msg）时优先展示后端内容
 const humanizeHttpError = (error: any): string => {
@@ -58,13 +67,15 @@ service.interceptors.response.use(
   (response) => {
     const res = response.data as Result
     if (res.code !== 0) {
-      if (res.code === 401) {
+      // 登录接口的失败（如密码错误）属普通业务错误：直接抛给调用方展示，不走统一跳转
+      if (res.code === 401 && !isLoginRequest(response.config?.url)) {
         redirectToLogin()
         return Promise.reject(new Error(res.msg || '未登录'))
       }
       const errMsg = res.msg || '后端返回业务错误'
+      // 弹窗豁免两类场景：登录接口的失败提示由登录页统一展示（避免同一条错误弹两次）；
       // 静默请求（后台轮询）失败不弹窗，避免轮询期间错误弹窗轰炸
-      if (!response.config.silent && (window as any).$message) {
+      if (!isLoginRequest(response.config?.url) && !response.config.silent && (window as any).$message) {
         ;(window as any).$message.error(errMsg)
       }
       return Promise.reject(new Error(errMsg))
@@ -74,14 +85,16 @@ service.interceptors.response.use(
   (error) => {
     const status = error.response?.status
     const code = error.response?.data?.code
-    if (status === 401 || code === 401) {
+    // 登录接口的失败不触发"会话失效跳转"（登录页本就无需跳转，且会吞掉错误提示）
+    if ((status === 401 || code === 401) && !isLoginRequest(error.config?.url)) {
       redirectToLogin()
       return Promise.reject(error)
     }
 
     const errMsg = humanizeHttpError(error)
+    // 弹窗豁免两类场景：登录接口的失败提示由登录页统一展示（避免同一条错误弹两次）；
     // 静默请求（后台轮询）失败不弹窗，仅记录后由调用方自行兜底
-    if (!error.config?.silent && (window as any).$message) {
+    if (!isLoginRequest(error.config?.url) && !error.config?.silent && (window as any).$message) {
       ;(window as any).$message.error(errMsg)
     }
     return Promise.reject(error)

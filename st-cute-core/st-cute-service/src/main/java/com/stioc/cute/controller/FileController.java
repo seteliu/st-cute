@@ -21,6 +21,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 /**
  * 文件上传与资源访问 API 控制器
@@ -92,8 +93,19 @@ public class FileController {
             response.setContentType(mimeType);
             response.setContentLengthLong(file.length());
 
+            // SVG 内联安全防御：SVG 是唯一可携带脚本的"图片"格式，以 inline 方式输出时
+            // 其内嵌 <script> 会在应用同源下执行，可读取会话数据或驱动接口。
+            // 仅对 SVG 施加限制：强制降级为附件下载（不在浏览器内联渲染），
+            // 并补 CSP 与 nosniff 双重兜底，避免直接打开链接即触发脚本
+            if (isSvg(mimeType, ext)) {
+                response.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+            }
+            response.setHeader("X-Content-Type-Options", "nosniff");
+
             String encodedFilename = URLEncoder.encode(file.getName(), StandardCharsets.UTF_8).replace("+", "%20");
-            String dispositionType = Boolean.TRUE.equals(download) ? "attachment" : "inline";
+            // SVG 无论调用方是否要求下载，一律以附件形式返回，杜绝内联渲染执行脚本
+            boolean forceAttachment = isSvg(mimeType, ext);
+            String dispositionType = (Boolean.TRUE.equals(download) || forceAttachment) ? "attachment" : "inline";
             response.setHeader("Content-Disposition", dispositionType + "; filename=\"" + encodedFilename + "\"; filename*=UTF-8''" + encodedFilename);
 
             try (InputStream is = new FileInputStream(file);
@@ -110,5 +122,21 @@ public class FileController {
             log.warn("文件查看或下载异常: path={}, mode={}, error={}", path, mode, e.getMessage());
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         }
+    }
+
+    /**
+     * 判定目标是否为 SVG（可按 MIME 或扩展名命中）。
+     * <p>
+     * SVG 属"可执行图片"：以 inline 渲染时其中的脚本会在应用同源下运行，
+     * 故需单独施加更严格的响应头策略。
+     * </p>
+     *
+     * @param mimeType 探测出的 MIME 类型
+     * @param ext      文件扩展名（不含点）
+     * @return true 表示是 SVG
+     */
+    private boolean isSvg(String mimeType, String ext) {
+        return "svg".equalsIgnoreCase(ext)
+                || (mimeType != null && mimeType.toLowerCase(Locale.ROOT).contains("image/svg"));
     }
 }

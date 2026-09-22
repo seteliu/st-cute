@@ -52,7 +52,11 @@ public class FlywayManualInitializer {
             flyway.migrate();
             log.info(">>>> [Flyway] 执行数据库版本迁移成功！");
         } catch (Exception e) {
-            log.error(">>>> [Flyway] 执行数据库版本迁移失败", e);
+            // fail-fast：迁移失败意味着库表结构与代码预期不一致，带着旧结构继续启动会在运行期
+            // 以更难定位的方式炸开（缺列、缺表引发的 SQL 异常）。此处直接终止启动，让问题在启动期暴露。
+            // 原始异常作为 cause 保留，便于排查具体是哪个迁移脚本或连接问题
+            log.error(">>>> [Flyway] 执行数据库版本迁移失败，启动中止", e);
+            throw new IllegalStateException("数据库版本迁移失败，应用无法安全启动: " + e.getMessage(), e);
         }
     }
 }

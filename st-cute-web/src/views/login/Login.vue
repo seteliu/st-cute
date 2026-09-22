@@ -22,7 +22,8 @@
             size="large"
             class="premium-input"
             :bordered="false"
-            maxlength="64"
+            maxlength="32"
+            @keydown.enter.prevent="handleLogin"
           />
         </n-form-item>
 
@@ -46,6 +47,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { t } from '@/i18n'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -81,7 +83,14 @@ const handleLogin = () => {
       // replace 替代 push：登录成功后不留历史栈记录，防止后退键回到登录页
       router.replace('/')
     } catch (err: any) {
+      // 登录失败必须给出可见反馈：请求层对登录接口的 401 不做统一跳转、也不弹全局提示，
+      // 错误消息在此处统一展示（含"密码错误"、"尝试次数过多"等后端业务提示），避免重复弹窗。
+      // 优先取后端业务消息：HTTP 层异常（如跨源被拒 403）时 axios 原生 message 为英文
       console.error('登录校验失败:', err)
+      if ((window as any).$message) {
+        const errMsg = err?.response?.data?.msg || err?.message || t('settings.loginFailed')
+        ;(window as any).$message.error(errMsg)
+      }
       loading.value = false
     }
   })

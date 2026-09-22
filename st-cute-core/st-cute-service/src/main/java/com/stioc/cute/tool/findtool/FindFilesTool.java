@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.PatternSyntaxException;
 
 /**
  * 按 Glob 表达式查找文件与目录的本地核心工具
@@ -96,6 +97,16 @@ public class FindFilesTool extends AbstractFindTool {
             return ToolResult.error("搜索根目录不存在或不是目录: " + rootDirVal);
         }
 
+        // glob 表达式编译：非法 pattern（如未闭合的 [ 或 {）会抛 PatternSyntaxException，
+        // 属 RuntimeException 不会被下方的 IOException 分支捕获而穿透工具层，故在此显式拦截并给出友好提示
+        List<PathMatcher> matchers;
+        try {
+            matchers = compileMatchers(normalizedPattern, findArgs.candidatePatterns(), shallowMode);
+        } catch (PatternSyntaxException e) {
+            return ToolResult.error("Glob 表达式语法有误: " + e.getMessage()
+                    + "。请检查中括号与花括号是否闭合，或改用更简单的通配形式（如 'src/**' 或 '*.java'）。");
+        }
+
         List<String> matchedFiles = new ArrayList<>();
         AtomicBoolean truncated = new AtomicBoolean(false);
         try {
@@ -103,7 +114,7 @@ public class FindFilesTool extends AbstractFindTool {
                 // 浅层模式：仅遍历 rootDir 直接子项，glob 对条目名称做匹配，目录条目输出时带 / 后缀。
                 // 排除口径与递归模式的「永久排除」对齐：.git 等版本库内部目录任何情况都不列出，
                 // 产物依赖目录（target/node_modules 等）保留展示（浅层列目录属用户显式浏览意图）
-                PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + normalizedPattern);
+                PathMatcher matcher = matchers.getFirst();
                 try (var stream = Files.list(rootPath)) {
                     stream.forEach(entry -> {
                         if (matchedFiles.size() >= resultLimit) {
@@ -134,11 +145,6 @@ public class FindFilesTool extends AbstractFindTool {
                 return result.toJSONString();
             }
 
-            // 递归模式：walkFileTree 全路径 glob 匹配（pattern 已含 / 或 **，直接使用不拼前缀）
-            String syntaxAndPattern = normalizedPattern.startsWith("glob:") || normalizedPattern.startsWith("regex:")
-                    ? normalizedPattern : "glob:" + normalizedPattern;
-
-            PathMatcher matcher = FileSystems.getDefault().getPathMatcher(syntaxAndPattern);
             Path finalRootPath = rootPath;
 
             // pattern 首段意图识别：显式点名的目录不走排除过滤。
@@ -173,7 +179,7 @@ public class FindFilesTool extends AbstractFindTool {
 
                     // 递归模式补充目录条目匹配：若目录符合 pattern（相对路径或绝对路径），收录目录路径（带 / 后缀与浅层模式对齐）
                     Path relativePath = finalRootPath.relativize(dir);
-                    if (matcher.matches(dir) || matcher.matches(relativePath)) {
+                    if (matchesAny(matchers, dir, relativePath)) {
                         if (matchedFiles.size() >= resultLimit) {
                             truncated.set(true);
                             return FileVisitResult.TERMINATE;
@@ -187,7 +193,7 @@ public class FindFilesTool extends AbstractFindTool {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                     Path relativePath = finalRootPath.relativize(file);
-                    if (matcher.matches(file) || matcher.matches(relativePath)) {
+                    if (matchesAny(matchers, file, relativePath)) {
                         if (matchedFiles.size() >= resultLimit) {
                             truncated.set(true);
                             return FileVisitResult.TERMINATE;
@@ -224,5 +230,56 @@ public class FindFilesTool extends AbstractFindTool {
             log.error("FindFilesTool 查找异常", e);
             return ToolResult.error("查找文件失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 编译 glob 候选列表为 PathMatcher 列表。
+     * <p>
+     * 候选由 {@link FindFilesArgs} 依据 {@code **}{@code /} 展开而来（覆盖零层目录情形），
+     * 任一候选命中即视为匹配。显式 {@code glob:} / {@code regex:} 前缀形态不做拼接，原样编译。
+     * </p>
+     *
+     * @param normalizedPattern 归一化后的 pattern（用于判定是否已带语法前缀）
+     * @param candidates        候选 pattern 列表（展开后）
+     * @param shallowMode       是否为浅层模式（浅层仅对文件名匹配，取首候选即可）
+     * @return 编译后的匹配器列表，顺序与候选一致
+     * @throws PatternSyntaxException pattern 语法非法时抛出，由调用方转为工具错误返回
+     */
+    private List<PathMatcher> compileMatchers(String normalizedPattern, List<String> candidates,
+                                              boolean shallowMode) {
+        boolean explicitSyntax = normalizedPattern.startsWith("glob:") || normalizedPattern.startsWith("regex:");
+        List<String> effective = (candidates == null || candidates.isEmpty())
+                ? List.of(normalizedPattern)
+                : candidates;
+        // 浅层模式只在直接子项名上匹配，展开的候选对单层名无意义，取首项避免重复判定
+        if (shallowMode) {
+            effective = List.of(effective.getFirst());
+        }
+
+        List<PathMatcher> compiled = new ArrayList<>(effective.size());
+        for (String candidate : effective) {
+            String syntaxAndPattern = explicitSyntax || candidate.startsWith("glob:") || candidate.startsWith("regex:")
+                    ? candidate
+                    : "glob:" + candidate;
+            compiled.add(FileSystems.getDefault().getPathMatcher(syntaxAndPattern));
+        }
+        return compiled;
+    }
+
+    /**
+     * 判定条目是否命中任一候选匹配器（绝对路径与相对路径各试一次，与既有语义保持一致）
+     *
+     * @param matchers     候选匹配器列表
+     * @param absolutePath 条目的绝对路径
+     * @param relativePath 条目相对于搜索根的路径
+     * @return true 表示任一候选命中
+     */
+    private boolean matchesAny(List<PathMatcher> matchers, Path absolutePath, Path relativePath) {
+        for (PathMatcher matcher : matchers) {
+            if (matcher.matches(absolutePath) || matcher.matches(relativePath)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

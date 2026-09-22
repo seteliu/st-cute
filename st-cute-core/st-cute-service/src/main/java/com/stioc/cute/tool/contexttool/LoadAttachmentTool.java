@@ -41,6 +41,16 @@ public class LoadAttachmentTool implements CuteTool {
     private final ProviderService providerService;
     private final ProjectService projectService;
 
+    /**
+     * 单文件加载大小上限：64MB。
+     * <p>
+     * 各解码器在解码前会 {@code readAllBytes} 全量载入字节数组（文本/图片路径），
+     * 若不设上限，对超大文件（如数 GB 日志）调用本工具将直接触发 OOM。
+     * read_file 与 grep_search 各自已有体积上限，唯独本工具此前裸奔，故在此统一收口。
+     * </p>
+     */
+    private static final long MAX_ATTACHMENT_FILE_SIZE = 64L * 1024 * 1024;
+
     @Override
     public String getRawName() {
         return ToolNames.LOAD_ATTACHMENT;
@@ -99,6 +109,14 @@ public class LoadAttachmentTool implements CuteTool {
             String ext = FileStorageService.getFileExtension(file.getName());
             String mimeType = FileStorageService.detectMimeType(ext);
             long fileSize = file.length();
+
+            // 体积门禁：解码器会全量读入字节数组，超限文件直接拒绝，避免 OOM 穿透至容器层
+            if (fileSize > MAX_ATTACHMENT_FILE_SIZE) {
+                return ToolResult.error(String.format(
+                        "文件过大，无法加载：%s（当前 %.1f MB，上限 %d MB）。请改用 read_file 分段读取或 grep_search 检索关键片段。",
+                        file.getName(), fileSize / 1024.0 / 1024.0, MAX_ATTACHMENT_FILE_SIZE / 1024 / 1024),
+                        obj -> obj.fluentPut("status", "error").fluentPut("path", path));
+            }
 
             // 视觉能力跟随当前 Provider 配置
             boolean allowImage = false;

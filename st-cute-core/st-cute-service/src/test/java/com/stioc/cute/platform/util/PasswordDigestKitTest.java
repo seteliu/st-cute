@@ -119,6 +119,28 @@ class PasswordDigestKitTest {
             assertFalse(PasswordDigestKit.isDigested("not_base64:not_base64"));
         }
 
+        @Test
+        @DisplayName("isDigested 严格按生成格式识别：形如明文的冒号串不得误判为摘要")
+        void testIsDigestedStrictFormat() {
+            // 用户在 config.json 手写的明文密码可能恰好含冒号且两段可 Base64 解码，
+            // 宽松判定会将其误认为摘要形态、走质询链路导致登录失败且提示语义错乱
+            assertFalse(PasswordDigestKit.isDigested("abcd:efgh"), "短段明文不应识别为摘要");
+            assertFalse(PasswordDigestKit.isDigested("abcdefghijklmnop:abcdefghijklmnop"),
+                    "长度不符的 Base64 段不应识别为摘要");
+            assertFalse(PasswordDigestKit.isDigested(":digestOnly"));
+            assertFalse(PasswordDigestKit.isDigested("saltOnly:"));
+
+            // 恰为正确长度的合法 Base64 段应识别为摘要形态
+            String validHash = PasswordDigestKit.hash("abcd1234");
+            assertTrue(PasswordDigestKit.isDigested(validHash));
+        }
+
+        @Test
+        @DisplayName("原文长度上限与访问码安全策略保持同一口径")
+        void testMaxRawLengthAlignedWithPolicy() {
+            assertEquals(PasswordPolicy.MAX_LENGTH, PasswordDigestKit.MAX_RAW_LENGTH);
+        }
+
         @ParameterizedTest(name = "文本 \"{0}\" 的 SHA-256 十六进制摘要为 \"{1}\"")
         @ValueSource(strings = {"", "admin", "hello world"})
         @DisplayName("sha256Hex 返回 64 位小写十六进制摘要")
