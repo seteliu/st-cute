@@ -146,7 +146,7 @@ public class ConversationService {
         } else {
             // 如果库里没有任何会话，默认读取默认权限模式（供应商字段同样不做默认填充）
             if (conversation.getPermissionMode() == null) {
-                conversation.setPermissionMode(PermissionMode.READ_ONLY.name());
+                conversation.setPermissionMode(PermissionMode.STRICT_APPROVAL.name());
             }
         }
 

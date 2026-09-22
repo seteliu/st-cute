@@ -269,9 +269,9 @@ export const useConversationStore = defineStore('conversation', () => {
         agentStore.mcpList = envInfo.mcpServers || []
         agentStore.rulesList = envInfo.rules || []
         if (envInfo.permissionMode) {
-          appStore.permissionMode = envInfo.permissionMode
+          appStore.applyPermissionMode(envInfo.permissionMode)
         } else {
-          appStore.permissionMode = 'READ_ONLY'
+          appStore.permissionMode = 'STRICT_APPROVAL'
         }
 
         // 顺便同步最新的 Token 用量与 LoopRunning 状态
@@ -583,9 +583,9 @@ export const useConversationStore = defineStore('conversation', () => {
         agentStore.mcpList = envInfo.mcpServers || []
         agentStore.rulesList = envInfo.rules || []
         if (envInfo.permissionMode) {
-          appStore.permissionMode = envInfo.permissionMode
+          appStore.applyPermissionMode(envInfo.permissionMode)
         } else {
-          appStore.permissionMode = 'READ_ONLY'
+          appStore.permissionMode = 'STRICT_APPROVAL'
         }
       }
       return success

@@ -64,7 +64,7 @@ class EnvironmentContributorTest {
     @DisplayName("contribute 生成结构化环境提示词并正确填充各段字段")
     void verifyEnvironmentPromptStructure() {
         AgentContext context = new AgentContext(555L, null, null);
-        context.setPermissionMode(PermissionMode.SMART_APPROVAL.name());
+        context.setPermissionMode(PermissionMode.RELAXED_APPROVAL.name());
 
         String prompt = contributor.contribute(context);
         assertNotNull(prompt);
@@ -86,7 +86,7 @@ class EnvironmentContributorTest {
         assertTrue(prompt.contains("- 当前工作目录: D:/projects/st-cute-backend"));
 
         // 权限模式说明
-        assertTrue(prompt.contains("【智能审批模式】"));
+        assertTrue(prompt.contains("【宽松审批模式】"));
 
         // 会话 ID 与临时目录约定
         assertTrue(prompt.contains("- 当前会话 ID (cid): 555"));

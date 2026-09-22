@@ -123,7 +123,7 @@ Hook 为叠加型契约，三层规则全部生效；装载注入顺序：项目
 | **`cachedTokens`** | Long | 累计缓存命中 Token 数 |
 | **`loopCount`** | Integer | 当前循环轮次（第几轮），用户发消息置 1，每轮工具完成后由合法触发者推进 |
 | **`parentCid`** | Long | 父会话 ID（SubAgent 场景下非空） |
-| **`permissionMode`** | String | 当前权限模式（如 `READ_ONLY` / `SMART_APPROVAL`） |
+| **`permissionMode`** | String | 当前权限模式（如 `STRICT_APPROVAL` / `RELAXED_APPROVAL`） |
 | **`providerGroup`** | String | 当前使用的模型供应商分组 |
 | **`providerModelName`** | String | 当前使用的模型名称 |
 | **`callToolCount`** | Integer | 累计工具调用次数 |

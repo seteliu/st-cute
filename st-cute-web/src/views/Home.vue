@@ -251,7 +251,7 @@ onMounted(async () => {
     } else {
       if (cid === conversationStore.activeCid) {
         appStore.loopRunning = payload.loopRunning === 1
-        appStore.permissionMode = payload.permissionMode
+        appStore.applyPermissionMode(payload.permissionMode)
         appStore.currentIteration = payload.iterationCount
 
         conversationStore.inputTokens = payload.inputTokens

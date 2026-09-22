@@ -117,11 +117,15 @@ public class PermissionService {
 
         // 层级 1: 计划模式已移除，豁免检查跳过
 
+        // 路径沙箱开关：层级 2 的 cwd 前置防线与层级 4 的沙箱强拦截共用同一开关口径，
+        // 关闭（pathSandboxEnabled=false）时两处均不拦截——cwd 出项目的限制只在开启路径沙箱保护后才生效
+        boolean pathSandboxEnabled = contractProperty == null || contractProperty.isPathSandboxEnabled();
+
         // 层级 2: 安全只读命令快速放行（防元字符旁路）
         if ((ToolNames.EXECUTE_COMMAND.equalsIgnoreCase(toolName)) && StringUtils.hasText(commandVal)) {
-            // 前置防线：快速放行前必须先校验 cwd 落沙箱。否则 execute_command(command="ls", cwd="C:/Windows/...")
+            // 前置防线：快速放行前必须先校验 cwd 落沙箱（仅沙箱开启时）。否则 execute_command(command="ls", cwd="C:/Windows/...")
             // 会在沙箱检查之前命中白名单直接 ALLOW，越界工作目录从未被校验（cwd 参数不在 path 参数提取链内）
-            if (StringUtils.hasText(cwdVal) && !isPathInSandbox(cwdVal, context)) {
+            if (pathSandboxEnabled && StringUtils.hasText(cwdVal) && !isPathInSandbox(cwdVal, context)) {
                 log.warn("权限裁决: DENY [安全命令快速放行被越界 cwd 阻断] - cwd={}", cwdVal);
                 return ToolPermissionVerdict.deny("命令工作目录(cwd)路径越界。禁止访问项目根目录或临时目录外的系统敏感路径: " + cwdVal);
             }
@@ -164,8 +168,6 @@ public class PermissionService {
         boolean isWriteOrModify = toolInstance != null && toolInstance.getAccessLevel() == ToolAccessLevel.WRITE;
         boolean isSensitiveTool = toolInstance != null && toolInstance.getAccessLevel() == ToolAccessLevel.SENSITIVE;
         boolean isExecuteCommand = ToolNames.EXECUTE_COMMAND.equalsIgnoreCase(toolName);
-
-        boolean pathSandboxEnabled = contractProperty == null || contractProperty.isPathSandboxEnabled();
 
         if (pathSandboxEnabled) {
             List<String> pathsToCheck = new ArrayList<>();
@@ -215,7 +217,7 @@ public class PermissionService {
         }
 
         // 层级 5.5: 已读文件白名单强化（read_file 读过且内容哈希仍与磁盘一致的文件，其 Write/Modify 直接 ALLOW 放行）。
-        // 仅授给写级工具：敏感级（删除/命令）即使先读过也必须走完整审批链，防止只读模式下"先读后删"被静默放行。
+        // 仅授给写级工具：敏感级（删除/命令）即使先读过也必须走完整审批链，防止严格审批模式下"先读后删"被静默放行。
         // 刻意置于规则层（层级 5）之后评估：用户显式配置的 DENY/ASK 规则必须优先于此白名单生效，
         // 防止"先 read_file 再修改"的组合绕过用户明确表达的拒绝意图（历史上先于此层评估存在绕过隐患）
         if (isWriteOrModify && !isSensitiveTool && StringUtils.hasText(pathVal)) {
@@ -240,7 +242,7 @@ public class PermissionService {
         }
 
         // 层级 6: 矩阵四档权限兜底决策 (只产 ALLOW 或 ASK，不产 DENY)
-        // permissionMode 已字符串化：宿主侧按需解析为枚举（null 会安全兜底为 READ_ONLY）
+        // permissionMode 已字符串化：宿主侧按需解析为枚举（null 会安全兜底为 STRICT_APPROVAL）
         PermissionMode mode = PermissionMode.fromName(context != null ? context.getPermissionMode() : null);
         String category = getToolCategory(toolInstance);
 
@@ -254,12 +256,12 @@ public class PermissionService {
             return ToolPermissionVerdict.allow();
         }
 
-        if (mode == PermissionMode.SMART_APPROVAL && "filewrite".equalsIgnoreCase(category)) {
-            log.debug("权限裁决: ALLOW [矩阵兜底-智能审批下的文件写入直接放行]");
+        if (mode == PermissionMode.RELAXED_APPROVAL && "filewrite".equalsIgnoreCase(category)) {
+            log.debug("权限裁决: ALLOW [矩阵兜底-宽松审批下的文件写入直接放行]");
             return ToolPermissionVerdict.allow();
         }
 
-        // 只读模式下的写与命令，以及智能审批下的终端命令，均进入人在回路 Ask
+        // 严格审批模式下的写与命令，以及宽松审批下的终端命令，均进入人在回路 Ask
         log.info("权限裁决: ASK [需人在回路二次授权] - toolName={}, mode={}", toolName, mode);
         return ToolPermissionVerdict.ask();
     }
@@ -308,7 +310,7 @@ public class PermissionService {
         if (level == ToolAccessLevel.WRITE) {
             return "filewrite";
         }
-        // 敏感级工具与未知工具一样按命令类治理：智能审批不放行，进入人工审批
+        // 敏感级工具与未知工具一样按命令类治理：宽松审批不放行，进入人工审批
         return "command";
     }
 

@@ -106,14 +106,14 @@ public class EnvironmentContributor implements SystemPromptContributor {
      */
     private String describePermissionMode(String mode) {
         if (mode == null) {
-            return "未知（默认只读保护）";
+            return "未知（默认严格审批保护）";
         }
         PermissionMode permissionMode = PermissionMode.fromName(mode);
         return switch (permissionMode) {
-            case READ_ONLY -> """
-                    【只读模式】你具有只读查看权限，可以自由读取文件或调用 invoke_subagent 派发子智能体（均直接放行）。但任何尝试修改文件（如 write_file、edit_file 等）或在终端执行命令的动作都将被安全拦截并挂起，进入人在回路确认（ASK）流程，需由开发者批准方可真正执行。请你在可能触发 ASK 前预先向开发者简要说明你需要执行的改动或命令以期获得授权。""";
-            case SMART_APPROVAL -> """
-                    【智能审批模式】你拥有读写代码文件的完整权限（所有读写文件操作直接放行），以及运行常用安全只读终端命令（如 git status, pwd 等）的特权。但任何存在修改副作用或未授权的终端命令动作（如 execute_command 运行其他命令）都将被安全拦截并挂起，进入人在回路确认（ASK）流程，需由开发者批准后方可执行。""";
+            case STRICT_APPROVAL -> """
+                    【严格审批模式】仅开放只读工具直接执行，你可以自由读取文件或调用 invoke_subagent 派发子智能体（均直接放行）。但任何尝试修改文件（如 write_file、edit_file 等）或在终端执行命令的动作都将被安全拦截并挂起，进入人在回路确认（ASK）流程，需由开发者批准方可真正执行。请你在可能触发 ASK 前预先向开发者简要说明你需要执行的改动或命令以期获得授权。""";
+            case RELAXED_APPROVAL -> """
+                    【宽松审批模式】你拥有读写代码文件的完整权限（所有读写文件操作直接放行），以及运行常用安全只读终端命令（如 git status, pwd 等）的特权。但任何存在修改副作用或未授权的终端命令动作（如 execute_command 运行其他命令）都将被安全拦截并挂起，进入人在回路确认（ASK）流程，需由开发者批准后方可执行。""";
             case ALL_ALLOW -> """
                     【全部放行模式】你拥有完全自动化运行的高级特权，读取、写入代码文件或执行终端命令等所有操作均直接放行，无需用户手动干预审批。""";
         };

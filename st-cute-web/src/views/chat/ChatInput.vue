@@ -165,8 +165,8 @@
               </template>
               <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: #e3e3e7; max-width: 260px;">
                 <div style="font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 6px; padding-bottom: 4px;">{{ t('sider.permissionMode') }}:</div>
-                <div><strong>{{ t('sider.modeReadOnly') }}: </strong>{{ t('sider.modeReadOnlyTooltip') }}</div>
-                <div style="margin-top: 4px;"><strong>{{ t('sider.modeSmart') }}: </strong>{{ t('sider.modeSmartTooltip') }}</div>
+                <div><strong>{{ t('sider.modeStrictApproval') }}: </strong>{{ t('sider.modeStrictApprovalTooltip') }}</div>
+                <div style="margin-top: 4px;"><strong>{{ t('sider.modeRelaxedApproval') }}: </strong>{{ t('sider.modeRelaxedApprovalTooltip') }}</div>
                 <div style="margin-top: 4px;"><strong>{{ t('sider.modeAllAllow') }}: </strong>{{ t('sider.modeAllAllowTooltip') }}</div>
               </div>
             </n-tooltip>

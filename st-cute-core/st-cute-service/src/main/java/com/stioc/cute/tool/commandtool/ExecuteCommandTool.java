@@ -88,7 +88,7 @@ public class ExecuteCommandTool implements CuteTool {
 
     @Override
     public ToolAccessLevel getAccessLevel() {
-        // 敏感级：执行终端命令为高危操作，智能审批模式同样需要人工确认
+        // 敏感级：执行终端命令为高危操作，宽松审批模式同样需要人工确认
         return ToolAccessLevel.SENSITIVE;
     }
 

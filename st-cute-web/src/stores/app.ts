@@ -69,7 +69,7 @@ export const useAppStore = defineStore('app', () => {
   const minimalSkillMode = ref(false)
 
   // 权限安全配置
-  const permissionMode = ref('READ_ONLY')
+  const permissionMode = ref('STRICT_APPROVAL')
 
   // 迭代进度
   const currentIteration = ref(0)
@@ -89,10 +89,18 @@ export const useAppStore = defineStore('app', () => {
 
   // 快捷选项列表
   const permissionModeOptions = computed(() => [
-    { label: t('sider.modeReadOnly'), value: 'READ_ONLY' },
-    { label: t('sider.modeSmart'), value: 'SMART_APPROVAL' },
+    { label: t('sider.modeStrictApproval'), value: 'STRICT_APPROVAL' },
+    { label: t('sider.modeRelaxedApproval'), value: 'RELAXED_APPROVAL' },
     { label: t('sider.modeAllAllow'), value: 'ALL_ALLOW' }
   ])
+
+  // 应用权限模式（统一收口点）：后端返回值若匹配不到任何选项（如 DB 存量旧值 READ_ONLY / SMART_APPROVAL），
+  // 回退选中第一档（严格审批），保证下拉框选中值恒与选项列表精确匹配、不出现原始串显示
+  const applyPermissionMode = (val: string) => {
+    permissionMode.value = permissionModeOptions.value.some(option => option.value === val)
+      ? val
+      : permissionModeOptions.value[0].value
+  }
 
   // 改变权限安全模式
   const handlePermissionModeChange = (val: string) => {
@@ -293,6 +301,7 @@ export const useAppStore = defineStore('app', () => {
     currentViewToolFallback,
     
     permissionModeOptions,
+    applyPermissionMode,
     handlePermissionModeChange,
     showRawLog,
     showThoughtDrawer,

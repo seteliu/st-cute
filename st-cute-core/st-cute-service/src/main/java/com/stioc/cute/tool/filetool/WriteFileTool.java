@@ -82,7 +82,7 @@ public class WriteFileTool extends AbstractFileTool {
 
     @Override
     public ToolAccessLevel getAccessLevel() {
-        // 写级：整文件覆写，随文件写类工具治理（智能审批放行）
+        // 写级：整文件覆写，随文件写类工具治理（宽松审批放行）
         return ToolAccessLevel.WRITE;
     }
 

@@ -217,7 +217,7 @@ class LoopCancellationTest {
     }
 
     /**
-     * 智能审批豁免的工具（isApprovalExempt）不进入权限评估，直接执行
+     * 宽松审批豁免的工具（isApprovalExempt）不进入权限评估，直接执行
      */
     @Test
     void bypassesGuardForApprovalExemptTool() throws IOException {

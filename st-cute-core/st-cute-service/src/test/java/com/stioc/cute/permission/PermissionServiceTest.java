@@ -67,6 +67,17 @@ class PermissionServiceTest {
         }
     }
 
+    /**
+     * 当前平台是否为 Windows。
+     * <p>
+     * 越界路径类用例必须按平台选取「真实绝对路径」：盘符形态（如 {@code Z:/x}）在 Linux 上
+     * 会被 {@code Paths.get} 判为相对路径，进而被沙箱解析进项目根内，令用例静默失去越界语义。
+     * </p>
+     */
+    private static boolean isWindows() {
+        return System.getProperty("os.name").toLowerCase().contains("win");
+    }
+
     private static void injectDependencies(PermissionService service, ProjectService ps, ContractProperty cp) {
         try {
             Field psField = PermissionService.class.getDeclaredField("projectService");
@@ -94,7 +105,7 @@ class PermissionServiceTest {
         injectDependencies(permissionService, projectService, contractProperty);
 
         agentContext = new AgentContext(777L, null, null);
-        agentContext.setPermissionMode(PermissionMode.SMART_APPROVAL.name());
+        agentContext.setPermissionMode(PermissionMode.RELAXED_APPROVAL.name());
 
         executeCommandTool = new CuteTool() {
             @Override
@@ -150,8 +161,8 @@ class PermissionServiceTest {
 
             assertNotNull(verdict);
             assertTrue(verdict.isDeny(), "命令 [" + command + "] 应被硬拦截判定为 DENY");
-            assertEquals(ToolPermissionDecision.DENY, verdict.decision());
-            assertNotNull(verdict.reason());
+            assertEquals(ToolPermissionDecision.DENY, verdict.getDecision());
+            assertNotNull(verdict.getReason());
         }
 
         @Test
@@ -185,7 +196,7 @@ class PermissionServiceTest {
 
             assertNotNull(verdict);
             assertTrue(verdict.isDeny());
-            assertTrue(verdict.reason().contains("破坏性删除目标") || verdict.reason().contains("系统路径"));
+            assertTrue(verdict.getReason().contains("破坏性删除目标") || verdict.getReason().contains("系统路径"));
         }
     }
 
@@ -207,15 +218,42 @@ class PermissionServiceTest {
         @Test
         @DisplayName("安全命令若携带沙箱外越界 cwd，快速放行被阻断并判定为 DENY")
         void safeCommandWithOutsideCwdDenied() {
+            // 越界 cwd 必须是「当前平台的绝对路径且落在沙箱三白名单（项目根 / 临时目录 / 用户级配置目录）之外」。
+            // 不可写死 "Z:/..." 这类 Windows 盘符路径：Linux 上 Paths.get 会判定为非绝对路径，
+            // 被测试沙箱按相对路径解析进项目根内部，用例静默退化为「沙箱内放行」而在 CI 假红
+            String outsideCwd = isWindows() ? "C:/Windows/System32" : "/etc";
+            assertTrue(Paths.get(outsideCwd).isAbsolute(), "越界用例必须选用当前平台的绝对路径");
+
             // 试图以系统敏感目录作为 cwd 执行 ls
             ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
                     executeCommandTool,
-                    Map.of("command", "ls", "cwd", "Z:/OutsideServerFolder"),
+                    Map.of("command", "ls", "cwd", outsideCwd),
                     agentContext
             );
 
             assertTrue(verdict.isDeny());
-            assertTrue(verdict.reason().contains("cwd"));
+            assertTrue(verdict.getReason().contains("cwd"));
+        }
+
+        @Test
+        @DisplayName("路径沙箱关闭时，安全命令携带越界 cwd 不再被层级 2 前置防线拦截（开关放行语义）")
+        void safeCommandWithOutsideCwdAllowedWhenSandboxDisabled() {
+            // 与上例同一越界口径：当前平台的绝对路径且落在沙箱三白名单之外
+            String outsideCwd = isWindows() ? "C:/Windows/System32" : "/etc";
+            assertTrue(Paths.get(outsideCwd).isAbsolute(), "越界用例必须选用当前平台的绝对路径");
+
+            // 关闭路径沙箱保护后重注入依赖（cwd 出项目的拦截仅在开启沙箱保护后才生效）
+            ContractProperty sandboxOff = new ContractProperty();
+            sandboxOff.setPathSandboxEnabled(false);
+            injectDependencies(permissionService, new SandboxProjectService(tempDir), sandboxOff);
+
+            ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
+                    executeCommandTool,
+                    Map.of("command", "ls", "cwd", outsideCwd),
+                    agentContext
+            );
+
+            assertTrue(verdict.isAllow(), "沙箱关闭时安全命令不应因越界 cwd 被拦截");
         }
     }
 
@@ -224,9 +262,9 @@ class PermissionServiceTest {
     class PermissionModeTests {
 
         @Test
-        @DisplayName("READ_ONLY 只读模式下敏感命令触发 ASK 申请")
-        void readOnlyModeAsksOnCommand() {
-            agentContext.setPermissionMode(PermissionMode.READ_ONLY.name());
+        @DisplayName("STRICT_APPROVAL 严格审批模式下敏感命令触发 ASK 申请")
+        void strictApprovalModeAsksOnCommand() {
+            agentContext.setPermissionMode(PermissionMode.STRICT_APPROVAL.name());
 
             ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
                     executeCommandTool, Map.of("command", "mvn compile"), agentContext
@@ -300,7 +338,7 @@ class PermissionServiceTest {
         @Test
         @DisplayName("手工编辑权限文件后，下一次裁决自动重读生效（无需任何刷新调用）")
         void manualEditIsPickedUpAutomatically() throws Exception {
-            // 首次：无配置 → 智能审批下命令走 ASK
+            // 首次：无配置 → 宽松审批下命令走 ASK
             assertTrue(permissionService.evaluateVerdict(
                     executeCommandTool, Map.of("command", "mvn compile"), agentContext).isAsk());
 
@@ -317,7 +355,7 @@ class PermissionServiceTest {
         @Test
         @DisplayName("「总是放行」写盘后当次裁决立即可见（不依赖 mtime 变化）")
         void writtenRuleIsImmediatelyVisible() {
-            // 起始无本地规则：智能审批下命令走 ASK
+            // 起始无本地规则：宽松审批下命令走 ASK
             assertTrue(permissionService.evaluateVerdict(
                     executeCommandTool, Map.of("command", "mvn compile"), agentContext).isAsk());
 
