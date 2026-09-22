@@ -27,7 +27,7 @@ class FileEditMatcherTest {
             String content = "public void hello() {\n    System.out.println(\"hello\");\n}\n";
             String oldContent = "System.out.println(\"hello\");";
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, oldContent, oldContent, oldContent,
+                    content, oldContent, oldContent,
                     "System.out.println(\"world\");", content, "文件 [Test.java]", false
             );
 
@@ -43,7 +43,7 @@ class FileEditMatcherTest {
             String content = "int a = 1;\nint a = 1;\n";
             String oldContent = "int a = 1;";
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, oldContent, oldContent, oldContent,
+                    content, oldContent, oldContent,
                     "int a = 2;", content, "文件 [Test.java]", false
             );
 
@@ -61,7 +61,7 @@ class FileEditMatcherTest {
             String altVariantOld = "line1\r\nline2";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, normalizedOld, normalizedOld, altVariantOld,
+                    content, normalizedOld, altVariantOld,
                     "newLines", content, "文件 [Test.java]", false
             );
 
@@ -79,7 +79,7 @@ class FileEditMatcherTest {
             String altVariantOld = "dup\r\n";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, normalizedOld, normalizedOld, altVariantOld,
+                    content, normalizedOld, altVariantOld,
                     "new", content, "文件 [Test.java]", false
             );
 
@@ -96,7 +96,7 @@ class FileEditMatcherTest {
             String oldContent = "class App {\n  int value = 42;\n}";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, oldContent, oldContent, oldContent,
+                    content, oldContent, oldContent,
                     "class App {\n    int value = 100;\n}", content, "文件 [Test.java]", false
             );
 
@@ -114,7 +114,7 @@ class FileEditMatcherTest {
             String oldContent = "int a = 1;  int b = 2;";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, oldContent, oldContent, oldContent,
+                    content, oldContent, oldContent,
                     "int x = 2;", content, "文件 [Test.java]", false
             );
 
@@ -132,7 +132,7 @@ class FileEditMatcherTest {
             String oldContent = "foo();\n";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, oldContent, oldContent, oldContent,
+                    content, oldContent, oldContent,
                     "baz();\n", content, "文件 [app.py]", false
             );
 
@@ -153,7 +153,7 @@ class FileEditMatcherTest {
             String oldContent = "\tfoo();\n";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, oldContent, oldContent, oldContent,
+                    content, oldContent, oldContent,
                     "baz();\n", content, "文件 [app.py]", false
             );
 
@@ -170,7 +170,7 @@ class FileEditMatcherTest {
             String newContent = "final int MAX_COUNT = 100;";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, oldContent, oldContent, oldContent,
+                    content, oldContent, oldContent,
                     newContent, content, "文件 [App.java]", false
             );
 
@@ -179,20 +179,19 @@ class FileEditMatcherTest {
         }
 
         @Test
-        @DisplayName("阶段4：行号范围内未找到匹配，报错附带实际切片与期望内容")
+        @DisplayName("阶段4：行号范围内未找到匹配，报错附带窗口实际内容切片")
         void notFoundInRangeEchoesActualContent() {
             String rangeContent = "int a = 10;\nint b = 20;\n";
             String oldContent = "int c = 30;";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    rangeContent, oldContent, oldContent, oldContent,
+                    rangeContent, oldContent, oldContent,
                     "int c = 40;", "whole file", "指定的行号范围 [1, 2]", true
             );
 
             assertFalse(result.isSuccess());
             assertTrue(result.errorMessage().contains("指定的行号范围 [1, 2]"));
             assertTrue(result.errorMessage().contains(rangeContent));
-            assertTrue(result.errorMessage().contains(oldContent));
         }
 
         @Test
@@ -202,7 +201,7 @@ class FileEditMatcherTest {
             String oldContent = "foo bar";
 
             MatchLocateResult result = FileEditMatcher.locateMatch(
-                    content, oldContent, oldContent, oldContent,
+                    content, oldContent, oldContent,
                     "replacement", content, "文件 [App.java]", false
             );
 
