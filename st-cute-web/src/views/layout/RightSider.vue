@@ -7,6 +7,7 @@
     :show-trigger="false"
     bordered
     class="right-sider"
+    content-style="display: flex; flex-direction: column; height: 100%; overflow: hidden;"
   >
     <n-tabs type="line" justify-content="space-evenly" class="inspector-tabs">
       <n-tab-pane name="overview">
@@ -19,8 +20,8 @@
       <n-tab-pane name="advanced" :tab="t('inspector.advanced')">
         <div style="display: flex; flex-direction: column; height: 100%;">
           <!-- 统一重载控制头部 -->
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 4px 8px 4px; border-bottom: 1px dashed #2d2d30; margin-bottom: 12px;">
-            <span style="font-size: 0.78rem; color: var(--text-color-secondary); font-weight: bold;">{{ t('inspector.assetsTitle') }}</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px dashed var(--border-color); margin-bottom: 4px;">
+            <span style="font-size: 0.78rem; color: var(--text-color-bright); font-weight: bold;">{{ t('inspector.assetsTitle') }}</span>
             <n-button
               size="tiny"
               type="primary"
@@ -260,11 +261,48 @@ onUnmounted(() => {
 .custom-resize-handle.active-resizing .resize-line {
   width: 4px;
   background-color: var(--primary-color) !important;
-  box-shadow: 0 0 8px rgba(129, 182, 229, 0.6);
+  box-shadow: 0 0 8px var(--border-color-active);
+}
+
+:deep(.n-layout-sider-scroll-container) {
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+:deep(.inspector-tabs) {
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.inspector-tabs > .n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:deep(.inspector-tabs .n-tab-pane) {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  overflow: hidden;
+}
+
+:deep(.inspector-tabs > .n-tabs-nav) {
+  height: 50px;
+  box-sizing: border-box;
+  background-color: var(--bg-color-card);
+  flex-shrink: 0;
 }
 
 :deep(.inspector-tabs > .n-tabs-nav .n-tabs-nav-scroll-content) {
   width: 100%;
+  height: 50px;
+  box-sizing: border-box;
   display: flex;
 }
 
@@ -272,10 +310,38 @@ onUnmounted(() => {
   flex: 1 1 0%;
   display: flex;
   justify-content: center;
+  height: 100%;
 }
 
 :deep(.inspector-tabs > .n-tabs-nav .n-tabs-tab) {
   width: 100%;
+  height: 100%;
   justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+}
+
+/* 高级选项二级 Tab：固定二级 Tab 栏，容器由子页面内部各自滚动 */
+:deep(.advanced-sub-tabs) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.advanced-sub-tabs > .n-tabs-nav) {
+  flex-shrink: 0;
+}
+
+:deep(.advanced-sub-tabs > .n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:deep(.advanced-sub-tabs .n-tab-pane) {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0;
 }
 </style>

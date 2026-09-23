@@ -202,9 +202,9 @@ defineExpose({
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: rgba(24, 160, 88, 0.08);
+  background: var(--diff-add-bg);
   backdrop-filter: blur(8px);
-  border: 1px dashed rgba(24, 160, 88, 0.3);
+  border: 1px dashed var(--success-green);
   border-radius: 8px;
   font-size: 13px;
   color: var(--n-text-color);

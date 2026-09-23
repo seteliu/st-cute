@@ -1,12 +1,5 @@
 import request from '@/utils/request'
-
-export interface FileUploadVo {
-  path: string
-  name: string
-  size: number
-  mimeType: string
-  compressed: boolean
-}
+import { FileUploadVo } from '@/types'
 
 /**
  * 上传文件到指定会话
@@ -28,6 +21,7 @@ export const uploadFile = async (cid: number, file: File, compress = true): Prom
  * 获取文件在线预览或下载 URL
  * <p>
  * 注意：后端对该接口有沙箱管控，path 必须位于用户目录 ~/.st-cute/files 内，越权一律 404。
+ * </p>
  */
 export const getFileViewUrl = (path: string, mode: 'raw' | 'thumbnail' = 'raw', download = false): string => {
   if (!path) return ''

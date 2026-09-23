@@ -1,7 +1,7 @@
 <template>
   <div class="pane-content">
     <div style="margin-bottom: 12px;">
-      <h4 style="margin: 0; border: none; padding: 0; font-size: 0.85rem; color: #a0a0a5;">{{ t('inspector.customRules') }}</h4>
+      <h4 style="margin: 0; border: none; padding: 0; font-size: 0.85rem; color: var(--text-color-bright); font-weight: bold;">{{ t('inspector.customRules') }}</h4>
     </div>
 
     <!-- 空白状态 -->
@@ -45,9 +45,8 @@
     <n-modal
       v-model:show="showModal"
       preset="card"
-      style="width: 90%; max-width: 800px; background: #18181c; border: 1px solid #2d2d30;"
+      style="width: 90%; max-width: 800px; border: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
       :title="selectedRule?.name + ' - AGENTS.md ' + t('chat.detail')"
-      bordered
     >
       <n-scrollbar style="max-height: 60vh;" trigger="none">
         <div style="padding: 4px 16px 16px 4px;">
@@ -90,9 +89,16 @@ const formatSize = (bytes: number) => {
 </script>
 
 <style scoped>
+.pane-content {
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px 16px;
+}
+
 .rule-card {
-  background: #101014;
-  border: 1px solid #2d2d30;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 12px;
   cursor: pointer;
@@ -101,9 +107,9 @@ const formatSize = (bytes: number) => {
 
 .rule-card:hover {
   border-color: var(--primary-color);
-  background: #141418;
+  background: var(--bg-color-inset);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-card);
 }
 
 .rule-header {
@@ -114,7 +120,7 @@ const formatSize = (bytes: number) => {
 }
 
 .rule-name {
-  color: #ffffff;
+  color: var(--text-color-bright)fff;
   font-size: 0.9rem;
   flex: 1;
   min-width: 0;
@@ -128,8 +134,8 @@ const formatSize = (bytes: number) => {
 }
 
 .rule-card:hover .view-btn {
-  background-color: rgba(129, 182, 229, 0.16) !important;
-  color: #81b6e5 !important;
+  background-color: var(--primary-bg-weak) !important;
+  color: var(--primary-color) !important;
 }
 
 .rule-details {
@@ -145,13 +151,13 @@ const formatSize = (bytes: number) => {
 }
 
 .detail-item .label {
-  color: #707075;
+  color: var(--text-color-muted);
   width: 65px;
   flex-shrink: 0;
 }
 
 .detail-item .val {
-  color: #c2c2c9;
+  color: var(--text-color);
   word-break: break-all;
 }
 

@@ -71,19 +71,44 @@ export interface StagedFile {
   mimeType?: string
 }
 
-export interface Project {
-  id: number
-  name: string
-  path: string
-  createTime?: string
-  updateTime?: string
-  expanded?: boolean
-  active?: boolean
-}
-
 export interface LimitMessageDto {
   messages: Message[]
   truncated: boolean
+}
+
+/** 工具审批决策请求体（与后端 ApproveToolDto 对齐） */
+export interface ApproveToolPayload {
+  /** 待审批的工具调用 ID */
+  id: string
+  /** 决策：允许 / 拒绝本次 / 已被用户在别处拒绝 */
+  decision: 'ALLOW' | 'DENY' | 'REJECTED'
+  /** 本次允许且记住规则（后续同类调用免审批） */
+  alwaysAllow?: boolean
+  toolName?: string
+  contentPattern?: string
+  customArgOverride?: string
+}
+
+/** 活跃系统进程信息（与后端 ActiveProcessVo 对齐） */
+export interface ActiveProcessInfo {
+  cid: number
+  sessionTitle: string
+  toolCallId: string
+  pid: number
+  command: string
+  cwd: string
+  startTime: number
+  runningTimeMs: number
+}
+
+/** 活跃大模型调用信息（与后端 ActiveLlmCallVo 对齐） */
+export interface ActiveLlmCallInfo {
+  cid: number
+  sessionTitle: string
+  llmCallId: string
+  model: string
+  startTime: number
+  durationTimeMs: number
 }
 
 /** 流式切片语义类型（与后端 StreamChunkType 对齐）：null/缺省=常规增量内容，CLEAR=清空重放 */

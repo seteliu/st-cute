@@ -58,9 +58,9 @@
           @update:show="(show: boolean) => activeDropdownId = show ? tc.id : null"
           @select="(key: string | number) => handleAlwaysAllowSelect(tc, String(key))"
         >
-          <n-button size="tiny" type="warning" secondary>{{ t('chat.alwaysAllow') }} ▾</n-button>
+          <n-button size="tiny" type="primary" secondary>{{ t('chat.alwaysAllow') }} ▾</n-button>
         </n-dropdown>
-        <n-button size="tiny" type="error" secondary @click="approveTool(tc.toolId, 'DENY', tc.toolName)">{{ t('chat.deny') }}</n-button>
+        <n-button size="tiny" type="error" secondary class="approval-deny-btn danger-secondary-btn" @click="approveTool(tc.toolId, 'DENY', tc.toolName)">{{ t('chat.deny') }}</n-button>
       </div>
 
       <!-- 7. 绑定的 Hook 状态渲染 -->
@@ -324,15 +324,15 @@ const renderDropdownLabel = (option: any) => {
         }
       },
       [
-        h('span', { style: { color: 'rgba(255, 255, 255, 0.8)', marginRight: '4px' } }, prefix),
+        h('span', { style: { color: 'var(--text-color-bright)', marginRight: '4px' } }, prefix),
         h('code', {
           style: {
             fontFamily: 'monospace',
             backgroundColor: 'rgba(0, 0, 0, 0.25)',
-            color: '#e3e3e7',
+            color: 'var(--text-color-bright)',
             padding: '2px 6px',
             borderRadius: '4px',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
+            border: '1px solid var(--overlay-veil)',
             fontSize: '0.75rem',
             display: 'inline-block',
             marginTop: '2px',
@@ -357,7 +357,7 @@ const renderDropdownLabel = (option: any) => {
         lineHeight: '1.45',
         fontSize: '0.78rem',
         padding: '4px 0',
-        color: 'rgba(255, 255, 255, 0.8)'
+        color: 'var(--text-color-bright)'
       }
     },
     option.label
@@ -387,8 +387,8 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 
 <style scoped>
 .tool-calls-container {
-  background-color: #16161a;
-  border: 1px solid #2d2d30;
+  background-color: var(--bg-color-elevated);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 8px 12px;
   margin-top: 0;
@@ -410,14 +410,15 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 /* 末批工具等待子智能体返回的三点指示：位于卡片容器内部底部、各工具行之下，
    表示"这批工具尚未收口"。高度恒定且仅含 transform/opacity 动画，
    不会扰动虚拟列表 ResizeObserver 的高度测量。
-   左内边距为 0：卡片容器自身的 padding-left（12px）已提供缩进，
-   三点恰好落在工具行状态圆点的同一列上；此前额外的 20px 会让三点看起来"空了一格"。
+   左内边距精准对齐上方工具行：上方 .tool-call-row 拥有 padding-left: 10px，
+   工具行状态小圆点直径为 8px（中心在 4px），跳动指示器首个小圆点直径为 7px（中心在 3.5px），
+   左内边距设为 10.5px（10px 行边距 + 0.5px 中心差），使两者在垂直线上像素级中心对齐。
    下内边距 4px：三点上方已有父级 gap（8px）加自身 padding-top（2px）共 10px 间距，
    若下方只靠容器 padding-bottom（8px）会显得贴边，补 4px 使上下留白接近 */
 .tool-waiting-dots {
   display: flex;
   align-items: center;
-  padding-left: 0;
+  padding-left: 10.5px;
   padding-top: 2px;
   padding-bottom: 4px;
   pointer-events: none;
@@ -437,29 +438,31 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 }
 
 .tool-status-dot.success {
-  background-color: var(--primary-color);
+  background-color: var(--status-success);
 }
 
 .tool-status-dot.running {
-  background-color: var(--status-warning);
+  background-color: var(--accent-color);
+  box-shadow: 0 0 6px var(--accent-color);
   animation: pulse 1.5s infinite ease-in-out;
 }
 
 .tool-status-dot.waiting-approval {
-  background-color: var(--status-warning);
+  background-color: var(--primary-color);
+  box-shadow: 0 0 6px var(--border-color-active);
 }
 
 .tool-status-dot.rejected {
-  background-color: #d03050;
+  background-color: var(--status-error);
 }
 
 .tool-status-dot.canceled {
-  background-color: var(--text-color-secondary);
+  background-color: var(--text-color-muted);
 }
 
 .tool-status-dot.failed {
   background-color: var(--status-error);
-  box-shadow: 0 0 6px rgba(208, 48, 80, 0.5);
+  box-shadow: 0 0 6px var(--status-error);
 }
 
 @keyframes pulse {
@@ -471,7 +474,7 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 .tool-name {
   font-family: monospace;
   font-weight: bold;
-  color: #e3e3e7;
+  color: var(--text-color-bright);
   font-size: 0.85rem;
   /* 工具名是行内主标识（左侧固定块），禁止换行且不参与 flex 收缩 */
   white-space: nowrap;
@@ -495,7 +498,7 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   /* 覆盖全局遗留的 max-width: 250px，否则会把弹性区卡死 */
   max-width: none;
   min-width: 0;
-  color: var(--text-color-secondary);
+  color: var(--text-color);
   font-family: monospace;
   font-size: 0.75rem;
   overflow: hidden;
@@ -526,15 +529,15 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 }
 
 .status-label.waiting-approval {
-  color: var(--status-warning);
+  color: var(--accent-color);
 }
 
 .status-label.rejected {
-  color: #d03050;
+  color: var(--status-error);
 }
 
 .status-label.canceled {
-  color: var(--text-color-secondary);
+  color: var(--text-color-muted);
 }
 
 /* 出参：吃掉入参之外的全部剩余空间（入参短则自动变宽），可压缩出省略号 */
@@ -543,7 +546,7 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   /* 覆盖全局遗留的 max-width，改由弹性区动态决定可用宽度 */
   max-width: none;
   min-width: 0;
-  color: #a0a0a5;
+  color: var(--text-color-muted);
   font-size: 0.75rem;
   margin-left: 0;
   overflow: hidden;
@@ -564,6 +567,19 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   gap: 8px;
 }
 
+/* 审批拒绝按钮：采用提亮珊瑚红前景与适度弱红底，既明亮醒目又保持克制次级体验 */
+.approval-deny-btn {
+  color: var(--status-error-hover) !important;
+  background-color: var(--status-error-bg-weak) !important;
+  border: 1px solid var(--status-error-soft) !important;
+  font-weight: 500;
+}
+
+.approval-deny-btn:hover {
+  background-color: var(--status-error-soft) !important;
+  color: var(--text-color-bright) !important;
+}
+
 /* Hook 切面渲染样式 */
 .tool-hooks-container {
   display: flex;
@@ -571,9 +587,9 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   gap: 4px;
   margin-left: 20px;
   padding: 4px 8px;
-  background-color: #101014;
+  background-color: var(--bg-color);
   border-radius: 4px;
-  border: 1px dashed #2d2d30;
+  border: 1px dashed var(--border-color);
   width: fit-content;
 }
 
@@ -592,38 +608,38 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 }
 
 .tool-hook-dot.running {
-  background-color: var(--status-warning);
+  background-color: var(--accent-color);
 }
 
 .tool-hook-dot.success {
-  background-color: var(--primary-color);
+  background-color: var(--status-success);
 }
 
 .tool-hook-dot.failed {
-  background-color: #d03050;
+  background-color: var(--status-error);
 }
 
 .tool-hook-label {
-  color: var(--text-color-secondary);
+  color: var(--text-color-muted);
 }
 
 .tool-hook-status.running {
-  color: var(--status-warning);
+  color: var(--accent-color);
   font-weight: bold;
 }
 
 .tool-hook-status.success {
-  color: var(--primary-color);
+  color: var(--status-success);
   font-weight: bold;
 }
 
 .tool-hook-status.failed {
-  color: #d03050;
+  color: var(--status-error);
   font-weight: bold;
 }
 
 .tool-hook-error {
-  color: #a0a0a5;
+  color: var(--text-color-muted);
   font-style: italic;
   max-width: 300px;
   overflow: hidden;
@@ -644,7 +660,7 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 .n-dropdown-menu {
   background-color: rgba(22, 22, 26, 0.94) !important;
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--overlay-veil-strong) !important;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6) !important;
   padding: 6px !important;
   border-radius: 10px !important;
@@ -673,22 +689,22 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 
 /* 选项悬浮交互高亮 */
 .n-dropdown-menu .n-dropdown-option:hover {
-  background-color: rgba(240, 160, 32, 0.12) !important;
+  background-color: var(--primary-bg-weak) !important;
 }
 
 .n-dropdown-menu .n-dropdown-option-content {
-  color: #c2c2c9 !important;
+  color: var(--text-color) !important;
   transition: color 0.15s ease;
 }
 
 .n-dropdown-menu .n-dropdown-option:hover .n-dropdown-option-content {
-  color: #f0a020 !important;
+  color: var(--primary-color) !important;
 }
 
 /* 选项中的代码块在选项悬浮时的联动变色效果：使用极深背景以确保文字高可读性 */
 .n-dropdown-menu .n-dropdown-option:hover code {
-  color: #f0a020 !important;
-  border-color: rgba(240, 160, 32, 0.35) !important;
+  color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
   background-color: rgba(0, 0, 0, 0.75) !important; /* 加深背景色 */
 }
 </style>

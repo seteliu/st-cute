@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { Message, Conversation, LimitMessageDto } from '@/types'
+import { Message, Conversation, LimitMessageDto, ApproveToolPayload, ActiveProcessInfo, ActiveLlmCallInfo } from '@/types'
 
 // silent=true 标识后台静默请求（断线重连强刷场景）：失败时拦截器不弹全局错误提示，由调用方兜底
 export const getConversations = async (silent = false): Promise<Conversation[]> => {
@@ -18,11 +18,11 @@ export const getConversationMessages = async (
   return request.get(url, { silent })
 }
 
-export const deleteConversationById = async (cid: number): Promise<any> => {
-  return request.delete(`/api/conversation/delete?id=${cid}`)
+export const deleteConversationById = async (id: number): Promise<void> => {
+  return request.delete(`/api/conversation/delete?id=${id}`)
 }
 
-export const batchDeleteConversationsApi = async (ids: number[]): Promise<any> => {
+export const batchDeleteConversationsApi = async (ids: number[]): Promise<void> => {
   return request.post('/api/conversation/batch-delete', ids)
 }
 
@@ -30,11 +30,11 @@ export const createConversationApi = async (conversation: Partial<Conversation>)
   return request.post('/api/conversation/create', conversation)
 }
 
-export const updateConversationProviderApi = async (cid: number, providerGroup: string, providerModelName: string): Promise<any> => {
+export const updateConversationProviderApi = async (cid: number, providerGroup: string, providerModelName: string): Promise<void> => {
   return request.post(`/api/conversation/update-provider?id=${cid}&providerGroup=${encodeURIComponent(providerGroup)}&providerModelName=${encodeURIComponent(providerModelName)}`)
 }
 
-export const clearConversationMessagesApi = async (cid: number): Promise<any> => {
+export const clearConversationMessagesApi = async (cid: number): Promise<void> => {
   return request.post(`/api/message/clear?cid=${cid}`)
 }
 
@@ -54,41 +54,20 @@ export const getMessageDetailApi = async (messageId: number): Promise<Message> =
   return request.get(`/api/message/detail?messageId=${messageId}`)
 }
 
-export const cancelConversationApi = async (cid: number): Promise<any> => {
+export const cancelConversationApi = async (cid: number): Promise<void> => {
   return request.post(`/api/conversation/cancel?id=${cid}`)
 }
 
-export const updateConversationConfigApi = async (cid: number, data: { permissionMode?: string }): Promise<any> => {
+export const updateConversationConfigApi = async (cid: number, data: { permissionMode?: string }): Promise<void> => {
   return request.post(`/api/conversation/config?id=${cid}`, data)
 }
 
-export const approveConversationPermissionApi = async (
-  cid: number,
-  data: {
-    id: string
-    decision: 'ALLOW' | 'DENY' | 'REJECTED'
-    alwaysAllow?: boolean
-    toolName?: string
-    contentPattern?: string
-    customArgOverride?: string
-  }
-): Promise<any> => {
+export const approveConversationPermissionApi = async (cid: number, data: ApproveToolPayload): Promise<void> => {
   return request.post(`/api/message/approve?cid=${cid}`, data)
 }
 
 export const renameConversationApi = async (cid: number, title: string): Promise<void> => {
   return request.post(`/api/conversation/rename?id=${cid}&title=${encodeURIComponent(title)}`)
-}
-
-export interface ActiveProcessInfo {
-  cid: number
-  sessionTitle: string
-  toolCallId: string
-  pid: number
-  command: string
-  cwd: string
-  startTime: number
-  runningTimeMs: number
 }
 
 export const getConversationProcessesApi = async (cid: number): Promise<ActiveProcessInfo[]> => {
@@ -103,15 +82,13 @@ export const killConversationProcessApi = async (cid: number, toolCallId?: strin
   return request.post(url)
 }
 
-export interface ActiveLlmCallInfo {
-  cid: number
-  sessionTitle: string
-  llmCallId: string
-  model: string
-  startTime: number
-  durationTimeMs: number
-}
-
 export const getConversationLlmCallsApi = async (cid: number): Promise<ActiveLlmCallInfo[]> => {
   return request.get(`/api/conversation/llm-calls?id=${cid}`)
+}
+
+/**
+ * 查询指定会话对大模型可见消息的累计缓存占比（小数制，4 位小数，如 0.8765）
+ */
+export const getConversationCacheRatioApi = async (cid: number): Promise<number> => {
+  return request.get(`/api/conversation/cache-ratio?id=${cid}`)
 }

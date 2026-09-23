@@ -1,17 +1,17 @@
 <template>
   <div class="pane-content">
     <h4>{{ t('overview.envTitle') }}</h4>
-    <div class="info-card" style="padding: 12px; margin-bottom: 16px; background: rgba(30, 30, 35, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);">
+    <div class="info-card" style="padding: 12px; margin-bottom: 16px; background: var(--overlay-bg-glassy); border: 1px solid var(--overlay-veil-strong); border-radius: 8px; box-shadow: var(--shadow-card);">
       <div style="display: flex; flex-direction: column; gap: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.currentProject') }}</span>
+          <span style="color: var(--text-color); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.currentProject') }}</span>
           <n-ellipsis style="min-width: 0; color: var(--text-color-bright); font-weight: bold; font-size: 0.85rem; text-align: right;">
             {{ currentProject ? currentProject.name : t('overview.unselected') }}
           </n-ellipsis>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--overlay-veil); padding-top: 8px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.physicalPath') }}</span>
+            <span style="color: var(--text-color); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.physicalPath') }}</span>
             <n-button
               v-if="currentProject?.path"
               quaternary
@@ -28,17 +28,13 @@
               </template>
             </n-button>
           </div>
-          <span style="word-break: break-all; font-family: monospace; font-size: 0.75rem; color: #a0a0a5; background: rgba(0,0,0,0.15); padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.03);">
+          <span style="word-break: break-all; font-family: monospace; font-size: 0.75rem; color: var(--text-color-muted); background: var(--overlay-veil); padding: 4px 6px; border-radius: 4px; border: 1px solid var(--overlay-veil);">
             {{ currentProject ? currentProject.path : t('inspector.none') }}
           </span>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.os') }}</span>
-          <span style="color: var(--text-color-bright); font-size: 0.85rem; white-space: nowrap;">Windows 11</span>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--overlay-veil); padding-top: 8px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.gitBranch') }}</span>
+            <span style="color: var(--text-color); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.gitBranch') }}</span>
             <n-button
               v-if="gitStore.selectedBranch?.branch"
               quaternary
@@ -55,12 +51,12 @@
               </template>
             </n-button>
           </div>
-          <span style="word-break: break-all; font-family: monospace; font-size: 0.75rem; color: #a0a0a5; background: rgba(0,0,0,0.15); padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.03);">
+          <span style="word-break: break-all; font-family: monospace; font-size: 0.75rem; color: var(--text-color-muted); background: var(--overlay-veil); padding: 4px 6px; border-radius: 4px; border: 1px solid var(--overlay-veil);">
             {{ gitStore.selectedBranch?.branch || t('inspector.none') }}
           </span>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.activeProcess') }}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--overlay-veil); padding-top: 8px;">
+          <span style="color: var(--text-color); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.activeProcess') }}</span>
           <n-button
             secondary
             strong
@@ -72,8 +68,8 @@
             {{ t('overview.viewDetails') }}
           </n-button>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
-          <span style="color: var(--text-color-secondary); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.activeNetwork') }}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--overlay-veil); padding-top: 8px;">
+          <span style="color: var(--text-color); font-size: 0.85rem; white-space: nowrap; flex-shrink: 0;">{{ t('overview.activeNetwork') }}</span>
           <n-button
             secondary
             strong
@@ -91,7 +87,7 @@
     <h4>{{ t('overview.subAgentsTitle') }}</h4>
     <div
       v-if="filteredSubAgents.length === 0"
-      style="color: #767680; font-style: italic; font-size: 13px; padding: 16px; background: rgba(30, 30, 35, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; text-align: center;"
+      style="color: var(--text-color-muted); font-style: italic; font-size: 13px; padding: 16px; background: var(--overlay-bg-glassy); border: 1px solid var(--overlay-veil-strong); border-radius: 8px; text-align: center;"
     >
       {{ t('overview.noSubAgents') }}
     </div>
@@ -100,7 +96,6 @@
       v-for="sub in filteredSubAgents"
       :key="sub.cid"
       :class="['subagent-card', sub.status?.toLowerCase()]"
-      style="cursor: pointer; margin-bottom: 12px; position: relative;"
       @click="agentStore.openSubAgentDrawer(Number(sub.cid))"
     >
       <div class="subagent-header" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -111,16 +106,21 @@
       </div>
       <div class="subagent-task">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <span style="color: #81b6e5; font-family: monospace; font-weight: bold;">[ID: {{ sub.cid }}]</span>
+          <span style="color: var(--accent-color); font-family: monospace; font-weight: bold;">[ID: {{ sub.cid }}]</span>
         </div>
 
-        <div style="font-size: 11px; margin-top: 4px; color: var(--text-color-secondary); display: flex; align-items: center; justify-content: space-between;">
+        <div style="font-size: 11px; margin-top: 4px; color: var(--text-color); display: flex; align-items: center; justify-content: space-between;">
           <token-metrics-tooltip
             :input-tokens="sub.inputTokens || 0"
             :output-tokens="sub.outputTokens || 0"
             :cached-tokens="sub.cachedTokens"
-            label-prefix="Tokens: "
-          />
+            :cid="sub.cid ? Number(sub.cid) : undefined"
+            :context-limit="contextLimit"
+          >
+            <template #default="{ total }">
+              上下文窗口: <strong style="color: var(--text-color-bright); font-weight: bold;">{{ formatTokenCount(total) }}</strong><template v-if="contextLimitText"> / {{ contextLimitText }} ({{ usagePercentage(total) }}%)</template>
+            </template>
+          </token-metrics-tooltip>
         </div>
       </div>
 
@@ -147,15 +147,14 @@
     <!-- 活动子进程详情控制弹窗 -->
     <n-modal
       v-model:show="showProcessModal"
-      preset="dialog"
+      preset="card"
       title="活动子进程看板"
-      style="width: 600px; background-color: #18181c; color: #fff;"
-      :show-icon="false"
+      style="width: 620px; max-width: 92vw; border: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
     >
-      <div style="margin-top: 16px;">
+      <div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <span style="font-size: 12px; color: #a0a0a5;">
-            共检测到 <strong style="color: #f6a23c;">{{ activeProcessesList.length }}</strong> 个正在后台同步运行的物理进程（包含并行子代理拉起的进程）
+          <span style="font-size: 12px; color: var(--text-color-muted);">
+            共检测到 <strong style="color: var(--accent-color);">{{ activeProcessesList.length }}</strong> 个正在后台同步运行的物理进程（包含并行子代理拉起的进程）
           </span>
           <n-button
             v-if="activeProcessesList.length > 0"
@@ -168,7 +167,7 @@
           </n-button>
         </div>
 
-        <div v-if="activeProcessesList.length === 0" style="padding: 24px; text-align: center; color: #767680; font-style: italic; background: rgba(0,0,0,0.15); border-radius: 6px;">
+        <div v-if="activeProcessesList.length === 0" style="padding: 24px; text-align: center; color: var(--text-color-faint); font-style: italic; background: var(--overlay-veil); border-radius: 6px;">
           暂无活动子进程，当智能体执行编译、运行测试等命令工具时在此展示。
         </div>
 
@@ -176,12 +175,12 @@
           <div
             v-for="proc in activeProcessesList"
             :key="proc.toolCallId"
-            style="padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; display: flex; flex-direction: column; gap: 6px;"
+            style="padding: 12px; background: var(--overlay-veil); border: 1px solid var(--border-color); border-radius: 6px; display: flex; flex-direction: column; gap: 6px;"
           >
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-weight: bold; font-family: monospace; color: #81b6e5;">PID: {{ proc.pid }}</span>
+              <span style="font-weight: bold; font-family: monospace; color: var(--accent-color);">PID: {{ proc.pid }}</span>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <n-tag size="mini" type="info" round :bordered="false">
+                <n-tag size="mini" round :bordered="false" style="color: var(--accent-color); background-color: var(--accent-bg-weak);">
                   {{ proc.sessionTitle }}
                 </n-tag>
                 <n-button
@@ -195,13 +194,13 @@
               </div>
             </div>
             
-            <div style="font-size: 11px; color: #a0a0a5; word-break: break-all; background: rgba(0,0,0,0.2); padding: 4px 6px; border-radius: 4px; font-family: monospace;">
+            <div style="font-size: 11px; color: var(--text-color-muted); word-break: break-all; background: var(--bg-color-code); padding: 4px 6px; border-radius: 4px; font-family: monospace;">
               {{ proc.command }}
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #767680;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-color-faint);">
               <span>工作目录: {{ proc.cwd }}</span>
-              <span>运行时间: {{ formatDuration(proc.runningTimeMs) }}</span>
+              <span>运行时间: <span style="color: var(--accent-color);">{{ formatDuration(proc.runningTimeMs) }}</span></span>
             </div>
           </div>
         </div>
@@ -211,19 +210,18 @@
     <!-- 活动大模型连接详情控制弹窗 -->
     <n-modal
       v-model:show="showLlmModal"
-      preset="dialog"
+      preset="card"
       title="活动 LLM 网络请求"
-      style="width: 550px; background-color: #18181c; color: #fff;"
-      :show-icon="false"
+      style="width: 580px; max-width: 92vw; border: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
     >
-      <div style="margin-top: 16px;">
+      <div>
         <div style="margin-bottom: 12px;">
-          <span style="font-size: 12px; color: #a0a0a5;">
-            共检测到 <strong style="color: #63e2b7;">{{ activeLlmCallsList.length }}</strong> 个正在进行的 LLM HTTP 网络请求
+          <span style="font-size: 12px; color: var(--text-color-muted);">
+            共检测到 <strong style="color: var(--accent-color);">{{ activeLlmCallsList.length }}</strong> 个正在进行的 LLM HTTP 网络请求
           </span>
         </div>
 
-        <div v-if="activeLlmCallsList.length === 0" style="padding: 24px; text-align: center; color: #767680; font-style: italic; background: rgba(0,0,0,0.15); border-radius: 6px;">
+        <div v-if="activeLlmCallsList.length === 0" style="padding: 24px; text-align: center; color: var(--text-color-faint); font-style: italic; background: var(--overlay-veil); border-radius: 6px;">
           暂无活动 LLM 请求，当智能体发起大模型调用或进行会话压缩/重命名时在此展示。
         </div>
 
@@ -231,20 +229,20 @@
           <div
             v-for="call in activeLlmCallsList"
             :key="call.llmCallId"
-            style="padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; display: flex; flex-direction: column; gap: 6px;"
+            style="padding: 12px; background: var(--overlay-veil); border: 1px solid var(--border-color); border-radius: 6px; display: flex; flex-direction: column; gap: 6px;"
           >
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-weight: bold; font-family: monospace; color: #63e2b7; font-size: 11px;">
+              <span style="font-weight: bold; font-family: monospace; color: var(--accent-color); font-size: 11px;">
                 ID: {{ call.llmCallId }}
               </span>
-              <n-tag size="mini" type="info" round :bordered="false">
+              <n-tag size="mini" round :bordered="false" style="color: var(--accent-color); background-color: var(--accent-bg-weak);">
                 {{ call.sessionTitle }}
               </n-tag>
             </div>
             
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-color-bright);">
-              <span>模型: <strong style="font-family: monospace; color: #f6a23c;">{{ call.model }}</strong></span>
-              <span style="color: #767680;">耗时: {{ formatDuration(call.durationTimeMs) }}</span>
+              <span>模型: <strong style="font-family: monospace; color: var(--accent-color);">{{ call.model }}</strong></span>
+              <span style="color: var(--text-color-faint);">耗时: <span style="color: var(--accent-color);">{{ formatDuration(call.durationTimeMs) }}</span></span>
             </div>
           </div>
         </div>
@@ -264,13 +262,18 @@ import { useConversationStore } from '@/stores/conversation'
 import { useGitStore } from '@/stores/git'
 import TokenMetricsTooltip from '@/components/TokenMetricsTooltip.vue'
 import SubAgentStatusTag from '@/components/SubAgentStatusTag.vue'
-import { getConversationProcessesApi, killConversationProcessApi, ActiveProcessInfo, getConversationLlmCallsApi, ActiveLlmCallInfo } from '@/api/conversation'
+import { useContextWindow, formatTokenCount } from '@/composables/useContextWindow'
+import { getConversationProcessesApi, killConversationProcessApi, getConversationLlmCallsApi } from '@/api/conversation'
+import type { ActiveProcessInfo, ActiveLlmCallInfo } from '@/types'
 
 const agentStore = useAgentStore()
 const projectStore = useProjectStore()
 const conversationStore = useConversationStore()
 const gitStore = useGitStore()
 const message = useMessage()
+
+// 上下文窗口口径：走共享 composable，恒取主会话绑定供应商的窗口大小（子会话继承父绑定）
+const { contextLimit, contextLimitText, usagePercentage } = useContextWindow()
 
 // 活动子进程监控与强杀状态
 const showProcessModal = ref(false)
@@ -423,33 +426,57 @@ const filteredSubAgents = computed(() => {
 .pulse-red-dot {
   width: 6px;
   height: 6px;
-  background-color: #d03050;
+  background-color: var(--status-error);
   border-radius: 50%;
   display: inline-block;
-  box-shadow: 0 0 0 0 rgba(208, 48, 80, 0.7);
+  box-shadow: 0 0 0 0 var(--status-error);
   animation: pulse-dot 1.5s infinite;
 }
 
 @keyframes pulse-dot {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(208, 48, 80, 0.7);
+    box-shadow: 0 0 0 0 var(--status-error);
   }
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 5px rgba(208, 48, 80, 0);
+    box-shadow: 0 0 0 5px transparent;
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(208, 48, 80, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
+.pane-content {
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px 16px;
+}
+
+/* 子智能体卡片：基础与悬浮点击交互向 RulesPane 的 .rule-card 严格对齐 */
+.subagent-card {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  cursor: pointer;
+  margin-bottom: 12px;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
 .subagent-card:hover {
+  border-color: var(--primary-color);
+  background: var(--bg-color-inset);
   transform: translateY(-2px);
-  background: rgba(35, 35, 42, 0.6);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 1px 1px rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-card);
+}
+
+.subagent-card:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .delete-subagent-btn {
@@ -462,7 +489,7 @@ const filteredSubAgents = computed(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--text-color-bright);
   font-size: 0.8rem;
   opacity: 0;
   transition: opacity 0.2s, color 0.2s;

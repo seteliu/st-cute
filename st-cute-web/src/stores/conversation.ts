@@ -21,6 +21,8 @@ import { useProjectStore } from './project'
 import { useAgentStore } from './agent'
 import { useGitStore } from './git'
 import { Message, Conversation, StagedFile } from '@/types'
+import { normalizeMessageList } from '@/utils/message'
+import { trimMessagesArray } from '@/utils/trimMessages'
 
 export const useConversationStore = defineStore('conversation', () => {
   const conversationList = ref<Conversation[]>([])
@@ -208,15 +210,8 @@ export const useConversationStore = defineStore('conversation', () => {
           // 避免旧会话慢响应（含重试链拉长的窗口）污染新会话已就绪的消息列表
           if (activeCid.value !== id) return
           truncated.value = res.truncated || false
-          const list = res.messages || []
-
-          messages.value = list.map((msg) => {
-            const roleLower = msg.role ? (msg.role.toLowerCase() as any) : 'assistant'
-            return {
-              ...msg,
-              role: roleLower
-            }
-          })
+          // role 大小写规范化收口：后端大写枚举名统一转前端小写语义（全局唯一适配点 utils/message.ts）
+          messages.value = normalizeMessageList(res.messages)
           lastError = null
           break
         } catch (e) {
@@ -278,8 +273,9 @@ export const useConversationStore = defineStore('conversation', () => {
         inputTokens.value = envInfo.inputTokens || 0
         outputTokens.value = envInfo.outputTokens || 0
         cachedTokens.value = envInfo.cachedTokens || 0
+        // loopRunning 为 0/1 数值语义，布尔化后再写入（后端部分场景会回传 boolean）
         if (envInfo.loopRunning !== undefined) {
-          appStore.loopRunning = envInfo.loopRunning
+          appStore.loopRunning = Boolean(envInfo.loopRunning)
         }
 
         const gitStore = useGitStore()
@@ -347,6 +343,34 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  /**
+   * 删除会话后的「选中下一个」收口逻辑（单个/批量删除共用，原两处 20 行重复代码收拢）。
+   * 优先级：当前项目剩余会话 > 无活跃项目时全局兜底 > 当前项目仍存在则在原项目新建 > 彻底清空
+   */
+  const selectNextAfterRemoval = async () => {
+    activeCid.value = null
+    // 优先在当前选中项目的会话中选择
+    const currentProjectId = projectStore.activeProjectId
+    const projectConversations = currentProjectId
+      ? conversationList.value.filter(s => String(s.workspaceId) === String(currentProjectId))
+      : []
+
+    if (projectConversations.length > 0) {
+      // 当前项目还有会话，选中第一个
+      await selectConversation(projectConversations[0].id)
+    } else if (currentProjectId === null && conversationList.value.length > 0) {
+      // 无活跃项目时的兜底：无项目上下文才有资格跳到其他会话
+      await selectConversation(conversationList.value[0].id)
+    } else if (currentProjectId !== null) {
+      // 当前项目的会话已删光但项目还在：留在当前项目下新建会话，不跳其他项目的会话（与刷新后 loadConversations 行为一致）
+      clearContext()
+      createConversation(currentProjectId || undefined)
+    } else {
+      // 没有项目了，彻底清空
+      clearContext()
+    }
+  }
+
   // 删除会话
   const deleteConversation = async (id: number) => {
     try {
@@ -357,27 +381,7 @@ export const useConversationStore = defineStore('conversation', () => {
       disposeStagedFiles(id)
 
       if (activeCid.value === id) {
-        activeCid.value = null
-        // 优先在当前选中项目的会话中选择
-        const currentProjectId = projectStore.activeProjectId
-        const projectConversations = currentProjectId
-          ? conversationList.value.filter(s => String(s.workspaceId) === String(currentProjectId))
-          : []
-        
-        if (projectConversations.length > 0) {
-          // 当前项目还有会话，选中第一个
-          await selectConversation(projectConversations[0].id)
-        } else if (currentProjectId === null && conversationList.value.length > 0) {
-          // 无活跃项目时的兜底：无项目上下文才有资格跳到其他会话
-          await selectConversation(conversationList.value[0].id)
-        } else if (currentProjectId !== null) {
-          // 当前项目的会话已删光但项目还在：留在当前项目下新建会话，不跳其他项目的会话（与刷新后 loadConversations 行为一致）
-          clearContext()
-          createConversation(currentProjectId || undefined)
-        } else {
-          // 没有项目了，彻底清空
-          clearContext()
-        }
+        await selectNextAfterRemoval()
       }
     } catch (e) {
       console.error('删除会话失败:', e)
@@ -397,27 +401,7 @@ export const useConversationStore = defineStore('conversation', () => {
       })
 
       if (activeCid.value !== null && ids.includes(activeCid.value)) {
-        activeCid.value = null
-        // 优先在当前选中项目的会话中选择
-        const currentProjectId = projectStore.activeProjectId
-        const projectConversations = currentProjectId
-          ? conversationList.value.filter(s => String(s.workspaceId) === String(currentProjectId))
-          : []
-        
-        if (projectConversations.length > 0) {
-          // 当前项目还有会话，选中第一个
-          await selectConversation(projectConversations[0].id)
-        } else if (currentProjectId === null && conversationList.value.length > 0) {
-          // 无活跃项目时的兜底：无项目上下文才有资格跳到其他会话
-          await selectConversation(conversationList.value[0].id)
-        } else if (currentProjectId !== null) {
-          // 当前项目的会话已删光但项目还在：留在当前项目下新建会话，不跳其他项目的会话（与刷新后 loadConversations 行为一致）
-          clearContext()
-          createConversation(currentProjectId || undefined)
-        } else {
-          // 没有项目了，彻底清空
-          clearContext()
-        }
+        await selectNextAfterRemoval()
       }
     } catch (e) {
       console.error('批量删除会话失败:', e)
@@ -656,28 +640,4 @@ export const useConversationStore = defineStore('conversation', () => {
 // 启用 Pinia store 热更新：dev 热替换时复用原 store 实例，避免新旧实例并存导致组件状态分裂、刷新链断裂
 if (import.meta.hot) {
   acceptHMRUpdate(useConversationStore, import.meta.hot)
-}
-
-export function trimMessagesArray(messages: any[], limit: number): { list: any[]; truncated: boolean } {
-  if (messages.length <= limit) {
-    return { list: messages, truncated: false }
-  }
-
-  const total = messages.length
-  let targetIndex = total - limit
-  let startIndex = 0
-
-  while (targetIndex >= 0) {
-    const msg = messages[targetIndex]
-    if (msg && (msg.role === 'user' || msg.role === 'USER')) {
-      startIndex = targetIndex
-      break
-    }
-    targetIndex--
-  }
-
-  if (startIndex > 0) {
-    return { list: messages.slice(startIndex), truncated: true }
-  }
-  return { list: messages, truncated: false }
 }

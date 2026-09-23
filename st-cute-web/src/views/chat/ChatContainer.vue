@@ -30,7 +30,7 @@
         </div>
 
         <div class="chat-header-actions" style="margin-left: auto; margin-right: 15px;">
-          <n-space align="center" style="font-size: 0.85rem; color: #a0a0a5;">
+          <n-space align="center" style="font-size: 0.85rem; color: var(--text-color-muted);">
             <!-- 桌面端视图：Hover 提示 -->
             <token-metrics-tooltip
               v-if="!isMobile"
@@ -38,34 +38,29 @@
               :output-tokens="conversationStore.outputTokens"
               :cached-tokens="conversationStore.cachedTokens"
               :title="t('chat.contextDetails')"
+              :cid="conversationStore.activeCid ?? undefined"
+              :context-limit="contextLimit"
             >
               <template #default="{ total }">
-                {{ t('chat.contextWindow') }}: <strong style="color: var(--text-color-bright);">{{ total }}</strong> / {{ contextLimitText }} ({{
-                  usagePercentage(total)
-                }}%)
+                {{ t('chat.contextWindow') }}: <strong style="color: var(--text-color-bright);">{{ formatTokenCount(total) }}</strong><template v-if="contextLimitText"> / {{ contextLimitText }} ({{ usagePercentage(total) }}%)</template>
               </template>
             </token-metrics-tooltip>
 
-            <!-- 移动端视图：点击 Popover -->
-            <n-popover v-else trigger="click" placement="bottom" style="background-color: #18181c;">
-              <template #trigger>
-                <span class="mobile-token-pct">
-                  {{ t('chat.contextWindow') }}: {{ usagePercentage(totalTokens) }}%
-                </span>
+            <!-- 移动端视图：点击触发，弹层内容与桌面端同一组件复用，仅触发方式不同 -->
+            <token-metrics-tooltip
+              v-else
+              trigger="click"
+              :input-tokens="conversationStore.inputTokens"
+              :output-tokens="conversationStore.outputTokens"
+              :cached-tokens="conversationStore.cachedTokens"
+              :title="t('chat.contextDetails')"
+              :cid="conversationStore.activeCid ?? undefined"
+              :context-limit="contextLimit"
+            >
+              <template #default="{ total }">
+                {{ t('chat.contextWindow') }}: <strong style="color: var(--text-color-bright);">{{ formatTokenCount(total) }}</strong><template v-if="contextLimitText"> / {{ contextLimitText }} ({{ usagePercentage(total) }}%)</template>
               </template>
-              <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: #e3e3e7;">
-                <div style="font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 6px; padding-bottom: 4px;">
-                  {{ t('chat.contextDetails') }}
-                </div>
-                <div>Total: <strong>{{ totalTokens }}</strong> / {{ contextLimitText }}</div>
-                <div>{{ t('chat.inputToken') }} (Input): {{ conversationStore.inputTokens }}</div>
-                <div>{{ t('chat.outputToken') }} (Output): {{ conversationStore.outputTokens }}</div>
-                <div>{{ t('chat.cachedToken') }} (Cached): {{ conversationStore.cachedTokens !== undefined ? conversationStore.cachedTokens : 0 }}</div>
-                <div v-if="conversationStore.inputTokens > 0 && conversationStore.cachedTokens" style="color: var(--status-warning); font-weight: bold; margin-top: 4px; border-top: 1px dashed #444; padding-top: 4px;">
-                  {{ t('chat.cacheRatio') }} (Ratio): {{ ((conversationStore.cachedTokens / conversationStore.inputTokens) * 100).toFixed(1) }}%
-                </div>
-              </div>
-            </n-popover>
+            </token-metrics-tooltip>
           </n-space>
         </div>
 
@@ -151,18 +146,14 @@ import { t } from '@/i18n'
 import MessageListFlow from './MessageListFlow.vue'
 import ChatInput from './ChatInput.vue'
 import TokenMetricsTooltip from '@/components/TokenMetricsTooltip.vue'
+import { useContextWindow, formatTokenCount } from '@/composables/useContextWindow'
 import { buildRenderItems, type RenderItem } from '@/utils/foldEngine'
 
 const appStore = useAppStore()
 const conversationStore = useConversationStore()
 const projectStore = useProjectStore()
-const providerStore = useProviderStore()
 
 const { isMobile } = useResponsive()
-
-const totalTokens = computed(() => {
-  return (conversationStore.inputTokens || 0) + (conversationStore.outputTokens || 0)
-})
 
 const messageListFlowRef = ref<any>(null)
 
@@ -180,29 +171,8 @@ const activeConversation = computed(() => {
   return conversationStore.conversationList.find(s => s.id === activeId)
 })
 
-const contextLimit = computed(() => {
-  const activeConv = activeConversation.value
-  if (activeConv && activeConv.providerGroup) {
-    const provider = providerStore.providerList.find(p => p.group === activeConv.providerGroup)
-    if (provider && provider.contextSize) {
-      return provider.contextSize
-    }
-  }
-  return 100000
-})
-
-const contextLimitText = computed(() => {
-  const limit = contextLimit.value
-  return limit >= 1000 ? `${(limit / 1000).toFixed(0)}K` : `${limit}`
-})
-
-const usagePercentage = computed(() => {
-  return (total: number) => {
-    const limit = contextLimit.value
-    if (!limit) return '0.0'
-    return ((total / limit) * 100).toFixed(1)
-  }
-})
+// 上下文窗口口径：走共享 composable（三处弹层统一取值，主会话绑定供应商的 contextSize）
+const { contextLimit, contextLimitText, usagePercentage } = useContextWindow()
 
 const scrollToBottom = (smooth = true) => {
   nextTick(() => {
@@ -220,7 +190,7 @@ const scrollToBottom = (smooth = true) => {
   justify-content: center;
   align-items: center;
   height: 100%;
-  color: var(--text-color-secondary);
+  color: var(--text-color-muted);
   font-style: italic;
   font-size: 0.95rem;
 }

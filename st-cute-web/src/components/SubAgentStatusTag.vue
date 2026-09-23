@@ -13,7 +13,8 @@ const props = defineProps<{
 
 const statusClass = computed(() => {
   const s = props.status?.toLowerCase()
-  if (s === 'running' || s === 'success') return 'success-state'
+  if (s === 'running') return 'running-state'
+  if (s === 'success') return 'success-state'
   return 'failed-state'
 })
 
@@ -39,15 +40,21 @@ const statusLabel = computed(() => {
   white-space: nowrap;
 }
 
+.running-state {
+  color: var(--accent-color);
+  background-color: var(--accent-bg-weak);
+  border: 1px solid rgba(187, 187, 233, 0.35);
+}
+
 .success-state {
-  color: var(--primary-color);
-  background-color: rgba(129, 182, 229, 0.1);
-  border: 1px solid rgba(129, 182, 229, 0.2);
+  color: var(--text-color-muted);
+  background-color: var(--overlay-veil);
+  border: 1px solid var(--border-color);
 }
 
 .failed-state {
   color: var(--status-error);
-  background-color: rgba(208, 48, 80, 0.1);
-  border: 1px solid rgba(208, 48, 80, 0.2);
+  background-color: var(--status-error-bg);
+  border: 1px solid rgba(208, 48, 80, 0.35);
 }
 </style>

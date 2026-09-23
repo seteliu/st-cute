@@ -167,7 +167,7 @@ const handleDownload = (att: AttachmentItem) => {
   position: relative;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--overlay-veil-strong);
   background-color: rgba(0, 0, 0, 0.2);
   width: 130px;
   display: flex;
@@ -177,7 +177,7 @@ const handleDownload = (att: AttachmentItem) => {
 
 .attachment-image-card:hover {
   transform: translateY(-1px);
-  border-color: rgba(129, 182, 229, 0.35);
+  border-color: var(--border-color-active);
 }
 
 :deep(.attachment-img-preview) {
@@ -200,7 +200,7 @@ const handleDownload = (att: AttachmentItem) => {
 
 .attachment-name {
   font-size: 0.68rem;
-  color: #c8c8cf;
+  color: var(--text-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -213,8 +213,8 @@ const handleDownload = (att: AttachmentItem) => {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background-color: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: var(--overlay-veil);
+  border: 1px solid var(--overlay-veil-strong);
   border-radius: 8px;
   cursor: pointer;
   max-width: 240px;
@@ -222,8 +222,8 @@ const handleDownload = (att: AttachmentItem) => {
 }
 
 .attachment-file-card:hover {
-  background-color: rgba(129, 182, 229, 0.08);
-  border-color: rgba(129, 182, 229, 0.35);
+  background-color: var(--primary-bg-weak);
+  border-color: var(--border-color-active);
   transform: translateY(-1px);
 }
 
@@ -244,7 +244,7 @@ const handleDownload = (att: AttachmentItem) => {
 
 .file-name {
   font-size: 0.8rem;
-  color: #e3e3e7;
+  color: var(--text-color-bright);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -253,12 +253,12 @@ const handleDownload = (att: AttachmentItem) => {
 
 .file-size {
   font-size: 0.7rem;
-  color: #8c8c93;
+  color: var(--text-color-faint);
   margin-top: 2px;
 }
 
 .file-action-icon {
-  color: #8c8c93;
+  color: var(--text-color-faint);
   display: flex;
   align-items: center;
   justify-content: center;

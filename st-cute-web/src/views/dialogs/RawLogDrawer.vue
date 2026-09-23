@@ -1,6 +1,12 @@
 <template>
-  <n-drawer v-model:show="appStore.showLogDrawer" :width="width" placement="right" @after-enter="stickToBottom">
-    <n-drawer-content :title="t('logDrawer.title')" closable style="background-color: #18181c; color: #fff;">
+  <n-drawer
+    v-model:show="appStore.showLogDrawer"
+    :width="width"
+    placement="right"
+    style="border-left: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
+    @after-enter="stickToBottom"
+  >
+    <n-drawer-content :title="t('logDrawer.title')" closable>
       <div style="display: flex; flex-direction: column; gap: 12px; height: 100%;">
 
         <!-- 工具名称：黑框外独立标题，置于抽屉内容最顶部 -->
@@ -223,10 +229,10 @@ watch(
 </script>
 
 <style scoped>
-/* 区块标题统一样式：蓝色加粗，位于黑框外 */
+/* 区块标题统一样式：浅紫色加粗，位于黑框外 */
 .log-section-title {
   font-weight: bold;
-  color: var(--primary-color);
+  color: var(--accent-color);
   font-size: 0.95rem;
   font-family: monospace;
   padding: 0 2px;
@@ -234,11 +240,11 @@ watch(
 
 /* 内容黑框统一样式：深底 + 细边框，等宽字体 */
 .log-pre {
-  background: #101014;
-  color: #c2c2c9;
+  background: var(--bg-color);
+  color: var(--text-color);
   padding: 12px 15px;
   border-radius: 6px;
-  border: 1px solid #2d2d30;
+  border: 1px solid var(--border-color);
   font-family: monospace;
   font-size: 0.8rem;
   margin: 0;
@@ -261,7 +267,7 @@ watch(
 
 /* 执行中占位提示：弱化色彩并居中，明确告知"结果尚未产生" */
 .log-pre-executing {
-  color: var(--status-warning);
+  color: var(--accent-color);
   font-style: italic;
   display: flex;
   align-items: center;

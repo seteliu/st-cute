@@ -246,7 +246,7 @@ const contentStyle = computed<CSSProperties>(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--overlay-veil);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 8px 16px;
@@ -256,7 +256,7 @@ const contentStyle = computed<CSSProperties>(() => {
 }
 
 .folded-content:hover {
-  background-color: rgba(255, 255, 255, 0.035);
+  background-color: var(--overlay-veil-strong);
   border-color: var(--primary-color-hover);
 }
 
@@ -289,7 +289,7 @@ const contentStyle = computed<CSSProperties>(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--status-warning, #f0a020);
+  color: var(--status-error);
   margin-left: 2px;
   animation: pulse-warning 2.5s infinite ease-in-out;
 }
@@ -307,12 +307,12 @@ const contentStyle = computed<CSSProperties>(() => {
 
 .folded-warning-tooltip .warning-title {
   font-weight: bold;
-  color: var(--status-warning, #f0a020);
+  color: var(--status-error);
   margin-bottom: 4px;
 }
 
 .folded-warning-tooltip .warning-item {
-  color: var(--text-color, #e0e0e0);
+  color: var(--text-color);
   margin-top: 2px;
 }
 
@@ -336,10 +336,12 @@ const contentStyle = computed<CSSProperties>(() => {
 .folded-detail-card {
   width: 100% !important;
   max-width: 100% !important;
-  background-color: #18181c !important;
-  color: #fff !important;
+  background-color: var(--bg-color-modal) !important;
+  color: var(--text-color-bright) !important;
   display: flex;
   flex-direction: column;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-overlay) !important;
 }
 
 .detail-header {
@@ -384,7 +386,7 @@ const contentStyle = computed<CSSProperties>(() => {
 }
 
 .detail-error {
-  color: var(--status-error, #d03050);
+  color: var(--status-error, var(--status-error));
 }
 
 /* 确保详情里的 virtual list 被限制在容器内滚动 */

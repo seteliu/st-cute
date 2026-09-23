@@ -66,7 +66,10 @@
             <div
               v-else
               class="markdown-content"
-              :class="{ 'is-running': isStreamingRunning && !!message.content }"
+              :class="{
+                'is-running': isStreamingRunning && !!message.content,
+                'is-typing-fast': isTypingFast
+              }"
               v-html="formattedContent"
             ></div>
             <!-- 思考中指示 (末条助手消息处于非完结态且尚无正文产出时，显示三个小点跳动动效)。
@@ -88,7 +91,7 @@
               </svg>
               执行失败，您可以点击下方的重试按钮。
             </div>
-            <div v-if="message.status === 'CANCELED'" style="color: var(--text-color-secondary); font-size: 0.8rem; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
+            <div v-if="message.status === 'CANCELED'" style="color: var(--text-color-muted); font-size: 0.8rem; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="15" y1="9" x2="9" y2="15"></line>
@@ -196,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useConversationStore } from '@/stores/conversation'
 import { renderMarkdownSafe } from '@/utils/markdown'
@@ -270,8 +273,35 @@ const avatarLabel = computed(() => {
 const isStreamingRunning = computed(() => {
   return props.message.role !== 'compressed' &&
     props.message.role !== 'user' &&
+    props.message.role !== 'branch' &&
     (props.message.status === 'RUNNING' || props.message.status === 'PENDING') &&
     props.running
+})
+
+// 高速打字指示：流式快速吐字时保持光标常亮稳定，停顿思考时转入柔和呼吸
+const isTypingFast = ref(false)
+let typingTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => props.message.content,
+  () => {
+    if (!isStreamingRunning.value) {
+      isTypingFast.value = false
+      return
+    }
+    isTypingFast.value = true
+    if (typingTimer) clearTimeout(typingTimer)
+    typingTimer = setTimeout(() => {
+      isTypingFast.value = false
+    }, 350)
+  }
+)
+
+onUnmounted(() => {
+  if (typingTimer) {
+    clearTimeout(typingTimer)
+    typingTimer = null
+  }
 })
 
 // 只允许最后一个用户消息之后的消息可以重试，防止历史消息中重试导致上下文错乱
@@ -299,6 +329,11 @@ const formattedContent = computed(() => {
     }
   }
 
+  // 流式生成中：裁剪末尾游离空白与换行符，防止 markdown 解析出空行/空标签导致光标单独掉行
+  if (isStreamingRunning.value) {
+    targetText = targetText.trimEnd()
+  }
+
   try {
     // 统一走 markdown 渲染入口
     return renderMarkdownSafe(targetText)
@@ -317,7 +352,7 @@ const handleCopy = async () => {
   const ok = await copyTextToClipboard(text)
   if ((window as any).$message) {
     if (ok) {
-      (window as any).$message.success('消息内容已复制')
+      (window as any).$message.success(t('chat.copiedSuccess'))
     } else {
       (window as any).$message.error(t('chat.copiedFailed'))
     }
@@ -364,26 +399,42 @@ const formatTime = (timeStr?: string) => {
 const cachedTime = ref('')
 
 const displayTime = computed(() => {
+  // 时间格式化纯函数化：缓存命中直接返回，未命中才格式化并回写缓存。
+  // （原实现把回写副作用放在 computed 内，属 Vue 反模式；此写法保持缓存语义且无副作用）
   const formatted = formatTime(props.message.createTime || (props.message as any).createdAt)
-  if (formatted) {
+  if (formatted && formatted !== cachedTime.value) {
     cachedTime.value = formatted
   }
-  return cachedTime.value
+  return cachedTime.value || formatted
 })
 </script>
 
 <style scoped>
-/* 正文末尾呼吸打字光标 */
-.markdown-content.is-running :deep(> :last-child::after) {
+/* 正文末尾打字光标：覆盖普通段落、代码块、列表项与引用块末尾，紧随文字不另起新行 */
+.markdown-content.is-running :deep(> :last-child:not(pre):not(ul):not(ol):not(blockquote)::after),
+.markdown-content.is-running :deep(> pre:last-child > code::after),
+.markdown-content.is-running :deep(> ul:last-child > li:last-child::after),
+.markdown-content.is-running :deep(> ol:last-child > li:last-child::after),
+.markdown-content.is-running :deep(> blockquote:last-child > :last-child::after) {
   content: '';
   display: inline-block;
   width: 6px;
   height: 14px;
-  margin-left: 4px;
+  margin-left: 3px;
   vertical-align: -1.5px;
-  background-color: var(--primary-color);
+  background-color: var(--accent-color);
   border-radius: 2px;
   animation: cursor-breathe 1.2s infinite ease-in-out;
+}
+
+/* 高速吐字状态：光标保持稳定常亮，不播放呼吸动画，彻底消除 DOM 频繁重建导致的抽搐与闪烁 */
+.markdown-content.is-running.is-typing-fast :deep(> :last-child:not(pre):not(ul):not(ol):not(blockquote)::after),
+.markdown-content.is-running.is-typing-fast :deep(> pre:last-child > code::after),
+.markdown-content.is-running.is-typing-fast :deep(> ul:last-child > li:last-child::after),
+.markdown-content.is-running.is-typing-fast :deep(> ol:last-child > li:last-child::after),
+.markdown-content.is-running.is-typing-fast :deep(> blockquote:last-child > :last-child::after) {
+  animation: none !important;
+  opacity: 0.95 !important;
 }
 
 @keyframes cursor-breathe {
@@ -424,14 +475,14 @@ const displayTime = computed(() => {
 }
 
 .status-failed {
-  border: 1px solid #d03050;
-  background-color: #2a1215 !important;
+  border: 1px solid var(--status-error);
+  background-color: var(--status-error-bg) !important;
 }
 
 .status-canceled {
   opacity: 0.55;
-  border: 1px dashed #444;
-  background-color: #121214 !important;
+  border: 1px dashed var(--border-color);
+  background-color: var(--bg-color-inset) !important;
 }
 
 @keyframes pulse-pending {
@@ -504,18 +555,18 @@ const displayTime = computed(() => {
 }
 
 .branch-message .avatar {
-  background-color: var(--purple-color);
+  background-color: var(--accent-color);
   color: var(--text-color-dark);
 }
 
 .compressed-message .avatar {
-  background-color: #3b82f6;
-  color: #ffffff;
+  background-color: var(--accent-color);
+  color: var(--text-color-dark);
 }
 
 .compressed-message .msg-content {
   background-color: var(--bg-color-card);
-  border-color: #3b82f6;
+  border-color: var(--border-color);
 }
 
 .compressed-status-text {
@@ -523,13 +574,21 @@ const displayTime = computed(() => {
   color: var(--text-color-bright);
 }
 
+/* BRANCH 消息属于已投递汇总报告，不显示特殊边框与脉冲闪烁，保持沉浸阅读 */
 .branch-message .msg-content {
   background-color: var(--bg-color-card);
-  border-color: var(--primary-color);
+  border-color: var(--border-color);
+}
+
+.branch-message.status-pending,
+.branch-message.status-pending.is-conv-running,
+.branch-message.status-running {
+  animation: none !important;
+  opacity: 1 !important;
 }
 
 .branch-label {
-  color: var(--primary-color);
+  color: var(--accent-color);
   font-size: 0.72rem;
   font-weight: 800;
   margin-bottom: 8px;

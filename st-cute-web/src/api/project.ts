@@ -9,7 +9,7 @@ export const saveProject = async (project: Partial<Project>): Promise<Project> =
   return request.post('/api/project/save', project)
 }
 
-export const deleteProjectById = async (id: number): Promise<any> => {
+export const deleteProjectById = async (id: number): Promise<void> => {
   return request.delete(`/api/project/delete?id=${id}`)
 }
 

@@ -1,6 +1,12 @@
 <template>
-  <n-drawer v-model:show="appStore.showThoughtDrawer" :width="width" placement="right" @after-enter="stickToBottom">
-    <n-drawer-content :title="t('chat.thoughtDetailTitle')" closable style="background-color: #18181c; color: #fff;">
+  <n-drawer
+    v-model:show="appStore.showThoughtDrawer"
+    :width="width"
+    placement="right"
+    style="border-left: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
+    @after-enter="stickToBottom"
+  >
+    <n-drawer-content :title="t('chat.thoughtDetailTitle')" closable>
       <div class="thought-drawer-container">
         <!-- 头部操作与信息栏 -->
         <div class="thought-drawer-header">
@@ -88,14 +94,14 @@ const currentThoughtText = computed(() => {
   if (targetId) {
     // 1. 先在主会话消息列表中查找
     const mainMsg = conversationStore.messages.find(m => m.id === targetId)
-    if (mainMsg && mainMsg.thought !== undefined) {
+    if (mainMsg && mainMsg.thought != null) {
       return mainMsg.thought.trim()
     }
     // 2. 在当前激活的子代理消息列表中查找
     const subAgent = agentStore.activeSubAgent
     if (subAgent && subAgent.messages) {
       const subMsg = subAgent.messages.find((m: any) => m.id === targetId)
-      if (subMsg && subMsg.thought !== undefined) {
+      if (subMsg && subMsg.thought != null) {
         return subMsg.thought.trim()
       }
     }
@@ -162,12 +168,12 @@ const handleCopy = async () => {
   justify-content: space-between;
   align-items: center;
   padding: 4px 0;
-  border-bottom: 1px solid #2d2d30;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .thought-stats {
   font-size: 0.8rem;
-  color: #a0a0a5;
+  color: var(--text-color-muted);
   font-family: monospace;
 }
 
@@ -179,8 +185,8 @@ const handleCopy = async () => {
 }
 
 .thought-full-content {
-  background: #101014;
-  color: #c2c2c9;
+  background: var(--bg-color);
+  color: var(--text-color);
   padding: 16px;
   border-radius: 6px;
   overflow: auto;
@@ -189,7 +195,7 @@ const handleCopy = async () => {
   line-height: 1.6;
   flex: 1;
   margin: 0;
-  border: 1px solid #2d2d30;
+  border: 1px solid var(--border-color);
   white-space: pre-wrap;
   word-break: break-word;
 }

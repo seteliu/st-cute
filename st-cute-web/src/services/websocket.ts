@@ -1,4 +1,6 @@
-export interface WebSocketEvent {
+import { WS_EVENTS, LOCAL_EVENTS, PONG_TYPE, PING_TYPE } from '@/constants/ws-events'
+
+export interface WebSocketEvent<T = any> {
   eventId: string;
   cid: number | null;
   parentCid?: number | null;
@@ -10,10 +12,13 @@ export interface WebSocketEvent {
   unbindCid?: number | null;
   timestamp: number;
   type: string;
-  payload: any;
+  payload: T;
 }
 
-export type EventCallback = (event: WebSocketEvent) => void;
+export type EventCallback<T = any> = (event: WebSocketEvent<T>) => void;
+
+/** 前端可监听的全部事件名（后端协议帧 + 本地连接生命周期），供 on() 收敛类型并获得补全 */
+export type ListenableEventName = (typeof WS_EVENTS)[keyof typeof WS_EVENTS] | (typeof LOCAL_EVENTS)[keyof typeof LOCAL_EVENTS]
 
 class WebSocketService {
   private socket: WebSocket | null = null;
@@ -22,9 +27,9 @@ class WebSocketService {
   private callbacks: Map<string, Set<EventCallback>> = new Map();
   private reconnectAttempts: number = 0;
   private maxReconnectDelay: number = 30000; // 最大 30 秒重连延迟
-  private pingIntervalId: any = null;
-  private pongTimeoutId: any = null;
-  private reconnectTimeoutId: any = null;
+  private pingIntervalId: ReturnType<typeof setInterval> | null = null;
+  private pongTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private isConnected: boolean = false;
 
   public connect(url?: string) {
@@ -59,15 +64,15 @@ class WebSocketService {
     // 物理连接建立瞬间，若已持有会话 ID，立即向后端发送 PING 握手包完成 0 延迟会话绑定注册
     if (this.cid !== null) {
       console.log(`[WS] 物理连接建立成功，立即向后端注册当前会话 ID: ${this.cid}`);
-      this.send('PING', {});
+      this.send(PING_TYPE, {});
     }
 
     this.startHeartbeat();
-    this.triggerCallbacks('OPEN', {
+    this.triggerCallbacks(LOCAL_EVENTS.OPEN, {
       eventId: '',
       cid: this.cid,
       timestamp: Date.now(),
-      type: 'OPEN',
+      type: LOCAL_EVENTS.OPEN,
       payload: {}
     });
   }
@@ -77,7 +82,7 @@ class WebSocketService {
       const data = JSON.parse(event.data) as WebSocketEvent;
       console.debug('[WS] 收到消息:', data);
 
-      if (data.type === 'PONG') {
+      if (data.type === PONG_TYPE) {
         console.debug('[WS] 收到心跳 PONG');
         this.resetPongTimeout();
         return;
@@ -98,11 +103,11 @@ class WebSocketService {
     console.warn(`[WS] 连接断开, 代码: ${event.code}, 原因: ${event.reason}`);
     this.isConnected = false;
     this.stopHeartbeat();
-    this.triggerCallbacks('CLOSE', {
+    this.triggerCallbacks(LOCAL_EVENTS.CLOSE, {
       eventId: '',
       cid: this.cid,
       timestamp: Date.now(),
-      type: 'CLOSE',
+      type: LOCAL_EVENTS.CLOSE,
       payload: {}
     });
     this.triggerReconnect();
@@ -134,7 +139,7 @@ class WebSocketService {
 
   private startHeartbeat() {
     this.stopHeartbeat();
-    
+
     // 30秒发一次 PING
     this.pingIntervalId = setInterval(() => {
       if (this.cid === null) {
@@ -142,8 +147,8 @@ class WebSocketService {
         return;
       }
 
-      this.send('PING', {});
-      
+      this.send(PING_TYPE, {});
+
       // 启动 30秒 PONG 响应超时检测（若 30秒内未回 PONG，判定心跳丢失）
       this.pongTimeoutId = setTimeout(() => {
         console.error('[WS] 心跳检测超时, 准备断开重连');
@@ -196,7 +201,11 @@ class WebSocketService {
     console.debug('[WS] 发送消息:', event);
   }
 
-  public on(type: string, callback: EventCallback) {
+  /**
+   * 注册事件监听。type 优先使用 ws-events 常量（可获得字面量联合类型约束），
+   * 保留 string 宽容度以兼容通配符 '*' 与未来扩展
+   */
+  public on(type: ListenableEventName | (string & {}), callback: EventCallback) {
     if (!this.callbacks.has(type)) {
       this.callbacks.set(type, new Set());
     }
@@ -245,7 +254,7 @@ class WebSocketService {
     this.cid = id;
     console.log(`[WS] 切换当前会话ID为: ${id}${prevCid !== null && prevCid !== id ? ` (解绑旧会话: ${prevCid})` : ''}`);
     if (this.isConnected) {
-      this.send('PING', {}, undefined, undefined, prevCid !== null && prevCid !== id ? prevCid : undefined);
+      this.send(PING_TYPE, {}, undefined, undefined, prevCid !== null && prevCid !== id ? prevCid : undefined);
     }
   }
 

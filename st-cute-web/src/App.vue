@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides" :locale="naiveLocale" :date-locale="naiveDateLocale">
+  <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides" :locale="naiveLocale" :date-locale="naiveDateLocale">
     <n-message-provider>
       <message-provider-content />
       <n-dialog-provider>
@@ -12,11 +12,16 @@
 
 <script setup lang="ts">
 import { defineComponent, computed } from 'vue'
-import { darkTheme, GlobalThemeOverrides, useMessage, useDialog, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
+import { darkTheme, lightTheme, GlobalThemeOverrides, useMessage, useDialog, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
 import { currentLang } from '@/i18n'
+import { currentTheme, naiveThemeMode, naiveThemeOverrides } from '@/styles/theme'
 
 const naiveLocale = computed(() => (currentLang.value === 'en-US' ? enUS : zhCN))
 const naiveDateLocale = computed(() => (currentLang.value === 'en-US' ? dateEnUS : dateZhCN))
+
+// Naive UI 明暗主题对象随主题状态联动（暗色用内置 darkTheme，浅色用 lightTheme）
+const naiveTheme = computed(() => (naiveThemeMode.value === 'light' ? lightTheme : darkTheme))
+const themeOverrides = computed<GlobalThemeOverrides>(() => naiveThemeOverrides.value)
 
 const MessageProviderContent = defineComponent({
   setup() {
@@ -31,32 +36,6 @@ const DialogProviderContent = defineComponent({
     return () => null
   }
 })
-
-// Naive UI 自定义全局配色
-const themeOverrides: GlobalThemeOverrides = {
-  common: {
-    primaryColor: '#81b6e5',
-    primaryColorHover: '#9ec7eb',
-    primaryColorPressed: '#659fcb',
-    primaryColorSuppl: '#9ec7eb',
-    bodyColor: '#101014',
-    cardColor: '#18181c'
-  },
-  Input: {
-    borderFocus: '1px solid #81b6e5',
-    borderHover: '1px solid #9ec7eb',
-    boxShadowFocus: '0 0 8px rgba(129, 182, 229, 0.25)'
-  },
-  Select: {
-    peers: {
-      InternalSelection: {
-        borderFocus: '1px solid #81b6e5',
-        borderHover: '1px solid #9ec7eb',
-        boxShadowFocus: '0 0 8px rgba(129, 182, 229, 0.25)'
-      }
-    }
-  }
-}
 </script>
 
 <style>

@@ -29,7 +29,8 @@
 .thinking-dot {
   width: 7px;
   height: 7px;
-  background-color: var(--primary-color);
+  background-color: var(--accent-color);
+  box-shadow: 0 0 6px rgba(187, 187, 233, 0.4);
   border-radius: 50%;
   opacity: 0.4;
   animation: thinking-bounce 1.4s infinite both;

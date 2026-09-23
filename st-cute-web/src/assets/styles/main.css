@@ -1,31 +1,60 @@
 :root {
-  /* 全局设计标记 (Tokens) */
+  /* 全局主题变量（ThemeVars）：色值由 src/styles/themeVars.ts 在启动时按主题动态写入。
+     此处仅列别名清单作为引用索引；样式代码统一使用 var(--xxx) 引用，禁止硬编码色值 */
   --primary-color: #81b6e5;
   --primary-color-hover: #9ec7eb;
   --primary-color-pressed: #659fcb;
-  --purple-color: #bbbbe9;
-  
-  /* 背景色 */
+  --primary-bg-weak: rgba(129, 182, 229, 0.12);
+  --primary-bg-solid: #1d2c3a;
+  --accent-color: #bbbbe9;
+  --accent-bg-weak: rgba(187, 187, 233, 0.12);
+
   --bg-color: #101014;
   --bg-color-card: #18181c;
   --bg-color-card-active: #1d2c3a;
-  
-  /* 文本色 (高清晰浅色文字规范) */
-  --text-color: #c2c2c9;          /* 浅色主文本 */
-  --text-color-bright: #e3e3e7;   /* 柔和浅白高亮色 */
-  --text-color-secondary: #bbbbe9;/* 紫色辅助文本 */
-  --text-color-dark: #101014;     /* 暗色文本 */
-  --text-color-muted: #a0a0a5;    /* 稍微暗一点的静音副文本 */
-  
-  /* 边框与阴影 */
+  --bg-color-elevated: #1a1a1f;
+  --bg-color-modal: #222227;
+  --bg-color-inset: #141418;
+  --bg-color-code: #0b0b0e;
+
+  --text-color-bright: #ffffff;
+  --text-color: #e4e4eb;
+  --text-color-muted: #a8a8b2;
+  --text-color-faint: #787882;
+  --text-color-dark: #101014;
+
   --border-color: #2d2d30;
-  --border-color-active: rgba(129, 182, 229, 0.4);
-  --shadow-color: rgba(0, 0, 0, 0.25);
-  
-  /* 状态色 */
-  --status-success: #81b6e5;
+  --border-color-active: rgba(129, 182, 229, 0.45);
+
+  --status-success: #63e2b7;
   --status-error: #d03050;
-  --status-warning: #bbbbe9;
+  --status-error-hover: #ff5c7c;
+  --status-warning: #d03050;
+  --status-info: #81b6e5;
+  --success-green: #63e2b7;
+  --warning-amber: #f0a020;
+  --diff-add-bg: rgba(46, 160, 67, 0.18);
+  --diff-remove-bg: rgba(248, 81, 73, 0.18);
+  --diff-add-fg: #3fb950;
+  --diff-remove-fg: #f85149;
+  --status-error-bg: rgba(208, 48, 80, 0.15);
+  --status-error-bg-weak: rgba(255, 92, 124, 0.22);
+  --status-error-bg-solid: #381c24;
+  --status-success-bg: rgba(99, 226, 183, 0.12);
+  --warning-amber-bg: rgba(240, 160, 32, 0.12);
+  --status-error-soft: rgba(255, 92, 124, 0.36);
+  --primary-soft: rgba(129, 182, 229, 0.2);
+
+  --overlay-veil: rgba(255, 255, 255, 0.06);
+  --overlay-veil-strong: rgba(255, 255, 255, 0.12);
+  --overlay-veil-max: rgba(255, 255, 255, 0.35);
+  --overlay-bg-glassy: rgba(30, 30, 35, 0.4);
+  --overlay-bg-glassy-strong: rgba(40, 40, 45, 0.55);
+
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --login-bg-start: #1b2838;
+  --login-bg-end: #0d131a;
 }
 
 html, body, #app {
@@ -74,37 +103,6 @@ body.sider-resizing .tool-calls-container {
   background-color: var(--bg-color-card) !important;
 }
 
-.sider-header {
-  height: 60px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.brand-text {
-  font-weight: bold;
-  font-size: 1.2rem;
-  color: var(--text-color-bright);
-}
-
-.sider-actions {
-  padding: 12px;
-}
-
-.add-project-btn {
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: var(--text-color-muted) !important;
-  background-color: transparent !important;
-  transition: all 0.25s ease !important;
-}
-
-.add-project-btn:hover {
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  color: var(--text-color-bright) !important;
-  background-color: rgba(255, 255, 255, 0.03) !important;
-}
-
 .conversation-list {
   padding: 8px;
 }
@@ -118,7 +116,7 @@ body.sider-resizing .tool-calls-container {
 }
 
 .conversation-item:hover {
-  background-color: #2a2a2f;
+  background-color: var(--bg-color-inset);
 }
 
 .conversation-item.active {
@@ -135,8 +133,13 @@ body.sider-resizing .tool-calls-container {
 
 .conversation-meta {
   font-size: 0.75rem;
-  color: var(--text-color-secondary);
+  color: var(--text-color-faint);
   margin-top: 4px;
+  transition: color 0.2s ease;
+}
+
+.conversation-item:hover .conversation-meta {
+  color: var(--text-color-muted);
 }
 
 /* 中间会话栏样式 */
@@ -157,6 +160,7 @@ body.sider-resizing .tool-calls-container {
 
 .chat-header {
   height: 50px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
@@ -188,7 +192,7 @@ body.sider-resizing .tool-calls-container {
   color: var(--primary-color);
   padding: 2px 6px;
   border-radius: 4px;
-  border: 1px solid rgba(129, 182, 229, 0.3);
+  border: 1px solid var(--border-color-active);
 }
 
 .chat-status {
@@ -233,7 +237,7 @@ body.sider-resizing .tool-calls-container {
 }
 
 .user-message .avatar {
-  background-color: var(--primary-color);
+  background-color: var(--accent-color);
   color: var(--text-color-dark);
 }
 
@@ -255,16 +259,16 @@ body.sider-resizing .tool-calls-container {
 
 .user-message .msg-content {
   background-color: var(--bg-color-card);
-  border-color: var(--primary-color);
+  border-color: var(--border-color);
 }
 
 .thought-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-left: 3px solid var(--text-color-secondary);
+  background-color: var(--overlay-veil);
+  border: 1px solid var(--overlay-veil);
+  border-left: 3px solid var(--accent-color);
   padding: 4px 10px;
   margin-bottom: 8px;
   border-radius: 4px;
@@ -275,7 +279,7 @@ body.sider-resizing .tool-calls-container {
 }
 
 .thought-prefix {
-  color: var(--text-color-secondary);
+  color: var(--accent-color);
   font-weight: bold;
   flex-shrink: 0;
   user-select: none;
@@ -291,7 +295,7 @@ body.sider-resizing .tool-calls-container {
 }
 
 .thought-count-tag {
-  color: var(--text-color-secondary);
+  color: var(--accent-color);
   font-size: 0.75rem;
   font-family: monospace;
   flex-shrink: 0;
@@ -308,7 +312,7 @@ body.sider-resizing .tool-calls-container {
 
 .thought-box {
   background-color: var(--bg-color);
-  border-left: 3px solid var(--text-color-secondary);
+  border-left: 3px solid var(--accent-color);
   padding: 8px 12px;
   margin-bottom: 12px;
   border-radius: 4px;
@@ -316,7 +320,7 @@ body.sider-resizing .tool-calls-container {
 }
 
 .thought-header {
-  color: var(--text-color-secondary);
+  color: var(--accent-color);
   font-weight: bold;
   margin-bottom: 4px;
 }
@@ -341,18 +345,18 @@ body.sider-resizing .tool-calls-container {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: rgba(30, 30, 35, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--overlay-bg-glassy);
+  border: 1px solid var(--overlay-veil-strong);
   border-radius: 12px;
   padding: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), 0 0 1px 1px rgba(255, 255, 255, 0.03);
+  box-shadow: var(--shadow-card), 0 0 1px 1px var(--overlay-veil);
   transition: border-color 0.25s, box-shadow 0.25s, background-color 0.25s;
 }
 
 .input-area:focus-within {
-  background: rgba(40, 40, 45, 0.55);
-  border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 1px 1px rgba(255, 255, 255, 0.06);
+  background: var(--overlay-bg-glassy-strong);
+  border-color: var(--overlay-veil-strong);
+  box-shadow: var(--shadow-overlay), 0 0 1px 1px var(--overlay-veil);
 }
 
 .input-area .n-input {
@@ -371,7 +375,7 @@ body.sider-resizing .tool-calls-container {
 
 .token-count {
   font-size: 0.8rem;
-  color: var(--text-color-secondary);
+  color: var(--text-color-muted);
 }
 
 /* 右侧栏样式 */
@@ -381,7 +385,7 @@ body.sider-resizing .tool-calls-container {
 }
 
 .inspector-tabs {
-  padding: 8px;
+  padding: 0;
 }
 
 .pane-content {
@@ -423,14 +427,6 @@ body.sider-resizing .tool-calls-container {
   font-family: monospace;
 }
 
-.subagent-card {
-  background: rgba(30, 30, 35, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  padding: 12px 14px;
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
 .subagent-header {
   display: flex;
   justify-content: space-between;
@@ -451,27 +447,27 @@ body.sider-resizing .tool-calls-container {
 }
 
 .status-tag.running {
-  background-color: var(--bg-color-card-active);
-  color: var(--primary-color);
-  border: 1px solid var(--border-color-active);
+  background-color: var(--accent-bg-weak);
+  color: var(--accent-color);
+  border: 1px solid rgba(187, 187, 233, 0.35);
 }
 
 .status-dot.success, .status-tag.success {
-  background-color: var(--bg-color-card-active);
-  color: var(--primary-color);
-  border: 1px solid var(--border-color-active);
+  background-color: var(--status-success-bg);
+  color: var(--status-success);
+  border: 1px solid rgba(99, 226, 183, 0.35);
 }
 
 .status-dot.failed, .status-tag.failed {
-  background-color: #2f1c20;
+  background-color: var(--status-error-bg);
   color: var(--status-error);
-  border: 1px solid rgba(208, 48, 80, 0.4);
+  border: 1px solid rgba(208, 48, 80, 0.35);
 }
 
 .status-tag.offline {
-  background-color: #2f1c20;
+  background-color: var(--status-error-bg);
   color: var(--status-error);
-  border: 1px solid rgba(208, 48, 80, 0.4);
+  border: 1px solid rgba(208, 48, 80, 0.35);
 }
 
 .subagent-task {
@@ -487,7 +483,7 @@ body.sider-resizing .tool-calls-container {
 }
 
 .empty-state {
-  color: var(--text-color-secondary);
+  color: var(--text-color-muted);
   font-size: 0.85rem;
 }
 
@@ -516,7 +512,7 @@ body.sider-resizing .tool-calls-container {
 
 /* 计划模式视觉特效 */
 .plan-active-bg {
-  background-color: #0b151e !important;
+  background-color: var(--bg-color-card-active) !important;
   border-bottom: 1.5px solid var(--border-color-active);
   transition: background-color 0.4s ease;
 }
@@ -556,28 +552,33 @@ body.sider-resizing .tool-calls-container {
 }
 
 .tool-status-dot.running {
-  background-color: var(--status-warning);
-  box-shadow: 0 0 6px rgba(250, 140, 22, 0.5);
+  background-color: var(--accent-color);
+  box-shadow: 0 0 6px var(--accent-color);
   animation: breathe 1.5s infinite ease-in-out;
 }
 
 .tool-status-dot.success {
+  background-color: var(--status-success);
+  box-shadow: 0 0 6px var(--status-success);
+}
+
+.tool-status-dot.waiting-approval {
   background-color: var(--primary-color);
-  box-shadow: 0 0 6px rgba(129, 182, 229, 0.5);
+  box-shadow: 0 0 6px var(--border-color-active);
 }
 
 .tool-status-dot.failed {
   background-color: var(--status-error);
-  box-shadow: 0 0 6px rgba(208, 48, 80, 0.5);
+  box-shadow: 0 0 6px var(--status-error);
 }
 
 .tool-name {
-  color: var(--primary-color);
+  color: var(--accent-color);
   font-weight: bold;
 }
 
 .tool-args {
-  color: var(--text-color-secondary);
+  color: var(--text-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -606,8 +607,8 @@ body.sider-resizing .tool-calls-container {
 }
 
 .system-banner {
-  background-color: #1a1a1f;
-  color: var(--text-color-secondary);
+  background-color: var(--bg-color-elevated);
+  color: var(--text-color);
   padding: 6px 16px;
   border-radius: 20px;
   font-size: 0.85rem;
@@ -617,20 +618,20 @@ body.sider-resizing .tool-calls-container {
 }
 
 .file-item {
-  color: #c9d1d9;
+  color: var(--text-color);
 }
 .file-item:hover {
   background: var(--border-color);
   color: var(--text-color-bright);
 }
 .file-item.active {
-  background: #1e1e1e;
+  background: var(--bg-color-card-active);
   border-left: 3px solid var(--primary-color);
   color: var(--primary-color);
 }
 
 /* ========================================== */
-/* Markdown 渲染精美全局样式（暗色主题定制）   */
+/* Markdown 渲染精美全局样式（引用设计令牌）    */
 /* ========================================== */
 .msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4, .msg-content h5, .msg-content h6 {
   color: var(--text-color-bright);
@@ -645,7 +646,7 @@ body.sider-resizing .tool-calls-container {
 .msg-content h3 { font-size: 1.15rem; }
 .msg-content h4 { font-size: 1.05rem; }
 .msg-content h5 { font-size: 0.95rem; }
-.msg-content h6 { font-size: 0.9rem; color: var(--text-color-muted); }
+.msg-content h6 { font-size: 0.9rem; }
 
 .msg-content p {
   margin-top: 0;
@@ -667,15 +668,15 @@ body.sider-resizing .tool-calls-container {
 .msg-content blockquote {
   margin: 12px 0;
   padding: 8px 16px;
-  border-left: 4px solid var(--primary-color);
-  background-color: #1a1a1f;
+  border-left: 4px solid var(--accent-color);
+  background-color: var(--bg-color-elevated);
   color: var(--text-color-muted);
   border-radius: 0 4px 4px 0;
 }
 
 .msg-content code {
   background-color: var(--border-color);
-  color: var(--status-warning);
+  color: var(--accent-color);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
@@ -683,7 +684,7 @@ body.sider-resizing .tool-calls-container {
 }
 
 .msg-content pre {
-  background-color: #0b0b0e;
+  background-color: var(--bg-color-code);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 12px 16px;
@@ -714,24 +715,24 @@ body.sider-resizing .tool-calls-container {
 }
 
 .msg-content th {
-  background-color: #1a1a1f;
+  background-color: var(--bg-color-elevated);
   color: var(--text-color-bright);
   font-weight: 600;
 }
 
 .msg-content tr:nth-child(even) {
-  background-color: #141418;
+  background-color: var(--bg-color-inset);
 }
 
 .msg-content a {
-  color: var(--primary-color);
+  color: var(--accent-color);
   text-decoration: none;
-  border-bottom: 1px dashed var(--primary-color);
+  border-bottom: 1px dashed var(--accent-color);
   transition: color 0.2s, border-color 0.2s;
 }
 
 .msg-content a:hover {
-  color: var(--primary-color-hover);
+  color: var(--accent-color);
   border-bottom-style: solid;
 }
 
@@ -783,16 +784,16 @@ body.sider-resizing .tool-calls-container {
   .main-layout {
     width: 100% !important;
   }
-  
+
   .n-drawer .left-sider,
   .n-drawer .right-sider {
     width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
     border: none !important;
-    background-color: #18181c !important;
+    background-color: var(--bg-color-card) !important;
   }
-  
+
   .chat-header {
     padding: 0 8px !important;
     gap: 4px !important;
@@ -805,13 +806,13 @@ body.sider-resizing .tool-calls-container {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  
+
   .chat-status {
     font-size: 0.75rem !important;
     margin-left: 12px !important;
     margin-right: 8px;
   }
-  
+
   .chat-status span {
     display: none !important;
   }
@@ -819,14 +820,14 @@ body.sider-resizing .tool-calls-container {
   /* 移动端顶部百分比详情点击提示样式 */
   .mobile-token-pct {
     cursor: pointer;
-    color: #a0a0a5;
+    color: var(--text-color-muted);
     font-size: 0.85rem;
     margin-left: 4px;
     user-select: none;
   }
-  
+
   .mobile-token-pct:hover {
-    color: #e3e3e7;
+    color: var(--text-color-bright);
   }
 
   /* 在移动端将消息卡片最大宽度拓宽到 96%，减少右侧留白以充分展示文本 */
@@ -840,7 +841,7 @@ body.sider-resizing .tool-calls-container {
   }
 }
 
-/* 全局滚动条自定义美化，消除 Chrome 中突兀的白色粗滚动条 */
+/* 全局滚动条自定义美化 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -851,24 +852,60 @@ body.sider-resizing .tool-calls-container {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--overlay-veil-strong);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: var(--overlay-veil-max);
 }
 
 /* Firefox 滚动条兼容 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--overlay-veil-strong) transparent;
 }
 
 /* 强制消除某些浏览器或第三方插件在 input 处于 invalid（如低于 50000 最小值）时自动添加的文字删除线/中划线样式 */
 input:invalid,
 .n-input input:invalid,
 .n-input-number input:invalid,
-.n-input__input-el {
+.n-input__input-el:invalid {
   text-decoration: none !important;
 }
+
+
+/* 修复 Naive UI 下拉选择框（NSelect）在 Windows 系统字体度量下文字视觉偏下、未与右侧箭头垂直居中的问题 */
+.n-base-selection-label .n-base-selection-input,
+.n-base-selection-label .n-base-selection-placeholder,
+.n-base-selection-label .n-base-selection-overlay {
+  transform: translateY(-1.5px) !important;
+}
+
+/* 系统设置中的清除、删除等危险次级操作按钮：
+   保持现有暗红弱底与微光边框，文字搭配正文色 */
+.danger-secondary-btn {
+  color: var(--text-color) !important;
+  background-color: var(--status-error-bg-weak) !important;
+  border: 1px solid var(--status-error-soft) !important;
+  font-weight: 500;
+}
+
+.danger-secondary-btn:hover {
+  background-color: var(--status-error-soft) !important;
+  color: var(--text-color-bright) !important;
+}
+
+/* 工具就地审批拒绝按钮：保持珊瑚红文字与暗红弱底 */
+.approval-deny-btn {
+  color: var(--status-error-hover) !important;
+  background-color: var(--status-error-bg-weak) !important;
+  border: 1px solid var(--status-error-soft) !important;
+  font-weight: 500;
+}
+
+.approval-deny-btn:hover {
+  background-color: var(--status-error-soft) !important;
+  color: var(--text-color-bright) !important;
+}
+

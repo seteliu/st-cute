@@ -2,7 +2,9 @@ import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { wsService } from '@/services/websocket'
 import { getContextInfoApi } from '@/api/agent-context'
-import { useConversationStore, trimMessagesArray } from './conversation'
+import { trimMessagesArray } from '@/utils/trimMessages'
+import { normalizeMessageList } from '@/utils/message'
+import { useConversationStore } from './conversation'
 import { useAppStore } from './app'
 import { cancelConversationApi, getConversationMessages } from '@/api/conversation'
 import {
@@ -12,6 +14,7 @@ import {
   McpServer,
   AgentRule
 } from '@/types'
+import { t } from '@/i18n'
 
 export const useAgentStore = defineStore('agent', () => {
   const subAgents = ref<SubAgent[]>([])
@@ -40,10 +43,8 @@ export const useAgentStore = defineStore('agent', () => {
     try {
       const res = await getConversationMessages(cid)
       sub.truncated = res.truncated || false
-      sub.messages = (res.messages || []).map(msg => {
-        if (msg.role) msg.role = msg.role.toLowerCase() as any
-        return msg
-      })
+      // role 规范化收口：后端大写枚举统一转小写（utils/message.ts 为全局唯一适配点）
+      sub.messages = normalizeMessageList(res.messages)
 
       // 同步获取其最新的 token 状态与 loopRunning 等，为数据做双重同步兜底
       const envInfo = await getContextInfoApi(cid)
@@ -52,6 +53,8 @@ export const useAgentStore = defineStore('agent', () => {
         sub.outputTokens = envInfo.outputTokens || 0
         sub.cachedTokens = envInfo.cachedTokens || 0
         sub.currentIteration = envInfo.iterationCount || 0
+        // 保守口径：仅明确的停止信号（0 或 false）才把 running 态收敛为 success，
+        // 其余未知真值形态一律按运行中处理，避免子代理卡片被误判提前完成
         if (envInfo.loopRunning === 0 || envInfo.loopRunning === false) {
           if (sub.status === 'running') {
             sub.status = 'success'
@@ -112,10 +115,10 @@ export const useAgentStore = defineStore('agent', () => {
         showSubAgentDrawer.value = false
         activeSubAgentCid.value = null
       }
-      ;(window as any).$message?.success('删除子代理会话成功')
+      ;(window as any).$message?.success(t('subAgent.deleteSuccess'))
     } catch (e) {
       console.error('删除子代理会话失败:', e)
-      ;(window as any).$message?.error('删除子代理会话失败')
+      ;(window as any).$message?.error(t('subAgent.deleteFailed'))
     }
   }
 

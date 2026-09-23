@@ -8,21 +8,39 @@
     class="left-sider"
     content-style="display: flex; flex-direction: column; height: 100%;"
   >
-    <div class="sider-header">
-      <span class="brand-text">ST-Cute</span>
-    </div>
-    
-    <div class="sider-actions">
-      <n-button class="add-project-btn" block @click="openAddProject">
-        + {{ t('sider.addProject') }}
-      </n-button>
+    <!-- 添加项目整条交互条带（高度 50px，与主聊天框 header 底部分割线对齐） -->
+    <div
+      class="add-project-bar"
+      role="button"
+      tabindex="0"
+      :title="t('sider.addProject')"
+      @click="showAddProjectModal = true"
+      @keydown.enter="showAddProjectModal = true"
+      @keydown.space.prevent="showAddProjectModal = true"
+    >
+      <div class="add-project-content">
+        <svg
+          class="add-project-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        <span class="add-project-text">{{ t('sider.addProject') }}</span>
+      </div>
     </div>
 
     <div class="project-collapse-wrapper">
       <div v-if="projectStore.projectList.length === 0" class="empty-projects">
         {{ t('sider.noProjects') }}
       </div>
-      
+
       <n-collapse
         v-else
         :expanded-names="expandedNames"
@@ -137,9 +155,12 @@
                   <n-input
                     v-model:value="editingTitle"
                     size="tiny"
+                    type="textarea"
+                    :autosize="{ minRows: 1, maxRows: 1 }"
                     ref="editInputRef"
+                    spellcheck="false"
                     @blur="saveTitle(sess)"
-                    @keyup.enter="saveTitle(sess)"
+                    @keydown.enter.prevent="saveTitle(sess)"
                     @keyup.esc="cancelEdit"
                     maxlength="50"
                   />
@@ -147,7 +168,7 @@
                 <template v-else>
                   <div class="conversation-title" :title="sess.title">{{ sess.title }}</div>
                   <div class="conversation-meta">
-                    {{ formatTime(sess.updateTime || (sess as any).updatedAt) }}
+                    {{ formatTime(sess.updateTime) }}
                     <!-- 运行状态监控：running 时显示转圈动效（右缘对齐 ✕ 按钮） -->
                     <span v-if="sess.loopRunning === 1 && !isBatchMode(proj.id)" class="running-spinner" title="会话运行中">
                       <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -162,7 +183,7 @@
                       </svg>
                     </span>
                   </div>
-                  
+
                   <!-- 非多选模式下的单独操作按钮（容器使按钮在条目下方纵向堆叠） -->
                   <div v-if="!isBatchMode(proj.id)" class="conversation-item-actions">
                     <!-- 重命名按钮 -->
@@ -280,8 +301,8 @@
     </div>
 
     <!-- 底部固定展示：系统设置 -->
-    <div class="sider-footer" style="padding: 12px; border-top: 1px solid #2d2d30; margin-top: auto;">
-      <n-button block quaternary @click="openSettingsModal">
+    <div class="sider-footer" style="padding: 12px; border-top: 1px solid var(--border-color); margin-top: auto;">
+      <n-button block quaternary @click="showSettingsModal = true">
         <template #icon>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         </template>
@@ -289,483 +310,16 @@
       </n-button>
     </div>
 
-    <!-- 添加项目弹窗 -->
-    <n-modal
-      v-model:show="showAddProjectModal"
-      preset="card"
-      style="width: 480px; max-width: 90vw;"
-      :title="t('sider.addProject')"
-      :bordered="false"
-      size="medium"
-    >
-      <div style="margin-top: 5px;">
-        <n-form label-placement="left" label-width="110">
-          <n-form-item>
-            <template #label>
-              <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.projectPath') }}
-            </template>
-            <n-input
-              v-model:value="newProjectForm.path"
-              :placeholder="t('sider.projectPathPlaceholder')"
-              @input="onPathInput"
-              maxlength="255"
-            />
-          </n-form-item>
-          <n-form-item>
-            <template #label>
-              <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.projectName') }}
-            </template>
-            <n-input
-              v-model:value="newProjectForm.name"
-              :placeholder="t('sider.projectNamePlaceholder')"
-              maxlength="50"
-            />
-          </n-form-item>
-        </n-form>
-      </div>
-      <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 12px;">
-          <n-button type="primary" @click="submitAddProject">{{ t('common.confirm') }}</n-button>
-          <n-button @click="showAddProjectModal = false">{{ t('common.cancel') }}</n-button>
-        </div>
-      </template>
-    </n-modal>
+    <!-- 添加项目弹窗（独立组件） -->
+    <add-project-modal v-model:show="showAddProjectModal" />
 
-    <!-- 系统设置大弹窗 -->
-    <n-modal
-      v-model:show="showSettingsModal"
-      preset="card"
-      style="width: 760px; max-width: 95vw; min-height: 480px;"
-      :title="isAddingOrEditingProvider ? (providerStore.isEditing ? t('sider.editProvider') : (providerStore.copySourceModelName ? t('sider.copyProviderTitle') : t('sider.addProvider'))) : t('settings.title')"
-      :bordered="false"
-      size="medium"
-    >
-      <!-- 供应商专属子页面 -->
-      <div v-if="isAddingOrEditingProvider" class="provider-sub-view">
-        <n-form :label-placement="isMobile ? 'top' : 'left'" label-width="135" style="margin-top: 15px;">
-          <n-form-item>
-            <template #label>
-              <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.protocol') }}
-            </template>
-            <n-select v-model:value="providerStore.form.protocol" :options="providerStore.protocolOptions" />
-          </n-form-item>
-          <n-form-item>
-            <template #label>
-              <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.groupName') }} (Group)
-            </template>
-            <n-input v-model:value="providerStore.form.group" placeholder="例如: openrouter" maxlength="50" />
-          </n-form-item>
-          <n-form-item>
-            <template #label>
-              <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.modelName') }}
-            </template>
-            <n-input ref="modelNameInputRef" v-model:value="providerStore.form.modelName" placeholder="例如: gpt-4" maxlength="100" />
-          </n-form-item>
-          <n-form-item>
-            <template #label>
-              <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.baseUrl') }}
-            </template>
-            <div style="display: flex; flex-direction: column; width: 100%; gap: 6px;">
-              <n-input v-model:value="providerStore.form.baseUrl" placeholder="例如: https://openrouter.ai/api/v1" maxlength="255" />
-              <n-checkbox v-model:checked="providerStore.form.useFullUrl">
-                {{ t('sider.useFullUrl') }}
-              </n-checkbox>
-            </div>
-          </n-form-item>
-          <n-form-item>
-            <template #label>
-              <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.apiKey') }}
-            </template>
-            <n-input
-              v-model:value="providerStore.form.apiKey"
-              :placeholder="t('sider.apiKeyPlaceholder')"
-              maxlength="255"
-            />
-          </n-form-item>
-          <n-form-item>
-            <template #label>
-              <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.contextSize') }}
-            </template>
-            <n-input-number v-model:value="providerStore.form.contextSize" :min="50000" :max="10000000" :step="1000" :placeholder="t('sider.contextSizePlaceholder')" style="width: 100%;" :input-props="{ spellcheck: 'false' }" />
-          </n-form-item>
-          <n-form-item>
-            <template #label>
-              <div style="display: flex; align-items: center; gap: 4px;">
-                <span>{{ t('sider.multimodal') }}</span>
-                <n-tooltip trigger="hover" placement="top-start">
-                  <template #trigger>
-                    <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                      </svg>
-                    </span>
-                  </template>
-                  <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                    {{ t('sider.multimodalTooltip') }}
-                  </div>
-                </n-tooltip>
-              </div>
-            </template>
-            <n-switch v-model:value="providerStore.form.multimodal" />
-          </n-form-item>
-          <n-form-item :label="t('sider.maxTokens')">
-            <n-input-number
-              v-model:value="providerStore.form.maxTokens"
-              :min="1"
-              :max="128000"
-              :placeholder="t('sider.maxTokensPlaceholder')"
-              :clearable="true"
-              style="width: 100%;"
-            />
-          </n-form-item>
-          <n-form-item :label="t('sider.reasoningEffort')">
-            <n-input
-              v-model:value="providerStore.form.reasoningEffort"
-              :placeholder="t('sider.reasoningEffortPlaceholder')"
-              maxlength="50"
-              :clearable="true"
-            />
-          </n-form-item>
-          <n-form-item :label="t('sider.temperature')">
-            <n-input-number
-              v-model:value="providerStore.form.temperature"
-              :min="0"
-              :max="2"
-              :step="0.1"
-              :placeholder="t('sider.temperaturePlaceholder')"
-              :clearable="true"
-              style="width: 100%;"
-            />
-          </n-form-item>
-        </n-form>
-        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
-          <n-button type="primary" @click="saveProviderAndReturn">{{ t('common.save') }}</n-button>
-          <n-button @click="cancelProviderEdit">{{ t('common.back') }}</n-button>
-        </div>
-      </div>
-
-      <!-- 设置主界面（Tab卡片） -->
-      <div v-else class="settings-main-view">
-        <n-tabs v-model:value="activeTab" placement="top" animated>
-          <!-- 卡片1：基础设置 -->
-          <n-tab-pane name="basic" :tab="t('settings.basicTab')">
-            <div class="settings-pane-content">
-              <!-- 语言设置（放在最前面） -->
-              <div class="setting-item-row setting-item-row--stack">
-                <div class="setting-item-label">
-                  <span>{{ t('settings.language') }}</span>
-                  <n-tooltip trigger="hover" placement="top-start">
-                    <template #trigger>
-                      <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                      </span>
-                    </template>
-                    <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                      {{ t('settings.languageTooltip') }}
-                    </div>
-                  </n-tooltip>
-                </div>
-                <n-select
-                  v-model:value="appStore.language"
-                  :options="[
-                    { label: t('settings.langZh'), value: 'zh-CN' },
-                    { label: t('settings.langEn'), value: 'en-US' }
-                  ]"
-                  class="setting-item-control select-control"
-                  @update:value="onLanguageChange"
-                />
-              </div>
-
-              <div class="setting-item-row setting-item-row--stack">
-                <div class="setting-item-label">
-                  <span>{{ t('settings.newlineKey') }}</span>
-                  <n-tooltip trigger="hover" placement="top-start">
-                    <template #trigger>
-                      <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                      </span>
-                    </template>
-                    <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                      {{ t('settings.newlineKeyTooltip') }}
-                    </div>
-                  </n-tooltip>
-                </div>
-                <n-select
-                  v-model:value="appStore.newlineKey"
-                  :options="[
-                    { label: t('settings.enterKey'), value: 'enter' },
-                    { label: t('settings.altEnterKey'), value: 'alt+enter' }
-                  ]"
-                  class="setting-item-control select-control"
-                  @update:value="appStore.saveBasicConfig"
-                />
-              </div>
-
-              <div class="setting-item-row">
-                <div class="setting-item-label">
-                  <span>{{ t('settings.pathSandbox') }}</span>
-                  <n-tooltip trigger="hover" placement="top-start">
-                    <template #trigger>
-                      <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                      </span>
-                    </template>
-                    <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                      {{ t('settings.pathSandboxTooltip') }}
-                    </div>
-                  </n-tooltip>
-                </div>
-                <n-switch
-                  v-model:value="appStore.pathSandboxEnabled"
-                  @update:value="appStore.saveBasicConfig"
-                />
-              </div>
-
-              <div class="setting-item-row">
-                <div class="setting-item-label">
-                  <span>{{ t('settings.httpLog') }}</span>
-                  <n-tooltip trigger="hover" placement="top-start">
-                    <template #trigger>
-                      <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                      </span>
-                    </template>
-                    <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                      {{ t('settings.httpLogTooltip') }}
-                    </div>
-                  </n-tooltip>
-                </div>
-                <n-switch
-                  v-model:value="appStore.httpLog"
-                  @update:value="appStore.saveBasicConfig"
-                />
-              </div>
-
-              <div v-if="appStore.httpLog" class="setting-item-row">
-                <div class="setting-item-label-simple">{{ t('settings.httpLogDays') }}</div>
-                <n-input-number
-                  v-model:value="appStore.httpLogDays"
-                  :min="1"
-                  :max="999"
-                  size="small"
-                  class="setting-item-control input-number-control"
-                  @update:value="appStore.saveBasicConfig"
-                />
-              </div>
-
-              <div class="setting-item-row">
-                <div class="setting-item-label">
-                  <span>{{ t('settings.minimalSkillMode') }}</span>
-                  <n-tooltip trigger="hover" placement="top-start">
-                    <template #trigger>
-                      <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                      </span>
-                    </template>
-                    <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                      {{ t('settings.minimalSkillModeTooltip') }}
-                    </div>
-                  </n-tooltip>
-                </div>
-                <n-switch
-                  v-model:value="appStore.minimalSkillMode"
-                  @update:value="appStore.saveBasicConfig"
-                />
-              </div>
-
-              <div class="setting-item-row">
-                <div class="setting-item-label">
-                  <span>{{ t('settings.password') }}</span>
-                  <n-tooltip trigger="hover" placement="top-start">
-                    <template #trigger>
-                      <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                      </span>
-                    </template>
-                    <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                      <div>{{ appStore.passwordSet ? t('settings.passwordStatusSet') : t('settings.passwordStatusUnset') }}</div>
-                      <div style="margin-top: 4px; color: var(--text-color-muted);">{{ t('settings.passwordTooltip') }}</div>
-                    </div>
-                  </n-tooltip>
-                </div>
-                <!--
-                  密码刻意不设常驻输入框：常驻输入框会被浏览器自动填充回填既有值，
-                  后续保存其它设置时夹带提交会污染密码。改为按钮 + 独立弹窗现输现提。
-                -->
-                <div class="setting-password-wrapper">
-                  <n-button
-                    v-if="!appStore.passwordSet"
-                    type="primary"
-                    size="small"
-                    @click="openPasswordModal"
-                  >
-                    {{ t('settings.passwordSetBtn') }}
-                  </n-button>
-                  <template v-else>
-                    <n-button
-                      type="primary"
-                      size="small"
-                      secondary
-                      @click="openPasswordModal"
-                    >
-                      {{ t('settings.passwordModifyBtn') }}
-                    </n-button>
-                    <n-button
-                      type="error"
-                      size="small"
-                      secondary
-                      @click="handleClearPassword"
-                    >
-                      {{ t('settings.passwordClearBtn') }}
-                    </n-button>
-                  </template>
-                </div>
-              </div>
-            </div>
-          </n-tab-pane>
-
-          <n-tab-pane name="providers" :tab="t('sider.providerSettings')">
-            <div class="providers-pane-content">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <span style="font-size: 0.9rem; color: #a0a0a5;">{{ t('sider.providerListTitle') }}</span>
-                <n-button type="primary" size="small" @click="openAddProvider">
-                  {{ t('sider.addProvider') }}
-                </n-button>
-              </div>
-
-              <div class="provider-settings-list" style="display: flex; flex-direction: column; gap: 12px; max-height: 350px; overflow-y: auto; padding-right: 4px;">
-                <div v-if="providerStore.providerList.length === 0" style="text-align: center; padding: 20px; color: #555568;">
-                  {{ t('sider.noProviders') }}
-                </div>
-                <template v-else>
-                  <!-- 按分组聚合展示：分组标题行 + 组内供应商卡片 -->
-                  <div v-for="g in groupedProviderList" :key="g.group" class="provider-group-block">
-                    <div class="provider-group-header" style="display: flex; align-items: center; gap: 8px; padding: 4px 2px;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #767680;">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                      </svg>
-                      <strong style="font-size: 0.82rem; color: #c8c8ce;">{{ g.group }}</strong>
-                      <span style="font-size: 0.72rem; color: #767680; background-color: rgba(255, 255, 255, 0.05); padding: 1px 6px; border-radius: 8px;">{{ g.items.length }}</span>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 8px; padding-left: 6px;">
-                      <div
-                        v-for="prov in g.items"
-                        :key="prov.group + ':' + prov.modelName"
-                        class="provider-setting-item"
-                        style="background-color: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;"
-                      >
-                        <div>
-                          <div style="display: flex; align-items: center; gap: 8px;">
-                            <!-- 模型名称作为大标题（分组名已在分组标题行展示，无需重复） -->
-                            <strong style="color: #e3e3e7;">{{ prov.modelName }}</strong>
-                            <span style="font-size: 0.75rem; background-color: rgba(129, 182, 229, 0.08); color: var(--primary-color); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(129, 182, 229, 0.25);">
-                              {{ prov.protocol }}
-                            </span>
-                            <span v-if="prov.multimodal" style="font-size: 0.75rem; background-color: rgba(99, 226, 183, 0.08); color: #63e2b7; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(99, 226, 183, 0.25);">
-                              {{ t('sider.multimodalBadge') }}
-                            </span>
-                          </div>
-                          <div style="font-size: 0.8rem; color: #a0a0a5; margin-top: 4px; display: flex; gap: 12px;">
-                            <span v-if="prov.contextSize">{{ t('sider.window') }}: {{ prov.contextSize.toLocaleString() }} tokens</span>
-                          </div>
-                        </div>
-                        <div style="display: flex; gap: 8px;">
-                          <n-button size="small" quaternary @click="openCopyProvider(prov)">
-                            {{ t('sider.copyProvider') }}
-                          </n-button>
-                          <n-button size="small" quaternary @click="openEditProvider(prov)">
-                            {{ t('common.edit') }}
-                          </n-button>
-                          <n-popconfirm
-                            @positive-click="providerStore.handleDeleteProvider(prov.group, prov.modelName)"
-                            :positive-text="t('common.confirm')"
-                            :negative-text="t('common.cancel')"
-                            placement="top-end"
-                          >
-                            <template #trigger>
-                              <n-button size="small" quaternary type="error">
-                                {{ t('common.delete') }}
-                              </n-button>
-                            </template>
-                            {{ t('sider.deleteProviderConfirm') }}
-                          </n-popconfirm>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </div>
-          </n-tab-pane>
-        </n-tabs>
-      </div>
-    </n-modal>
-
-    <!--
-      安全访问密码独立弹窗：现输现提，不与其它设置同批提交。
-      密码值不进任何常驻表单状态，杜绝浏览器自动填充污染
-    -->
-    <n-modal
-      v-model:show="showPasswordModal"
-      preset="card"
-      :title="appStore.passwordSet ? t('settings.passwordModifyTitle') : t('settings.passwordSetTitle')"
-      style="width: 420px; max-width: 92vw;"
-      :bordered="false"
-    >
-      <div style="display: flex; flex-direction: column; gap: 12px;">
-        <!-- 明文显示：密码为本地新设置，不做遮蔽，便于用户核对输入；不做二次确认 -->
-        <n-input
-          v-model:value="passwordInput"
-          :placeholder="t('settings.passwordInputPlaceholder')"
-          size="medium"
-          maxlength="32"
-          autocomplete="new-password"
-          @keydown.enter.prevent="handleSavePassword"
-        />
-        <div style="font-size: 0.75rem; color: var(--text-color-muted); line-height: 1.5;">
-          {{ t('settings.passwordPolicyHint') }}
-        </div>
-      </div>
-      <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 8px;">
-          <n-button type="primary" size="small" :loading="passwordSaving" @click="handleSavePassword">
-            {{ t('common.confirm') }}
-          </n-button>
-          <n-button size="small" @click="closePasswordModal">{{ t('common.cancel') }}</n-button>
-        </div>
-      </template>
-    </n-modal>
+    <!-- 系统设置大弹窗（独立组件：基础设置 + 供应商管理 + 密码弹窗） -->
+    <settings-modal v-model:show="showSettingsModal" />
 
     <!-- 自定义拖拽边框条 -->
-    <div 
+    <div
       v-if="!isMobile"
-      ref="resizeHandleRef" 
+      ref="resizeHandleRef"
       class="custom-resize-handle left-handle"
     >
       <div class="resize-line"></div>
@@ -775,7 +329,14 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useMessage } from 'naive-ui'
 import { useResponsive } from '@/utils/useResponsive'
+import { useConversationStore } from '@/stores/conversation'
+import { useProjectStore } from '@/stores/project'
+import { useAppStore } from '@/stores/app'
+import { t } from '@/i18n'
+import AddProjectModal from './settings/AddProjectModal.vue'
+import SettingsModal from './settings/SettingsModal.vue'
 
 const { isMobile } = useResponsive()
 
@@ -786,74 +347,14 @@ const collapsed = computed(() => {
 const width = computed(() => {
   return isMobile.value ? '100%' : appStore.leftSiderWidth
 })
-import { useMessage, useDialog } from 'naive-ui'
-import { useConversationStore } from '@/stores/conversation'
-import { useProjectStore } from '@/stores/project'
-import { useAppStore } from '@/stores/app'
-import { useProviderStore } from '@/stores/provider'
-import { t, setLanguage } from '@/i18n'
 
 const message = useMessage()
-const dialog = useDialog()
 const conversationStore = useConversationStore()
 const projectStore = useProjectStore()
 const appStore = useAppStore()
-const providerStore = useProviderStore()
-
-const onLanguageChange = (val: 'zh-CN' | 'en-US') => {
-  setLanguage(val)
-  appStore.saveBasicConfig()
-}
-
-// ── 安全访问密码弹窗 ──
-// 密码仅在弹窗中现输现提：状态不经过任何常驻表单，避免浏览器自动填充污染密码值
-const showPasswordModal = ref(false)
-const passwordInput = ref('')
-const passwordSaving = ref(false)
-
-const openPasswordModal = () => {
-  passwordInput.value = ''
-  showPasswordModal.value = true
-}
-
-const closePasswordModal = () => {
-  // 关闭即丢弃输入，密文不在内存中留存
-  passwordInput.value = ''
-  showPasswordModal.value = false
-}
-
-const handleSavePassword = async () => {
-  if (passwordSaving.value) return
-  passwordSaving.value = true
-  try {
-    const success = await appStore.savePassword(passwordInput.value)
-    if (success) {
-      closePasswordModal()
-    }
-  } finally {
-    passwordSaving.value = false
-  }
-}
-
-/**
- * 清除密码：二次确认后执行。
- * 清除后系统回到未启用密码保护的状态（仅本机来源可访问），故必须显式确认
- */
-const handleClearPassword = () => {
-  dialog.warning({
-    title: t('settings.passwordClearConfirmTitle'),
-    content: t('settings.passwordClearConfirmContent'),
-    positiveText: t('common.confirm'),
-    negativeText: t('common.cancel'),
-    onPositiveClick: async () => {
-      await appStore.clearPassword()
-    }
-  })
-}
 
 const showAddProjectModal = ref(false)
-const newProjectForm = ref({ name: '', path: '' })
-const lastExtractedName = ref('')
+const showSettingsModal = ref(false)
 
 // 会话重命名相关状态与逻辑
 const editingCid = ref<number | null>(null)
@@ -900,137 +401,6 @@ const cancelEdit = () => {
 }
 
 const expandedNames = ref<number[]>([])
-
-// 系统设置相关状态
-const showSettingsModal = ref(false)
-const activeTab = ref('basic')
-const isAddingOrEditingProvider = ref(false)
-// 模型名称输入框引用：复制供应商时用于自动聚焦
-const modelNameInputRef = ref<any>(null)
-
-const openSettingsModal = () => {
-  showSettingsModal.value = true
-  isAddingOrEditingProvider.value = false
-  activeTab.value = 'basic'
-}
-
-const openAddProvider = () => {
-  providerStore.resetForm()
-  isAddingOrEditingProvider.value = true
-}
-
-const openEditProvider = (prov: any) => {
-  providerStore.handleEditProvider(prov)
-  isAddingOrEditingProvider.value = true
-}
-
-const openCopyProvider = (prov: any) => {
-  providerStore.handleCopyProvider(prov)
-  isAddingOrEditingProvider.value = true
-  // 复制场景强制改名：视图渲染完成后自动聚焦模型名称输入框，引导用户直接修改
-  nextTick(() => {
-    modelNameInputRef.value?.focus()
-  })
-}
-
-// 供应商列表按分组聚合：分组按首次出现顺序排列，组内条目保持原有顺序
-const groupedProviderList = computed(() => {
-  const groups: { group: string; items: any[] }[] = []
-  const groupIndexMap: Record<string, number> = {}
-  providerStore.providerList.forEach(p => {
-    const groupName = p.group || '默认供应商'
-    if (groupIndexMap[groupName] === undefined) {
-      groupIndexMap[groupName] = groups.length
-      groups.push({ group: groupName, items: [] })
-    }
-    groups[groupIndexMap[groupName]].items.push(p)
-  })
-  return groups
-})
-
-const cancelProviderEdit = () => {
-  providerStore.resetForm()
-  isAddingOrEditingProvider.value = false
-}
-
-const saveProviderAndReturn = async () => {
-  const group = providerStore.form.group ? providerStore.form.group.trim() : ''
-  const baseUrl = providerStore.form.baseUrl ? providerStore.form.baseUrl.trim() : ''
-  const apiKey = providerStore.form.apiKey ? providerStore.form.apiKey.trim() : ''
-  const modelName = providerStore.form.modelName ? providerStore.form.modelName.trim() : ''
-
-  const protocol = providerStore.form.protocol
-  if (!protocol) {
-    message.warning('请选择协议')
-    return
-  }
-  if (!group) {
-    message.warning('请输入分组名称')
-    return
-  }
-  if (!baseUrl) {
-    message.warning('请输入端点 (Base URL)')
-    return
-  }
-  // 校验 Base URL 格式：必须以 http:// 或 https:// 开头，防止保存无效端点后所有请求失败
-  if (!/^https?:\/\//.test(baseUrl)) {
-    message.warning('端点 (Base URL) 必须以 http:// 或 https:// 开头')
-    return
-  }
-  if (!apiKey) {
-    message.warning('请输入密钥 (API Key)')
-    return
-  }
-  if (!modelName) {
-    message.warning('请输入模型名称')
-    return
-  }
-  if (!providerStore.form.contextSize) {
-    message.warning('请输入上下文窗口大小')
-    return
-  }
-
-  // 校验分组名称：不能出现空格和特殊字符 (只允许字母、数字、下划线、连字符)
-  const groupRegex = /^[a-zA-Z0-9_-]+$/
-  if (!groupRegex.test(group)) {
-    message.warning('分组名称不能包含空格或特殊字符（仅允许字母、数字、下划线和连字符）')
-    return
-  }
-
-  // 校验模型名称：不能出现空格和大部分特殊字符，但允许 @, /, -, _, ., :, 数字, 字母
-  const modelRegex = /^[a-zA-Z0-9_./@:-]+$/
-  if (!modelRegex.test(modelName)) {
-    message.warning('模型名称不能包含空格或特殊字符（仅允许字母、数字及 _ . / @ : - 等常见符号）')
-    return
-  }
-
-  // 校验推理力度：枚举语义字段（如 low/medium/high/xhigh 等），仅允许字母、数字和连字符，
-  // 防止乱填内容原样拼进大模型请求体导致接口报错
-  if (providerStore.form.reasoningEffort && !/^[a-zA-Z0-9-]+$/.test(providerStore.form.reasoningEffort)) {
-    message.warning('推理力度不能包含空格或特殊字符（仅允许字母、数字和连字符，如 low / medium / high）')
-    return
-  }
-
-  // 复制模式强制改名：模型名与源条目相同时不允许保存
-  if (providerStore.copySourceModelName && modelName.toLowerCase() === providerStore.copySourceModelName.toLowerCase()) {
-    message.warning(t('sider.copyMustRename'))
-    return
-  }
-
-  // 同组同名即时查重：编辑模式排除自身，新增/复制模式全量比对
-  if (providerStore.isModelNameDuplicated(group, modelName, providerStore.isEditing ? providerStore.originalModelName : undefined)) {
-    message.warning(`模型 '${modelName}' 在分组 '${group}' 中已存在，不允许重复添加`)
-    return
-  }
-
-  providerStore.form.group = group
-  providerStore.form.baseUrl = baseUrl
-  providerStore.form.apiKey = apiKey
-  providerStore.form.modelName = modelName
-
-  await providerStore.handleSaveProvider()
-  isAddingOrEditingProvider.value = false
-}
 
 /**
  * 平滑滚动侧边栏容器，使当前活跃项目居中展现在视野视口内。
@@ -1099,44 +469,6 @@ const handleExpandedChange = (names: any[]) => {
   })
 
   expandedNames.value = newExpandedIds
-}
-
-const openAddProject = () => {
-  newProjectForm.value = { name: '', path: '' }
-  lastExtractedName.value = ''
-  showAddProjectModal.value = true
-}
-
-const onPathInput = (val: string) => {
-  if (!val) return
-  const cleaned = val.replace(/[\\/]+$/, '')
-  const lastSlash = Math.max(cleaned.lastIndexOf('/'), cleaned.lastIndexOf('\\'))
-  const dirName = lastSlash !== -1 ? cleaned.substring(lastSlash + 1) : cleaned
-  
-  if (!newProjectForm.value.name || newProjectForm.value.name === lastExtractedName.value) {
-    newProjectForm.value.name = dirName
-    lastExtractedName.value = dirName
-  }
-}
-
-const submitAddProject = async () => {
-  if (!newProjectForm.value.path.trim()) {
-    message.warning('请输入项目路径')
-    return false
-  }
-  try {
-    const saved = await projectStore.handleSaveProject({
-      name: newProjectForm.value.name.trim() || '未命名项目',
-      path: newProjectForm.value.path.trim()
-    })
-    showAddProjectModal.value = false
-    // 自动为新创建的项目拉起第一个会话，提供极佳的流程体验
-    await conversationStore.createConversation(saved.id)
-    return true
-  } catch (e: any) {
-    message.error(e.response?.data?.message || e.message || '保存项目失败')
-    return false
-  }
 }
 
 // 会话假分页相关状态与逻辑 (纯前端内存响应式变量，支持在项目列表中一键下拉选择)
@@ -1416,7 +748,7 @@ const initResizeEvents = () => {
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
     document.body.classList.add('sider-resizing')
-    
+
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
     e.preventDefault()
@@ -1440,6 +772,71 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 添加项目整条交互条带（高度 50px，底部分割线与主聊天框 header 严格对齐） */
+.add-project-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 50px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-color-card);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.add-project-bar:focus-visible {
+  outline: 1px solid var(--primary-color);
+  outline-offset: -1px;
+}
+
+.add-project-bar:hover {
+  z-index: 1;
+  background: linear-gradient(90deg, rgba(129, 182, 229, 0.03) 0%, var(--primary-bg-weak) 50%, rgba(129, 182, 229, 0.03) 100%);
+  border-bottom-color: var(--border-color-active);
+  box-shadow: inset 0 -1px 0 var(--border-color-active), inset 0 0 12px rgba(129, 182, 229, 0.08);
+}
+
+.add-project-bar:active {
+  background-color: rgba(129, 182, 229, 0.18);
+  transform: scale(0.995);
+}
+
+.add-project-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.add-project-icon {
+  width: 15px;
+  height: 15px;
+  color: var(--text-color-bright);
+  transition: color 0.25s ease;
+}
+
+.add-project-bar:hover .add-project-icon {
+  color: var(--primary-color);
+}
+
+.add-project-text {
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--text-color-bright);
+  transition: color 0.25s ease;
+}
+
+.add-project-bar:hover .add-project-text {
+  color: var(--primary-color);
+}
+
 .project-collapse-wrapper {
   padding: 8px 12px;
   overflow-y: auto;
@@ -1448,7 +845,7 @@ onUnmounted(() => {
 
 .empty-projects {
   text-align: center;
-  color: var(--text-color-secondary);
+  color: var(--text-color-muted);
   margin-top: 20px;
   font-size: 0.9rem;
 }
@@ -1456,12 +853,12 @@ onUnmounted(() => {
 .project-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #e3e3e7;
+  color: var(--text-color-bright);
   width: 100%;
 }
 
 .project-title.active-project {
-  color: #81b6e5;
+  color: var(--primary-color);
 }
 
 .project-actions {
@@ -1482,7 +879,7 @@ onUnmounted(() => {
 
 .empty-conversations {
   padding: 8px 16px;
-  color: #555568;
+  color: var(--text-color-muted);
   font-size: 0.8rem;
 }
 
@@ -1508,123 +905,6 @@ onUnmounted(() => {
 .delete-conversation-btn:hover {
   opacity: 1;
   color: var(--status-error);
-}
-.settings-main-view {
-  min-height: 360px;
-  display: flex;
-  flex-direction: column;
-}
-/* 系统设置弹窗中的顶部 Tab 栏及分割线优化 */
-:deep(.settings-main-view .n-tabs.n-tabs--top-placement) {
-  height: 100%;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-/* Tab 标签下方的水平分割线优化 */
-:deep(.settings-main-view .n-tabs.n-tabs--top-placement > .n-tabs-nav) {
-  margin-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
-  padding-bottom: 8px;
-}
-:deep(.settings-main-view .n-tabs.n-tabs--top-placement .n-tabs-pane-wrapper) {
-  flex: 1;
-}
-
-/* 各设置面板内容区域容器 */
-.settings-pane-content {
-  padding: 0 24px;
-  display: flex;
-  flex-direction: column;
-}
-.providers-pane-content {
-  padding: 16px 24px;
-}
-
-/* 设置项常规行式布局 */
-.setting-item-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-.setting-item-row--stack {
-  /* 默认保持与 setting-item-row 一致，移动端再做堆叠覆盖 */
-}
-
-/* 设置项标签容器 */
-.setting-item-label {
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.setting-item-label-simple {
-  font-weight: 500;
-}
-
-/* 控制控件类 */
-.setting-item-control.select-control {
-  width: 260px;
-}
-.setting-item-control.input-number-control {
-  width: 90px;
-}
-
-/* 设置项列式布局（如密码设置） */
-.setting-item-col {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-.setting-password-wrapper {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.setting-item-control.password-input {
-  flex: 1;
-}
-
-/* 移动端响应式适配 */
-@media (max-width: 768px) {
-  .settings-pane-content {
-    padding: 0 12px;
-  }
-  .providers-pane-content {
-    padding: 12px 16px;
-  }
-  .setting-item-row {
-    padding: 12px 0;
-  }
-  /* 移动端强制堆叠为垂直布局的行 */
-  .setting-item-row--stack {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  .setting-item-row--stack .setting-item-control.select-control {
-    width: 100%;
-  }
-  .setting-item-col {
-    padding: 12px 0;
-  }
-}
-
-/* 超窄屏幕适配（针对供应商项） */
-@media (max-width: 480px) {
-  .provider-setting-item {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 8px !important;
-    padding: 10px !important;
-  }
-  .provider-setting-item > div:last-child {
-    align-self: flex-end;
-  }
 }
 
 .custom-resize-handle {
@@ -1653,7 +933,7 @@ onUnmounted(() => {
 .custom-resize-handle.active-resizing .resize-line {
   width: 4px;
   background-color: var(--primary-color) !important;
-  box-shadow: 0 0 8px rgba(129, 182, 229, 0.6);
+  box-shadow: 0 0 8px var(--border-color-active);
 }
 
 .conversation-title {
@@ -1669,7 +949,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--text-color-muted);
   font-size: 0.8rem;
   opacity: 0.6;
   transition: opacity 0.2s, color 0.2s;
@@ -1681,7 +961,7 @@ onUnmounted(() => {
 
 .edit-conversation-btn:hover {
   opacity: 1 !important;
-  color: #ffffff !important;
+  color: var(--text-color-bright) !important;
 }
 
 .conversation-edit-wrapper {
@@ -1705,7 +985,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--primary-color);
+  color: var(--accent-color);
 }
 
 .spin-icon {
@@ -1724,14 +1004,14 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 4px 6px;
   margin-top: 6px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  border-top: 1px dashed var(--overlay-veil-strong);
   font-size: 0.72rem;
 }
 
 /* 批量管理样式扩展 */
 .active-batch-btn {
   color: var(--primary-color) !important;
-  background-color: rgba(129, 182, 229, 0.15) !important;
+  background-color: var(--primary-bg-weak) !important;
 }
 
 .conversation-item.batch-item {
@@ -1769,9 +1049,9 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 8px;
   margin-top: 8px;
-  background-color: rgba(0, 0, 0, 0.25);
+  background-color: var(--bg-color-inset);
   border-radius: 6px;
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border: 1px dashed var(--overlay-veil-strong);
 }
 
 .batch-action-left {
@@ -1782,7 +1062,7 @@ onUnmounted(() => {
 
 .selected-count-text {
   font-size: 0.75rem;
-  color: var(--primary-color);
+  color: var(--accent-color);
   font-weight: 500;
 }
 
@@ -1793,18 +1073,18 @@ onUnmounted(() => {
 
 .page-size-selector {
   font-size: 0.72rem;
-  color: #a0a0a5;
+  color: var(--text-color-muted);
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--overlay-veil);
   transition: all 0.2s ease;
   white-space: nowrap;
 }
 
 .page-size-selector:hover {
   color: var(--primary-color);
-  background-color: rgba(129, 182, 229, 0.15);
+  background-color: var(--primary-bg-weak);
 }
 
 .pagination-right {
@@ -1815,14 +1095,14 @@ onUnmounted(() => {
 
 .page-num-text {
   font-size: 0.72rem;
-  color: #a0a0a5;
+  color: var(--text-color-muted);
   padding: 0 2px;
 }
 
 .page-arrow-btn {
   background: transparent;
   border: none;
-  color: #a0a0a5;
+  color: var(--text-color-muted);
   cursor: pointer;
   padding: 0 4px;
   font-size: 0.85rem;
@@ -1832,8 +1112,8 @@ onUnmounted(() => {
 }
 
 .page-arrow-btn:hover:not(:disabled) {
-  color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-color-bright);
+  background-color: var(--overlay-veil-strong);
 }
 
 .page-arrow-btn:disabled {
