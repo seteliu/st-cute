@@ -1,7 +1,7 @@
 {
   "name": "st-cute-web",
   "private": true,
-  "version": "0.2.4",
+  "version": "0.2.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "axios": "^1.18.1",
+    "dompurify": "^3.4.15",
     "marked": "^18.0.6",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",

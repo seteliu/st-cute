@@ -1,6 +1,6 @@
 [package]
 name = "st-cute-desktop"
-version = "0.2.4"
+version = "0.2.5"
 description = "st-cute desktop shell wrapper"
 authors = ["stioc"]
 edition = "2021"

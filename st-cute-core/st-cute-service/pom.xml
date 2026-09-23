@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.stioc</groupId>
         <artifactId>st-cute-core</artifactId>
-        <version>0.2.4</version>
+        <version>0.2.5</version>
         <!-- 聚合根 pom 位于上级目录 -->
         <relativePath>../pom.xml</relativePath>
     </parent>
@@ -93,6 +93,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Boot 4 模块化拆分：@WebMvcTest 切片注解与 MVC 测试自动配置移至独立模块 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

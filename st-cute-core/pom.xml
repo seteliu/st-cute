@@ -14,7 +14,7 @@
     <!-- 后端聚合根：仅负责模块聚合与三方依赖版本统一，不承载业务代码 -->
     <groupId>com.stioc</groupId>
     <artifactId>st-cute-core</artifactId>
-    <version>0.2.4</version>
+    <version>0.2.5</version>
     <packaging>pom</packaging>
     <name>st-cute-core</name>
     <description>ST-Cute 后端聚合根（引擎层 st-cute-engine + 宿主服务层 st-cute-service）</description>
