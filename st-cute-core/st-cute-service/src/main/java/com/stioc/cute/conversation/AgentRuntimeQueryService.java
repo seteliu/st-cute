@@ -4,8 +4,13 @@ import com.stioc.cute.conversation.types.ActiveLlmCallVo;
 import com.stioc.cute.conversation.types.ActiveProcessVo;
 import com.stioc.cute.engine.AgentEngine;
 import com.stioc.cute.engine.loop.core.AgentContext;
+import com.stioc.cute.engine.store.MessageStore;
 import com.stioc.cute.engine.store.types.Conversation;
 import com.stioc.cute.engine.store.types.ConversationPatch;
+import com.stioc.cute.engine.store.types.Message;
+import com.stioc.cute.engine.store.types.MessageQuery;
+import com.stioc.cute.engine.store.types.MessageRole;
+import com.stioc.cute.engine.store.types.SortDirection;
 import com.stioc.cute.runtime.loop.RuntimeContext;
 import com.stioc.cute.tool.commandtool.ActiveProcess;
 import jakarta.annotation.Resource;
@@ -13,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -192,6 +199,43 @@ public class AgentRuntimeQueryService {
             });
         }
         return resultList;
+    }
+
+    /**
+     * 统计指定会话对大模型可见消息的累计提示词缓存占比。
+     * <p>
+     * 逐轮真实用量由引擎统一记录在该轮 ASSISTANT 消息行上（每轮输入含全部历史，逐行累加会重复计数，
+     * 故分母取 SUM(input)、分子取 SUM(cached) 再做整体相除——比例恒小于等于逐轮最大值，语义正确）。
+     * 查询走 light 轻量投影，仅取两个 bigint 列，规避 content 大 TEXT 字段的溢出页 I/O。
+     * </p>
+     *
+     * @param cid 会话 ID
+     * @return 缓存占比（小数制，保留 4 位小数，如 0.8765）；无可见消息或累计输入为 0 时返回 0
+     */
+    public BigDecimal calculateCacheRatio(Long cid) {
+        List<Message> rows = agentEngine.getMessageStore().listByQuery(MessageQuery.builder()
+                .cid(cid)
+                .visibleToModel(true)
+                .role(MessageRole.ASSISTANT)
+                .light(true)
+                .sortField("id")
+                .sortDirection(SortDirection.ASC)
+                .build());
+        long totalInput = 0;
+        long totalCached = 0;
+        for (Message row : rows) {
+            if (row.getInputTokens() != null) {
+                totalInput += row.getInputTokens();
+            }
+            if (row.getCachedTokens() != null) {
+                totalCached += row.getCachedTokens();
+            }
+        }
+        if (totalInput <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(totalCached)
+                .divide(BigDecimal.valueOf(totalInput), 4, RoundingMode.HALF_UP);
     }
 
     /**

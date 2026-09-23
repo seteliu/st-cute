@@ -270,9 +270,11 @@ public class MessageStoreImpl implements MessageStore {
         }
 
         // ── 1. 轻量投影控制 ──
+        // token 两列供「会话缓存比」等统计类轻查询聚合使用（比例分子分母），随边界小字段一并取出
         if (query.isLight()) {
             wrapper.select(MessageEntity::getId, MessageEntity::getParentMessageId,
-                    MessageEntity::getRole, MessageEntity::getStatus);
+                    MessageEntity::getRole, MessageEntity::getStatus,
+                    MessageEntity::getInputTokens, MessageEntity::getCachedTokens);
         }
 
         // ── 2. 实体标准属性对齐 ──

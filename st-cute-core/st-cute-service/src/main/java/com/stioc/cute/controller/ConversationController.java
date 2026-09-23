@@ -14,6 +14,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -155,5 +156,13 @@ public class ConversationController {
     @GetMapping("/llm-calls")
     public Result<List<ActiveLlmCallVo>> getActiveLlmCalls(@RequestParam Long id) {
         return Result.success(agentRuntimeQueryService.listActiveLlmCalls(id));
+    }
+
+    /**
+     * 统计指定会话对大模型可见消息的累计缓存占比（小数制，保留 4 位小数）
+     */
+    @GetMapping("/cache-ratio")
+    public Result<BigDecimal> getCacheRatio(@RequestParam Long id) {
+        return Result.success(agentRuntimeQueryService.calculateCacheRatio(id));
     }
 }
