@@ -236,8 +236,10 @@ const contentStyle = computed<CSSProperties>(() => {
 
 <style scoped>
 .folded-message-card {
-  width: fit-content;
-  max-width: 85%;
+  /* 宽度收缩行为交给父级 .folded-wrapper 的 flex 对齐（与助手消息 .message 同机制），此处不再显式声明 fit-content */
+  /* 上限统一消费全局变量 --msg-max-width（桌面 85% / 移动端媒体查询放宽到 96%），
+     与助手气泡 (.message) 单一来源对齐，杜绝两端值各自为政导致右缘错位、摘要被提前挤换行 */
+  max-width: var(--msg-max-width, 85%);
   margin: 6px 0;
   box-sizing: border-box;
 }
@@ -246,17 +248,19 @@ const contentStyle = computed<CSSProperties>(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: var(--overlay-veil);
+  background-color: var(--bg-color-card);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 8px 16px;
+  box-shadow: var(--shadow-card);
+  /* 左右 12px 与助手气泡横向留白对齐；fit-content 收缩下 space-between 本无多余空间可分，16px 的 gap 属纯浪费，收紧到 8px 避免窄屏把摘要文字顶到临界换行 */
+  padding: 8px 12px;
   box-sizing: border-box;
   transition: border-color 0.25s, background-color 0.25s;
-  gap: 16px;
+  gap: 8px;
 }
 
 .folded-content:hover {
-  background-color: var(--overlay-veil-strong);
+  background-color: var(--primary-bg-weak);
   border-color: var(--primary-color-hover);
 }
 
@@ -265,6 +269,7 @@ const contentStyle = computed<CSSProperties>(() => {
   align-items: center;
   gap: 8px;
   font-size: 0.85rem;
+  /* 折叠条摘要文字刻意用 muted 弱化色：仅是统计性提示，不与正文消息抢视觉层级 */
   color: var(--text-color-muted);
 }
 
@@ -337,7 +342,10 @@ const contentStyle = computed<CSSProperties>(() => {
   width: 100% !important;
   max-width: 100% !important;
   background-color: var(--bg-color-modal) !important;
-  color: var(--text-color-bright) !important;
+  /* 卡片默认文字色刻意用正文色而非高亮色：弹窗内复用的助手消息正文（.msg-content 无显式 color，就近继承）
+     若继承到高亮白会明显亮过主会话里的同一批消息（主会话继承 body 的正文色）。
+     标题/副标题等需要更高层级的元素均已各自显式声明颜色，不受此默认值影响 */
+  color: var(--text-color) !important;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-color) !important;

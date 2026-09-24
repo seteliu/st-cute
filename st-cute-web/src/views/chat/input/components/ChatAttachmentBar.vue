@@ -99,7 +99,7 @@ const emit = defineEmits<{
 }
 
 .staged-attachments-bar::-webkit-scrollbar-thumb {
-  background-color: var(--overlay-veil-strong);
+  background-color: var(--scrollbar-thumb);
   border-radius: 2px;
 }
 

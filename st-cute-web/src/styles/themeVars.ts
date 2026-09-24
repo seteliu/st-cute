@@ -98,6 +98,19 @@ export interface ThemeVars {
   /** 登录页专属：深空径向渐变底（品牌氛围背景，明暗主题均使用深底） */
   loginBgStart: string
   loginBgEnd: string
+
+  /** 登录卡片专属：明暗主题视觉差异大（深色厚重实底毛玻璃 / 浅色轻盈白毛玻璃），
+   *  不复用共享 overlay 令牌，避免为迁就登录页调值而牵动聊天输入区等同源引用 */
+  loginCardBg: string
+  loginCardBorder: string
+  loginCardShadow: string
+  /** 登录输入框专属底色：深色为半透深底（毛玻璃透感），浅色为纯白实底 */
+  loginInputBg: string
+
+  /** 滚动条专属：thumb 常态与悬浮档。深色走白叠加，浅色为 slate 灰，
+   *  与共享的 overlayVeil 解耦（浅色下 veil 令牌过淡，白底上不可见） */
+  scrollbarThumb: string
+  scrollbarThumbHover: string
 }
 
 /** 主题名（登记处）：新主题在此扩展 */
@@ -122,7 +135,9 @@ const DARK_THEME: ThemeVars = {
   bgCode: '#0b0b0e',
 
   textBright: '#ffffff',
-  textBase: '#e4e4eb',
+  // 正文色刻意调暗并去色相：由原 #e4e4eb（冷紫调）改为纯中性灰 #dfdfdf，降低长文阅读刺眼感，
+  // 属刻意取舍（不再跟随主题的冷紫色相），勿随意调回
+  textBase: '#dfdfdf',
   textMuted: '#a8a8b2',
   textFaint: '#787882',
   textOnPrimary: '#101014',
@@ -159,68 +174,89 @@ const DARK_THEME: ThemeVars = {
   shadowCard: '0 8px 32px rgba(0, 0, 0, 0.25)',
   shadowOverlay: '0 12px 40px rgba(0, 0, 0, 0.45)',
 
+  // 登录卡片（深色）：厚重实底毛玻璃 + 白色叠加亮边 + 深投影
+  loginCardBg: 'rgba(20, 20, 25, 0.76)',
+  loginCardBorder: 'rgba(255, 255, 255, 0.12)',
+  loginCardShadow: '0 20px 50px rgba(0, 0, 0, 0.65)',
+  loginInputBg: 'rgba(16, 16, 20, 0.6)',
+
+  // 滚动条（深色）：白叠加档位，深底上低调不抢视觉；与悬浮档成对取值
+  scrollbarThumb: 'rgba(255, 255, 255, 0.12)',
+  scrollbarThumbHover: 'rgba(255, 255, 255, 0.35)',
+
   loginBgStart: '#1b2838',
   loginBgEnd: '#0d131a'
 }
 
-/** 浅色主题（预留占位：多主题功能上线时补全调优） */
+/** 浅色白色主题：小清新、轻盈通透、高质感冷白雪青底与微透浅紫胶囊 */
 const LIGHT_THEME: ThemeVars = {
-  primary: '#3b82c4',
-  primaryHover: '#4f93d2',
-  primaryPressed: '#2f6ba3',
-  primaryBgWeak: 'rgba(59, 130, 196, 0.12)',
-  primaryBgSolid: '#e3eef7',
-  accent: '#7a7ab8',
-  accentBgWeak: 'rgba(122, 122, 184, 0.12)',
+  primary: '#2575c0',
+  primaryHover: '#398ad6',
+  primaryPressed: '#1d62a4',
+  primaryBgWeak: 'rgba(37, 117, 192, 0.08)',
+  primaryBgSolid: '#e8f3fc',
+  accent: '#6355c7',
+  accentBgWeak: 'rgba(99, 85, 199, 0.06)',
 
-  bgBase: '#f5f6f8',
+  bgBase: '#ffffff',
   bgCard: '#ffffff',
-  bgCardActive: '#e3eef7',
+  bgCardActive: '#e8f3fc',
   bgElevated: '#ffffff',
   bgModal: '#ffffff',
-  bgInset: '#eef0f3',
-  bgCode: '#f0f1f4',
+  bgInset: '#f8fafc',
+  bgCode: '#f8fafc',
 
-  textBright: '#1a1c20',
-  textBase: '#3a3d44',
-  textMuted: '#6b6f78',
-  textFaint: '#9a9ea8',
+  // 文字四档统一中性灰阶：纯黑 → #1b1b1b → #595959 → #8c8c8c，逐档抬亮（去 slate 蓝调）
+  textBright: '#000000',
+  textBase: '#1b1b1b',
+  textMuted: '#595959',
+  textFaint: '#8c8c8c',
   textOnPrimary: '#ffffff',
 
-  borderBase: '#dcdfe4',
-  borderActive: 'rgba(59, 130, 196, 0.45)',
+  borderBase: '#e2e8f0',
+  borderActive: 'rgba(37, 117, 192, 0.35)',
 
-  statusSuccess: '#2e9e5b',
-  statusError: '#c4384f',
+  statusSuccess: '#209a54',
+  statusError: '#c9354d',
   statusErrorHover: '#ea3a5c',
-  statusWarning: '#c4384f',
-  statusInfo: '#3b82c4',
-  successGreen: '#2e9e5b',
+  statusWarning: '#c9354d',
+  statusInfo: '#2575c0',
+  successGreen: '#209a54',
   warningAmber: '#d98a00',
-  diffAddBg: 'rgba(46, 160, 67, 0.18)',
-  diffRemoveBg: 'rgba(248, 81, 73, 0.15)',
-  diffAddFg: '#2a7f3d',
-  diffRemoveFg: '#c7402f',
+  diffAddBg: 'rgba(46, 160, 67, 0.12)',
+  diffRemoveBg: 'rgba(248, 81, 73, 0.10)',
+  diffAddFg: '#237834',
+  diffRemoveFg: '#c23838',
 
-  statusErrorBg: '#f9e6e9',
-  statusErrorBgWeak: 'rgba(234, 58, 92, 0.16)',
+  statusErrorBg: 'rgba(201, 53, 77, 0.06)',
+  statusErrorBgWeak: 'rgba(234, 58, 92, 0.10)',
   statusErrorBgSolid: '#fbebed',
-  statusSuccessBg: '#e3f2e9',
-  warningAmberBg: 'rgba(217, 138, 0, 0.12)',
-  statusErrorSoft: 'rgba(234, 58, 92, 0.28)',
-  primarySoft: 'rgba(59, 130, 196, 0.2)',
+  statusSuccessBg: 'rgba(32, 154, 84, 0.08)',
+  warningAmberBg: 'rgba(217, 138, 0, 0.08)',
+  statusErrorSoft: 'rgba(234, 58, 92, 0.20)',
+  primarySoft: 'rgba(37, 117, 192, 0.16)',
 
-  overlayVeil: 'rgba(0, 0, 0, 0.05)',
-  overlayVeilStrong: 'rgba(0, 0, 0, 0.12)',
-  overlayVeilMax: 'rgba(0, 0, 0, 0.3)',
-  overlayBgGlassy: 'rgba(255, 255, 255, 0.72)',
-  overlayBgGlassyStrong: 'rgba(255, 255, 255, 0.88)',
+  overlayVeil: 'rgba(15, 23, 42, 0.02)',
+  overlayVeilStrong: 'rgba(15, 23, 42, 0.05)',
+  overlayVeilMax: 'rgba(15, 23, 42, 0.12)',
+  overlayBgGlassy: 'rgba(255, 255, 255, 0.96)',
+  overlayBgGlassyStrong: 'rgba(255, 255, 255, 0.98)',
 
-  shadowCard: '0 4px 16px rgba(0, 0, 0, 0.08)',
-  shadowOverlay: '0 12px 32px rgba(0, 0, 0, 0.14)',
+  shadowCard: '0 2px 10px -2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04)',
+  shadowOverlay: '0 12px 36px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04)',
 
-  loginBgStart: '#1b2838',
-  loginBgEnd: '#0d131a'
+  // 登录卡片（浅色）：轻盈白毛玻璃，与深色的厚重实底形成鲜明主题差异（故不复用共享 overlay 令牌）
+  loginCardBg: 'rgba(255, 255, 255, 0.98)',
+  loginCardBorder: '#e2e8f0',
+  loginCardShadow: '0 12px 36px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04)',
+  loginInputBg: '#ffffff',
+
+  // 滚动条（浅色）：中性灰 #a6a6a6 与全站文字灰阶同调，白底合成约 #dbdbdb，轻盈克制；悬浮提亮 0.20
+  scrollbarThumb: 'rgba(166, 166, 166, 0.40)',
+  scrollbarThumbHover: 'rgba(166, 166, 166, 0.60)',
+
+  loginBgStart: '#ffffff',
+  loginBgEnd: '#f8fafd'
 }
 
 /** 全部主题注册表 */
@@ -278,7 +314,13 @@ const CSS_VAR_MAP: Array<{ cssVar: string; tokenKey: keyof ThemeVars }> = [
   { cssVar: '--shadow-card', tokenKey: 'shadowCard' },
   { cssVar: '--shadow-overlay', tokenKey: 'shadowOverlay' },
   { cssVar: '--login-bg-start', tokenKey: 'loginBgStart' },
-  { cssVar: '--login-bg-end', tokenKey: 'loginBgEnd' }
+  { cssVar: '--login-bg-end', tokenKey: 'loginBgEnd' },
+  { cssVar: '--login-card-bg', tokenKey: 'loginCardBg' },
+  { cssVar: '--login-card-border', tokenKey: 'loginCardBorder' },
+  { cssVar: '--login-card-shadow', tokenKey: 'loginCardShadow' },
+  { cssVar: '--login-input-bg', tokenKey: 'loginInputBg' },
+  { cssVar: '--scrollbar-thumb', tokenKey: 'scrollbarThumb' },
+  { cssVar: '--scrollbar-thumb-hover', tokenKey: 'scrollbarThumbHover' }
 ]
 
 /**
@@ -340,10 +382,10 @@ export function buildNaiveThemeOverrides(vars: ThemeVars): Record<string, any> {
       }
     },
     Button: {
-      textColorError: vars.textBright,
-      textColorHoverError: vars.textBright,
-      textColorPressedError: vars.textBright,
-      textColorFocusError: vars.textBright
+      textColorError: '#ffffff',
+      textColorHoverError: '#ffffff',
+      textColorPressedError: '#ffffff',
+      textColorFocusError: '#ffffff'
     },
     Modal: {
       color: vars.bgModal,

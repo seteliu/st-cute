@@ -18,7 +18,9 @@
   --bg-color-code: #0b0b0e;
 
   --text-color-bright: #ffffff;
-  --text-color: #e4e4eb;
+  /* 正文刻意调暗并去色相（原 #e4e4eb 冷紫调 → 纯中性灰 #dfdfdf）：降低长文阅读刺眼感，
+     真实值由 themeVars.ts DARK_THEME 启动时覆盖，勿随意调回 */
+  --text-color: #dfdfdf;
   --text-color-muted: #a8a8b2;
   --text-color-faint: #787882;
   --text-color-dark: #101014;
@@ -55,6 +57,16 @@
   --shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.45);
   --login-bg-start: #1b2838;
   --login-bg-end: #0d131a;
+  --login-card-bg: rgba(20, 20, 25, 0.76);
+  --login-card-border: rgba(255, 255, 255, 0.12);
+  --login-card-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+  --login-input-bg: rgba(16, 16, 20, 0.6);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
+
+  /* 会话流宽度上限单一来源：助手/用户气泡 (.message) 与折叠消息卡片 (.folded-message-card) 共用。
+     移动端由底部 @media 断点统一改变量值放宽到 96%，消费方无需各自重复媒体查询 */
+  --msg-max-width: 85%;
 }
 
 html, body, #app {
@@ -123,12 +135,24 @@ body.sider-resizing .tool-calls-container {
   background-color: var(--bg-color-card-active);
 }
 
+/* 当前激活会话的标题用高亮色：与背景的激活态呼应（对齐项目名称 active-project 的处理） */
+.conversation-item.active .conversation-title {
+  color: var(--text-color-bright);
+}
+
 .conversation-title {
   font-size: 0.9rem;
-  color: var(--text-color-bright);
+  /* 常态刻意用正文色而非高亮色：侧边栏条目不抢焦点，悬浮时才提亮（见下方 hover 规则） */
+  color: var(--text-color);
+  transition: color 0.2s ease;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 会话条目悬浮时标题提亮为高亮色，强化可点击反馈 */
+.conversation-item:hover .conversation-title {
+  color: var(--text-color-bright);
 }
 
 .conversation-meta {
@@ -214,7 +238,8 @@ body.sider-resizing .tool-calls-container {
 .message {
   display: flex;
   gap: 16px;
-  max-width: 85%;
+  /* 上限统一取全局变量（桌面 85%，移动端媒体查询改变量为 96%），与折叠卡片同源对齐 */
+  max-width: var(--msg-max-width);
   align-items: flex-start;
 }
 
@@ -266,8 +291,8 @@ body.sider-resizing .tool-calls-container {
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: var(--overlay-veil);
-  border: 1px solid var(--overlay-veil);
+  background-color: var(--accent-bg-weak);
+  border: 1px solid var(--accent-bg-weak);
   border-left: 3px solid var(--accent-color);
   padding: 4px 10px;
   margin-bottom: 8px;
@@ -537,12 +562,14 @@ body.sider-resizing .tool-calls-container {
   font-family: monospace;
   font-size: 0.82rem;
   color: var(--text-color);
-  background-color: var(--bg-color);
+  background-color: var(--bg-color-card);
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   border: 1px solid var(--border-color);
   gap: 8px;
 }
+
+/* 工具行刻意不做悬浮颜色反馈（无边框变色 / 背景泛蓝）：消息流中工具行数量多，批量泛蓝过喧闹 */
 
 .tool-status-dot {
   width: 8px;
@@ -614,7 +641,7 @@ body.sider-resizing .tool-calls-container {
   font-size: 0.85rem;
   border: 1px dashed var(--border-color);
   text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-card);
 }
 
 .file-item {
@@ -634,7 +661,9 @@ body.sider-resizing .tool-calls-container {
 /* Markdown 渲染精美全局样式（引用设计令牌）    */
 /* ========================================== */
 .msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4, .msg-content h5, .msg-content h6 {
-  color: var(--text-color-bright);
+  /* 标题刻意用品牌辅助紫而非高亮白：消息正文里标题是结构标识，用 accent 紫强化层级与氛围，
+     与思考行前缀、BRANCH 标签等结构元素的用色习惯一致 */
+  color: var(--accent-color);
   margin-top: 14px;
   margin-bottom: 8px;
   font-weight: 600;
@@ -675,10 +704,11 @@ body.sider-resizing .tool-calls-container {
 }
 
 .msg-content code {
-  background-color: var(--border-color);
+  background-color: var(--accent-bg-weak);
   color: var(--accent-color);
-  padding: 2px 6px;
+  padding: 1.5px 5px;
   border-radius: 4px;
+  border: 1px solid var(--accent-bg-weak);
   font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
   font-size: 0.85em;
 }
@@ -697,6 +727,7 @@ body.sider-resizing .tool-calls-container {
   color: var(--text-color);
   padding: 0;
   border-radius: 0;
+  border: none;
   font-size: 0.85rem;
   line-height: 1.5;
 }
@@ -799,9 +830,13 @@ body.sider-resizing .tool-calls-container {
     gap: 4px !important;
   }
 
+  /* 移动端刻意加宽标题展示上限：右侧上下文触发文案已精简为「上下文：x.x%」仅百分比形式
+     （见 ChatContainer.vue 移动端 token-metrics-tooltip），特意把省出的宽度让给会话标题，
+     长标题可多显示数个字符；小屏时 flex 收缩 + 省略号自动兜底，max-width 仅作上限不会溢出。
+     这是移动端的宽度分配取舍，请勿随意改回小值 */
   .chat-header h3 {
     font-size: 1rem !important;
-    max-width: 120px;
+    max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -830,9 +865,11 @@ body.sider-resizing .tool-calls-container {
     color: var(--text-color-bright);
   }
 
-  /* 在移动端将消息卡片最大宽度拓宽到 96%，减少右侧留白以充分展示文本 */
-  .message {
-    max-width: 96% !important;
+  /* 移动端将会话流宽度上限统一放宽到 96%，减少右侧留白以充分展示文本。
+     助手气泡 (.message) 与折叠卡片 (.folded-message-card) 均消费 var(--msg-max-width)，
+     此处只需改变量本身，两端自动同宽，无需再逐个选择器放行 */
+  :root {
+    --msg-max-width: 96%;
   }
 
   /* 移动端下移除 Naive UI Modal 容器的默认 padding，以使全屏弹窗紧贴边缘 */
@@ -852,18 +889,18 @@ body.sider-resizing .tool-calls-container {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--overlay-veil-strong);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--overlay-veil-max);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Firefox 滚动条兼容 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--overlay-veil-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 /* 强制消除某些浏览器或第三方插件在 input 处于 invalid（如低于 50000 最小值）时自动添加的文字删除线/中划线样式 */
@@ -875,10 +912,12 @@ input:invalid,
 }
 
 
-/* 修复 Naive UI 下拉选择框（NSelect）在 Windows 系统字体度量下文字视觉偏下、未与右侧箭头垂直居中的问题 */
-.n-base-selection-label .n-base-selection-input,
-.n-base-selection-label .n-base-selection-placeholder,
-.n-base-selection-label .n-base-selection-overlay {
+/* 修复 Naive UI 下拉选择框（NSelect）在 Windows 系统字体度量下文字视觉偏下、未与右侧箭头垂直居中的问题。
+   仅在 main.ts 启动时 UA 检测为 Windows 后挂载的 platform-windows 根类下生效，
+   macOS / Linux / 移动端浏览器不受影响（其字体度量无此偏下问题，补偿反而会造成文字偏上） */
+.platform-windows .n-base-selection-label .n-base-selection-input,
+.platform-windows .n-base-selection-label .n-base-selection-placeholder,
+.platform-windows .n-base-selection-label .n-base-selection-overlay {
   transform: translateY(-1.5px) !important;
 }
 
@@ -907,5 +946,49 @@ input:invalid,
 .approval-deny-btn:hover {
   background-color: var(--status-error-soft) !important;
   color: var(--text-color-bright) !important;
+}
+
+/* ========================================================= */
+/* 白色主题（Light Theme）专属精细化视觉优化                   */
+/* ========================================================= */
+
+/* 1. 聊天信息卡片：弱化边框，增强立体微阴影，视觉上轻盈悬浮托举 */
+[data-theme="light"] .msg-content {
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03), 0 8px 24px -4px rgba(15, 23, 42, 0.05);
+}
+
+/* 2. 折叠卡片与信息卡片悬浮感保持同频柔和托举 */
+[data-theme="light"] .folded-content {
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03), 0 6px 18px -2px rgba(15, 23, 42, 0.04);
+}
+
+/* 3. 工具调用卡片：此前遗漏，浅色下仅实色描边无托举阴影，与相邻的信息/折叠卡片视觉割裂；
+      补齐同款弱化描边与柔和托举，浅色主题三类消息卡片（气泡/折叠/工具）视觉统一。
+      box-shadow 无同名属性冲突必生效；border 若被组件内 scoped 同特异性规则按加载序覆盖，
+      退化到 var(--border-color)（浅色下同为浅石板灰），视觉几乎无差 */
+[data-theme="light"] .tool-calls-container {
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03), 0 6px 18px -2px rgba(15, 23, 42, 0.04);
+}
+
+/* 4. 思考过程条：消除灰暗感，改用极淡雅纯净紫白雪底与柔和浅紫描边 */
+[data-theme="light"] .thought-row {
+  background-color: #fafaff;
+  border: 1px solid #eeeffe;
+  border-left: 3px solid var(--accent-color);
+  box-shadow: 0 1px 2px rgba(99, 85, 199, 0.04);
+}
+
+[data-theme="light"] .thought-text-fixed {
+  color: #4d4d4d;
+}
+
+/* 5. 服务连通状态指示灯：取消跳动波纹动效，保持静止常亮 */
+[data-theme="light"] .chat-status .n-badge .n-badge-dot::after,
+[data-theme="light"] .chat-status .n-badge--processing::after {
+  display: none !important;
+  animation: none !important;
 }
 

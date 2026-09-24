@@ -4,10 +4,18 @@ import naive from 'naive-ui'
 import App from './App.vue'
 import router from './router'
 import { applyTheme } from './styles/themeVars'
+import { currentTheme } from './styles/theme'
 import '@/assets/styles/main.css'
 
-// 应用默认主题变量：CSS 自定义属性写入文档根，全站 var(--xxx) 引用即生效（多主题切换的单一入口）
-applyTheme('dark')
+// 应用初始主题变量：优先采用本地快照（默认为 dark），确保首屏在网络请求前以正确主题就位
+applyTheme(currentTheme.value)
+
+// 平台标记：NSelect 文字垂直居中的 -1.5px 补偿仅针对 Windows 系统字体度量（文字视觉偏下），
+// 启动时按 UA 检测在根节点挂 platform-windows 类，main.css 的补偿规则仅在该类下生效，
+// 避免 macOS/Linux 与移动端被错误上移（UA 在各平台浏览器中仍稳定携带系统标识，足够做此粒度判定）
+if (/Windows/i.test(navigator.userAgent)) {
+  document.documentElement.classList.add('platform-windows')
+}
 
 const app = createApp(App)
 

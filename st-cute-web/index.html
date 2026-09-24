@@ -1,10 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" style="background-color: #101014; color: #dfdfdf;">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ST-Cute Dashboard</title>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('st-cute-theme');
+          if (t === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+            document.documentElement.style.backgroundColor = '#ffffff';
+            document.documentElement.style.color = '#1b1b1b';
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

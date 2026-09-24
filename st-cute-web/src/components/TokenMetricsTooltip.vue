@@ -7,7 +7,8 @@
         </slot>
       </span>
     </template>
-    <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: var(--text-color-bright);">
+    <!-- 弹层正文刻意用正文色而非高亮色：明细数据为主阅读内容，层级交给加粗标题与紫色缓存比行区分 -->
+    <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: var(--text-color);">
       <div style="font-weight: bold; border-bottom: 1px solid var(--border-color); margin-bottom: 6px; padding-bottom: 4px;">
         {{ displayTitle }}
       </div>
@@ -35,7 +36,7 @@ const props = withDefaults(
     labelPrefix?: string
     /** 弹层触发方式：PC 悬浮 / 移动端点击 */
     trigger?: 'hover' | 'click'
-    /** 会话 ID：传入才会启用「总计会话缓存比」懒查询 */
+    /** 会话 ID：传入才会启用「累计缓存占比」懒查询 */
     cid?: number
     /** 窗口上限（token 数）：无值时隐藏「当前窗口」行 */
     contextLimit?: number | null
@@ -61,7 +62,7 @@ const windowPercentage = computed<string | null>(() => {
   return ((totalTokens.value / limit) * 100).toFixed(1)
 })
 
-// ── 总计会话缓存比：弹层弹出才查询，不缓存结果（数据随对话增长变化，每次弹出取最新值）。
+// ── 累计缓存占比：弹层弹出才查询，不缓存结果（数据随对话增长变化，每次弹出取最新值）。
 // 后端返回小数制 4 位小数，此处统一转为百分比 1 位小数展示（换算仅前端处理） ──
 const tooltipVisible = ref(false)
 const cacheRatioLoading = ref(false)

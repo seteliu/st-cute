@@ -339,7 +339,10 @@ watch(
   width: 100%;
   max-width: 100%;
   background-color: var(--bg-color-modal) !important;
-  color: var(--text-color-bright) !important;
+  /* 卡片默认文字色刻意用正文色而非高亮色：弹窗内复用的助手消息正文（.msg-content 无显式 color，就近继承）
+     若继承到高亮白会明显亮过主会话里的同一批消息（与 FoldedMessageCard 折叠详情弹窗同款问题与修法）。
+     标题等需要更高层级的元素均已各自显式声明颜色，不受此默认值影响 */
+  color: var(--text-color) !important;
   border: 1px solid var(--border-color) !important;
   box-shadow: var(--shadow-overlay) !important;
   transition: all 0.3s ease;

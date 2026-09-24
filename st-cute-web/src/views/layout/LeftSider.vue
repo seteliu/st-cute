@@ -794,15 +794,31 @@ onUnmounted(() => {
   outline-offset: -1px;
 }
 
-.add-project-bar:hover {
-  z-index: 1;
-  background: linear-gradient(90deg, rgba(129, 182, 229, 0.03) 0%, var(--primary-bg-weak) 50%, rgba(129, 182, 229, 0.03) 100%);
-  border-bottom-color: var(--border-color-active);
-  box-shadow: inset 0 -1px 0 var(--border-color-active), inset 0 0 12px rgba(129, 182, 229, 0.08);
+/* 悬浮特效：底部光条从中间往两边展开。
+   ::after 光条 2px 主题色实线 + 外发光，scaleX 从 0 → 1 展开（transform 动画走合成层，
+   性能优于过渡 width）；条带三边被相邻元素遮挡，静态边框变色/inset 亮线反馈不可见，
+   已由光条取代，悬浮反馈仅此一项（容器自带 overflow: hidden，光条辉光在条带内自然裁切） */
+.add-project-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--primary-color);
+  box-shadow: 0 0 8px var(--primary-color);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.add-project-bar:hover::after {
+  transform: scaleX(1);
 }
 
 .add-project-bar:active {
-  background-color: rgba(129, 182, 229, 0.18);
+  background-color: var(--primary-bg-weak);
   transform: scale(0.995);
 }
 
@@ -818,23 +834,13 @@ onUnmounted(() => {
   width: 15px;
   height: 15px;
   color: var(--text-color-bright);
-  transition: color 0.25s ease;
-}
-
-.add-project-bar:hover .add-project-icon {
-  color: var(--primary-color);
 }
 
 .add-project-text {
   font-size: 0.88rem;
-  font-weight: 500;
+  font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text-color-bright);
-  transition: color 0.25s ease;
-}
-
-.add-project-bar:hover .add-project-text {
-  color: var(--primary-color);
 }
 
 .project-collapse-wrapper {
@@ -853,12 +859,19 @@ onUnmounted(() => {
 .project-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-color-bright);
+  /* 常态刻意用正文色而非高亮色：侧边栏条目不抢焦点，悬浮时才提亮（见下方 hover 规则） */
+  color: var(--text-color);
   width: 100%;
+  transition: color 0.2s ease;
 }
 
 .project-title.active-project {
   color: var(--primary-color);
+}
+
+/* 项目标题悬浮时提亮为高亮色，强化可点击反馈；active 项目保持主色，不被 hover 覆盖 */
+.project-title:hover:not(.active-project) {
+  color: var(--text-color-bright);
 }
 
 .project-actions {

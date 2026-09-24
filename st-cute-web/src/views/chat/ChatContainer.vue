@@ -42,11 +42,13 @@
               :context-limit="contextLimit"
             >
               <template #default="{ total }">
-                {{ t('chat.contextWindow') }}: <strong style="color: var(--text-color-bright);">{{ formatTokenCount(total) }}</strong><template v-if="contextLimitText"> / {{ contextLimitText }} ({{ usagePercentage(total) }}%)</template>
+                {{ t('chat.contextWindow') }}: {{ formatTokenCount(total) }}<template v-if="contextLimitText"> / {{ contextLimitText }} (<strong style="color: var(--text-color-bright);">{{ usagePercentage(total) }}%</strong>)</template>
               </template>
             </token-metrics-tooltip>
 
-            <!-- 移动端视图：点击触发，弹层内容与桌面端同一组件复用，仅触发方式不同 -->
+            <!-- 移动端视图：点击触发，弹层内容与桌面端同一组件复用，仅触发方式不同。
+                 【移动端特殊展示】移动端宽度紧张，触发文字精简为「上下文：xx.x%」仅百分比形式（完整明细点击弹层内查看）。
+                 这是移动端为节省内容宽度特意设计的精简文案，不是缺陷，请勿改回桌面端的完整格式！ -->
             <token-metrics-tooltip
               v-else
               trigger="click"
@@ -58,7 +60,7 @@
               :context-limit="contextLimit"
             >
               <template #default="{ total }">
-                {{ t('chat.contextWindow') }}: <strong style="color: var(--text-color-bright);">{{ formatTokenCount(total) }}</strong><template v-if="contextLimitText"> / {{ contextLimitText }} ({{ usagePercentage(total) }}%)</template>
+                {{ t('chat.contextWindowShort') }}<strong style="color: var(--text-color-bright);">{{ usagePercentage(total) ?? '0.0' }}%</strong>
               </template>
             </token-metrics-tooltip>
           </n-space>
@@ -68,7 +70,7 @@
           <n-badge
             dot
             :type="appStore.isConnected ? 'success' : 'error'"
-            :processing="appStore.isConnected"
+            :processing="currentTheme !== 'light' && appStore.isConnected"
           />
           <span>{{
             appStore.isConnected ? t('chat.connected') : t('chat.disconnected')
@@ -143,6 +145,7 @@ import { useProjectStore } from '@/stores/project'
 import { useProviderStore } from '@/stores/provider'
 import { useResponsive } from '@/utils/useResponsive'
 import { t } from '@/i18n'
+import { currentTheme } from '@/styles/theme'
 import MessageListFlow from './MessageListFlow.vue'
 import ChatInput from './ChatInput.vue'
 import TokenMetricsTooltip from '@/components/TokenMetricsTooltip.vue'

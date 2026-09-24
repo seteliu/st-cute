@@ -168,7 +168,7 @@ const handleDownload = (att: AttachmentItem) => {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--overlay-veil-strong);
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: var(--bg-color-inset);
   width: 130px;
   display: flex;
   flex-direction: column;
@@ -194,7 +194,7 @@ const handleDownload = (att: AttachmentItem) => {
 
 .attachment-img-meta {
   padding: 4px 6px;
-  background-color: rgba(20, 20, 24, 0.75);
+  background-color: var(--overlay-bg-glassy-strong);
   overflow: hidden;
 }
 

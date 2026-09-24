@@ -188,6 +188,10 @@ defineExpose({
 .folded-wrapper {
   /* 缩进跟随头像开关收缩：展示头像时为 36px avatar + 16px gap，隐藏时收缩为 0（变量由根节点动态注入） */
   padding-left: var(--avatar-indent, 52px);
+  /* 与助手消息 .message-item-wrapper 同构的 flex 纵列：卡片宽度隐式收缩到内容宽（不再依赖卡片自身 fit-content），超宽时由卡片 max-width 封顶 */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .truncated-tip-wrapper {

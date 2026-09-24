@@ -176,11 +176,11 @@ const handleLogin = async () => {
   z-index: 2;
   width: 380px;
   padding: 40px;
-  background: rgba(20, 20, 25, 0.76);
+  background: var(--login-card-bg);
   backdrop-filter: blur(25px);
-  border: 1px solid var(--overlay-veil-strong);
+  border: 1px solid var(--login-card-border);
   border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+  box-shadow: var(--login-card-shadow);
   animation: fadeIn 0.8s ease-out;
 }
 
@@ -205,7 +205,16 @@ const handleLogin = async () => {
 
 .premium-input {
   border-radius: 8px;
-  background-color: rgba(16, 16, 20, 0.6) !important;
+  background-color: var(--login-input-bg) !important;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-card);
+  transition: all 0.25s ease;
+}
+
+.premium-input:hover,
+.premium-input:focus-within {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 2px var(--primary-bg-weak) !important;
 }
 
 .login-btn {
@@ -216,14 +225,14 @@ const handleLogin = async () => {
   transition: all 0.3s ease;
   background: linear-gradient(135deg, var(--primary-color), var(--primary-color-pressed));
   border: none;
-  color: var(--text-color-bright) !important;
+  color: #ffffff !important;
 }
 
 .login-btn:hover {
   background: linear-gradient(135deg, var(--primary-color-hover), var(--primary-color));
   transform: translateY(-1px);
   box-shadow: 0 4px 12px var(--border-color-active);
-  color: var(--text-color-bright) !important;
+  color: #ffffff !important;
 }
 
 @keyframes fadeIn {

@@ -91,7 +91,8 @@
                   </svg>
                 </div>
               </template>
-              <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: var(--text-color-bright); max-width: 260px;">
+              <!-- tooltip 正文刻意用正文色而非高亮色：说明文字为主阅读内容，层级交给 strong 加粗的条目名区分 -->
+              <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: var(--text-color); max-width: 260px;">
                 <div style="font-weight: bold; border-bottom: 1px solid var(--border-color); margin-bottom: 6px; padding-bottom: 4px;">{{ t('sider.permissionMode') }}:</div>
                 <div><strong>{{ t('sider.modeStrictApproval') }}: </strong>{{ t('sider.modeStrictApprovalTooltip') }}</div>
                 <div style="margin-top: 4px;"><strong>{{ t('sider.modeRelaxedApproval') }}: </strong>{{ t('sider.modeRelaxedApprovalTooltip') }}</div>
@@ -122,6 +123,7 @@
         <div class="input-buttons" style="display: flex; gap: 8px;">
           <n-button
             type="primary"
+            class="send-btn"
             :class="{ 'send-btn-active': !appStore.loopRunning && (appStore.userInput || stagedFiles.length > 0) && !isSendBlocked }"
             :disabled="!appStore.loopRunning && ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)"
             @click="appStore.loopRunning ? appStore.cancelLoop() : executeSend()"
@@ -197,6 +199,7 @@
           <n-button
             type="primary"
             size="small"
+            class="send-btn"
             :class="{ 'send-btn-active': !appStore.loopRunning && (appStore.userInput || stagedFiles.length > 0) && !isSendBlocked }"
             :disabled="!appStore.loopRunning && ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)"
             @click="appStore.loopRunning ? appStore.cancelLoop() : executeSend()"
@@ -467,7 +470,8 @@ const handleEnterKey = (e: KeyboardEvent) => {
   right: 0;
   bottom: 0;
   z-index: 20;
-  background-color: rgba(20, 20, 24, 0.85);
+  background-color: var(--overlay-bg-glassy-strong);
+  backdrop-filter: blur(8px);
   border: 2px dashed var(--primary-color);
   border-radius: 8px;
   display: flex;
@@ -478,6 +482,15 @@ const handleEnterKey = (e: KeyboardEvent) => {
   color: var(--primary-color);
   font-weight: 500;
   pointer-events: none;
+}
+
+.send-btn {
+  border-radius: 6px !important;
+  font-weight: 500;
+  letter-spacing: 2px;
+  text-indent: 2px;
+  padding: 0 18px !important;
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
 }
 
 .send-btn-active {
