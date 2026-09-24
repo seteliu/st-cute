@@ -121,8 +121,17 @@ public class PermissionService {
         // 关闭（pathSandboxEnabled=false）时两处均不拦截——cwd 出项目的限制只在开启路径沙箱保护后才生效
         boolean pathSandboxEnabled = contractProperty == null || contractProperty.isPathSandboxEnabled();
 
+        // 权限模式一次性解析：层级 2 / 5.5 / 6 三处模式门槛共用同一解析结果
+        //（permissionMode 已字符串化：宿主侧按需解析为枚举，null 会安全兜底为 STRICT_APPROVAL）
+        PermissionMode mode = PermissionMode.fromName(context != null ? context.getPermissionMode() : null);
+
         // 层级 2: 安全只读命令快速放行（防元字符旁路）
-        if ((ToolNames.EXECUTE_COMMAND.equalsIgnoreCase(toolName)) && StringUtils.hasText(commandVal)) {
+        // 模式门槛（与前端三档语义对齐）：快速放行仅面向宽松审批与全部放行——
+        // 宽松审批语义为「开放文件读写与常用安全命令直接执行」，此白名单正是「常用安全命令」的实现载体；
+        // 严格审批语义为「写操作与命令执行均需审批」，白名单命令也必须落入层级 6 转 ASK，不得在此豁免
+        boolean safeCommandFastPathEnabled = mode != PermissionMode.STRICT_APPROVAL;
+        if (safeCommandFastPathEnabled
+                && (ToolNames.EXECUTE_COMMAND.equalsIgnoreCase(toolName)) && StringUtils.hasText(commandVal)) {
             // 前置防线：快速放行前必须先校验 cwd 落沙箱（仅沙箱开启时）。否则 execute_command(command="ls", cwd="C:/Windows/...")
             // 会在沙箱检查之前命中白名单直接 ALLOW，越界工作目录从未被校验（cwd 参数不在 path 参数提取链内）
             if (pathSandboxEnabled && StringUtils.hasText(cwdVal) && !isPathInSandbox(cwdVal, context)) {
@@ -139,7 +148,7 @@ public class PermissionService {
                     }
                 }
                 if (isSafePrefix) {
-                    log.debug("权限裁决: ALLOW [安全只读命令快速放行]");
+                    log.debug("权限裁决: ALLOW [安全只读命令快速放行] - mode={}", mode);
                     return ToolPermissionVerdict.allow();
                 }
             }
@@ -218,9 +227,11 @@ public class PermissionService {
 
         // 层级 5.5: 已读文件白名单强化（read_file 读过且内容哈希仍与磁盘一致的文件，其 Write/Modify 直接 ALLOW 放行）。
         // 仅授给写级工具：敏感级（删除/命令）即使先读过也必须走完整审批链，防止严格审批模式下"先读后删"被静默放行。
+        // 模式门槛：严格审批语义为「写操作与命令执行均需审批」，先读后写的便利性放行仅面向宽松/全部放行档；
         // 刻意置于规则层（层级 5）之后评估：用户显式配置的 DENY/ASK 规则必须优先于此白名单生效，
         // 防止"先 read_file 再修改"的组合绕过用户明确表达的拒绝意图（历史上先于此层评估存在绕过隐患）
-        if (isWriteOrModify && !isSensitiveTool && StringUtils.hasText(pathVal)) {
+        if (isWriteOrModify && !isSensitiveTool && StringUtils.hasText(pathVal)
+                && mode != PermissionMode.STRICT_APPROVAL) {
             try {
                 // 与 ReadFileTool/ModifyFileTool 统一走 ProjectService 解析与 FileHashSupport.toStorageKey 规范化 Key，
                 // 保证相对路径以项目根目录为基准，消除 Windows 路径大小写差异导致的白名单失配
@@ -242,8 +253,6 @@ public class PermissionService {
         }
 
         // 层级 6: 矩阵四档权限兜底决策 (只产 ALLOW 或 ASK，不产 DENY)
-        // permissionMode 已字符串化：宿主侧按需解析为枚举（null 会安全兜底为 STRICT_APPROVAL）
-        PermissionMode mode = PermissionMode.fromName(context != null ? context.getPermissionMode() : null);
         String category = getToolCategory(toolInstance);
 
         if ("readonly".equalsIgnoreCase(category)) {

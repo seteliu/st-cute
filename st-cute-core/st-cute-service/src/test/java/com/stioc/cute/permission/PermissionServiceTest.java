@@ -6,10 +6,12 @@ import com.stioc.cute.engine.tool.types.ToolAccessLevel;
 import com.stioc.cute.engine.tool.types.ToolExecutionContext;
 import com.stioc.cute.engine.tool.types.ToolPermissionDecision;
 import com.stioc.cute.engine.tool.types.ToolPermissionVerdict;
+import com.stioc.cute.file.FileHashSupport;
 import com.stioc.cute.permission.types.PermissionMode;
 import com.stioc.cute.permission.types.PermissionRule;
 import com.stioc.cute.platform.contract.ContractProperty;
 import com.stioc.cute.project.ProjectService;
+import com.stioc.cute.runtime.loop.RuntimeContext;
 import com.stioc.cute.tool.ToolNames;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,6 +46,7 @@ class PermissionServiceTest {
     private PermissionService permissionService;
     private AgentContext agentContext;
     private CuteTool executeCommandTool;
+    private CuteTool writeTool;
 
     static class SandboxProjectService extends ProjectService {
         private final Path root;
@@ -133,6 +136,34 @@ class PermissionServiceTest {
                 return "ok";
             }
         };
+
+        // 写级工具桩：访问等级 WRITE，用于已读文件白名单（层级 5.5）的模式门槛用例
+        writeTool = new CuteTool() {
+            @Override
+            public String getRawName() {
+                return "write_file";
+            }
+
+            @Override
+            public String getDescription() {
+                return "写文件";
+            }
+
+            @Override
+            public String getArgumentSchema() {
+                return "{}";
+            }
+
+            @Override
+            public ToolAccessLevel getAccessLevel() {
+                return ToolAccessLevel.WRITE;
+            }
+
+            @Override
+            public String execute(Map<String, Object> arguments, ToolExecutionContext context) {
+                return "ok";
+            }
+        };
     }
 
     @Nested
@@ -204,12 +235,39 @@ class PermissionServiceTest {
     @DisplayName("层级 2 & 4：只读命令放行与沙箱 cwd 防御")
     class SafeCommandAndSandboxTests {
 
-        @ParameterizedTest(name = "安全只读命令快速放行: {0}")
+        @Test
+        @DisplayName("模式门槛：严格审批下安全命令白名单不再放行，落入矩阵兜底转 ASK")
+        void strictModeDisablesSafeCommandFastPath() {
+            agentContext.setPermissionMode(PermissionMode.STRICT_APPROVAL.name());
+
+            ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "echo hello world"), agentContext
+            );
+
+            assertTrue(verdict.isAsk(),
+                    "严格审批语义为「命令执行均需审批」，白名单命令（echo/ls 等）不得豁免");
+        }
+
+        @ParameterizedTest(name = "宽松审批下安全只读命令快速放行: {0}")
         @ValueSource(strings = {"ls", "pwd", "git status", "git log", "git diff", "echo hello"})
-        @DisplayName("无元字符的安全只读命令直接 ALLOW 放行")
+        @DisplayName("宽松审批（模式语义开放常用安全命令）无元字符安全命令直接 ALLOW 放行")
         void fastPathAllowSafeCommands(String command) {
+            agentContext.setPermissionMode(PermissionMode.RELAXED_APPROVAL.name());
+
             ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
                     executeCommandTool, Map.of("command", command), agentContext
+            );
+
+            assertTrue(verdict.isAllow());
+        }
+
+        @Test
+        @DisplayName("全部放行模式下安全命令白名单同样快速放行（语义开放所有工具）")
+        void allAllowModeKeepsSafeCommandFastPath() {
+            agentContext.setPermissionMode(PermissionMode.ALL_ALLOW.name());
+
+            ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
+                    executeCommandTool, Map.of("command", "echo hello"), agentContext
             );
 
             assertTrue(verdict.isAllow());
@@ -295,6 +353,49 @@ class PermissionServiceTest {
             );
 
             assertTrue(verdict.isDeny(), "高优先级黑名单在全部放行模式下依然不可绕过");
+        }
+
+        @Test
+        @DisplayName("模式门槛：严格审批下已读文件白名单不再放行先读后写，一律 ASK")
+        void strictModeDisablesReadFileWhitelist() throws Exception {
+            agentContext.setPermissionMode(PermissionMode.STRICT_APPROVAL.name());
+
+            // 构造先读后写场景：目标文件存在且哈希已登记进运行时上下文
+            Path target = tempDir.resolve("strict_guard.txt");
+            Files.writeString(target, "原始内容", StandardCharsets.UTF_8);
+            RuntimeContext runtimeCtx = new RuntimeContext(agentContext.getCid());
+            runtimeCtx.getReadFiles().put(
+                    FileHashSupport.toStorageKey(target),
+                    FileHashSupport.computeFileHash(target));
+            agentContext.putExtraContext(RuntimeContext.class, runtimeCtx);
+
+            ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
+                    writeTool, Map.of("path", target.toString()), agentContext
+            );
+
+            assertTrue(verdict.isAsk(),
+                    "严格审批语义为「写操作均需审批」，先读后写的便利性放行不得豁免");
+        }
+
+        @Test
+        @DisplayName("模式门槛：宽松审批下已读文件白名单保持先读后写直接放行")
+        void relaxedModeKeepsReadFileWhitelist() throws Exception {
+            agentContext.setPermissionMode(PermissionMode.RELAXED_APPROVAL.name());
+
+            Path target = tempDir.resolve("relaxed_guard.txt");
+            Files.writeString(target, "原始内容", StandardCharsets.UTF_8);
+            RuntimeContext runtimeCtx = new RuntimeContext(agentContext.getCid());
+            runtimeCtx.getReadFiles().put(
+                    FileHashSupport.toStorageKey(target),
+                    FileHashSupport.computeFileHash(target));
+            agentContext.putExtraContext(RuntimeContext.class, runtimeCtx);
+
+            ToolPermissionVerdict verdict = permissionService.evaluateVerdict(
+                    writeTool, Map.of("path", target.toString()), agentContext
+            );
+
+            assertTrue(verdict.isAllow(),
+                    "宽松审批语义为「开放文件读写直接执行」，先读后写白名单应继续放行");
         }
     }
 
