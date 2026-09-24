@@ -95,9 +95,9 @@
         - Responsive web UI with mobile adaptation
     - Multi-language
         - Frontend supports both Chinese and English
+    - Multiple theme colors
 - **Not yet released, planned**
     - Multi-language support for backend response messages and LLM built-in prompts
-    - Multiple theme colors
 
 ---
 

@@ -45,13 +45,13 @@ class LifecycleControllerTest extends AbstractControllerSliceTest {
     @Test
     @DisplayName("ping：开放探测（无凭证）回传 desktopAuth=open 与版本号")
     void pingOpenMode() throws Exception {
-        when(environment.getProperty("st-cute.version", "unknown")).thenReturn("0.2.5");
+        when(environment.getProperty("st-cute.version", "unknown")).thenReturn("0.2.6");
 
         mockMvc.perform(localGet("/api/ping"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.app").value("st-cute"))
-                .andExpect(jsonPath("$.data.version").value("0.2.5"))
+                .andExpect(jsonPath("$.data.version").value("0.2.6"))
                 .andExpect(jsonPath("$.data.desktopAuth").value("open"));
     }
 
