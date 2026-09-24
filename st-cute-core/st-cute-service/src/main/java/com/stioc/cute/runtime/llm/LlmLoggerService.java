@@ -54,6 +54,15 @@ public class LlmLoggerService implements LlmHttpLogger {
                 && contractProperty.getLlmLog().isHttpLog();
     }
 
+    /**
+     * 返回当前是否记录响应部分（含 SSE 流式响应全文）。
+     * 关闭后仅记录请求报文与异常，避免 SSE 流式响应把日志文件冲爆。
+     */
+    public boolean isHttpLogResponseIncluded() {
+        return isHttpLogEnabled()
+                && contractProperty.getLlmLog().isIncludeResponse();
+    }
+
     // ──────────────────────────────────────────────
     // Raw HTTP 日志（由 OkHttpLoggingInterceptor 调用）
     // ──────────────────────────────────────────────
@@ -79,7 +88,8 @@ public class LlmLoggerService implements LlmHttpLogger {
     }
 
     public void writeRawHttpResponse(String uuid, String url, int code, Map<String, List<String>> headers, String body, boolean isStream) {
-        if (!isHttpLogEnabled()) {
+        // 响应体记录被关闭时直接跳过，从写入口兜底拦截（拦截器层已提前短路）
+        if (!isHttpLogResponseIncluded()) {
             return;
         }
         try {
@@ -104,7 +114,8 @@ public class LlmLoggerService implements LlmHttpLogger {
      * headers 和 status_code 与流开始时的响应头一致，body 为完整的 SSE 原文（最大 20MB，超出则截断）。
      */
     public void writeRawHttpStreamComplete(String uuid, String url, int code, Map<String, List<String>> headers, String completeStream) {
-        if (!isHttpLogEnabled()) {
+        // SSE 流全文属于响应部分，关闭记录时直接跳过
+        if (!isHttpLogResponseIncluded()) {
             return;
         }
         try {

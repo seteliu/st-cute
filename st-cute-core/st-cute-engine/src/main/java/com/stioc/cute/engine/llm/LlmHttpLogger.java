@@ -19,6 +19,12 @@ public interface LlmHttpLogger {
     boolean isHttpLogEnabled();
 
     /**
+     * 返回当前是否记录响应部分（含 SSE 流式响应全文）。
+     * 关闭时拦截器仅记录请求报文与异常，响应体完全不缓冲，避免流式日志把文件冲爆。
+     */
+    boolean isHttpLogResponseIncluded();
+
+    /**
      * 写入原始 HTTP 请求日志
      */
     void writeRawHttpRequest(String uuid, String url, String method, Map<String, List<String>> headers, String body);

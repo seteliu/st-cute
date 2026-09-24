@@ -56,6 +56,11 @@ public class OkHttpLoggingInterceptor implements Interceptor {
         int code = response.code();
         Map<String, List<String>> responseHeaders = response.headers().toMultimap();
 
+        // 响应部分记录关闭时直接透传：不 peek、不缓冲、不写响应日志（SSE 也不包 Spy 代理，省去 20MB 内存缓冲）
+        if (!llmHttpLogger.isHttpLogResponseIncluded()) {
+            return response;
+        }
+
         ResponseBody body = response.body();
         boolean isStream = body != null
                 && body.contentType() != null
