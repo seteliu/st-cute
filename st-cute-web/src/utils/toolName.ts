@@ -8,10 +8,10 @@
  *
  * 说明：
  * 1. 中文环境返回简短译名，非中文环境原样返回（兜底去除 Tool 后缀）；
- * 2. MCP 动态接入的工具名称不可枚举，无映射时回退展示原名；
+ * 2. MCP 动态接入的工具（mcp__{serverName}__{toolName}）名称不可枚举，统一收敛展示为「MCP调用」，具体工具名放入参数摘要展示；
  * 3. 译名仅用于界面展示，不影响任何逻辑判断与上报的原始 toolName。
  */
-import { getLanguage } from '@/i18n'
+import { getLanguage, t } from '@/i18n'
 
 /**
  * 工具名映射表：key 支持后端协议名（如 read_file）与历史类名（如 ReadFileTool）双写，
@@ -53,7 +53,12 @@ const TOOL_NAME_MAP: Record<string, string> = {
  */
 export function formatToolName(name: string | undefined | null): string {
   if (!name) return ''
-  // 中文环境下优先查映射表，未命中（如 MCP 动态工具）保持原名
+  // MCP 动态接入工具（mcp__{serverName}__{toolName}，动态名不可枚举）统一收敛为「MCP调用」，
+  // 原生工具名由参数摘要（formatToolArgs）回填展示，完整原名在原始日志详情抽屉中可见
+  if (name.startsWith('mcp__')) {
+    return t('chat.mcpToolDisplayName')
+  }
+  // 中文环境下优先查映射表，未命中保持原名
   if (getLanguage() === 'zh-CN') {
     return TOOL_NAME_MAP[name] || name
   }

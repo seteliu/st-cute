@@ -15,7 +15,7 @@
         <!-- 3. 中间弹性区：入参优先保障，出参吃掉剩余空间；宽度不足时各自出省略号；出参为空时入参独占整个弹性区 -->
         <div class="tool-io-zone" :class="{ 'has-result': hasResultContent(tc.content) }">
           <!-- 入参精简提示（完整参数不做悬浮展示，全状态可点击右侧"详情"查看抽屉详情） -->
-          <span class="tool-args">{{ formatToolArgs(tc.toolArguments) }}</span>
+          <span class="tool-args">{{ formatToolArgs(tc.toolArguments, tc.toolName) }}</span>
           <!-- 出参摘要：只要结果内容非空即展示（执行中/失败等状态若已有内容同样呈现） -->
           <span v-if="hasResultContent(tc.content)" class="tool-result-summary">› {{ getResultSummary(tc.content) }}</span>
         </div>
@@ -162,7 +162,30 @@ const getStatusClass = (status: string | undefined) => {
   return 'success'
 }
 
-const formatToolArgs = (argsStr: string | undefined) => {
+const formatToolArgs = (argsStr: string | undefined, toolName?: string) => {
+  // MCP 动态工具（mcp__{serverName}__{toolName}）：名称统一展示为「MCP调用」，
+  // 此处把原生工具名与首个标量业务参数回填进摘要，保证列表上仍能区分具体调用了什么
+  if (toolName && toolName.startsWith('mcp__')) {
+    // lastIndexOf 兜底 serverName 自身含 "__" 的极端情况：最后一个 "__" 之后必为原生工具名
+    const nativeName = toolName.slice(toolName.lastIndexOf('__') + 2)
+    let extra = ''
+    let parsed: any = null
+    try {
+      parsed = argsStr ? JSON.parse(argsStr) : null
+    } catch (e) {
+      parsed = null
+    }
+    if (parsed && typeof parsed === 'object') {
+      // 附加首个标量参数（string/number/boolean），数组与嵌套对象不做摘要展示
+      const entry = Object.entries(parsed).find(([, v]) =>
+        typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+      if (entry) {
+        extra = `, ${entry[0]}="${String(entry[1])}"`
+      }
+    }
+    return `(tool="${nativeName}"${extra})`
+  }
+
   if (!argsStr) return ''
 
   let parsed: any = null
@@ -272,11 +295,21 @@ const getAlwaysAllowOptions = (tc: any) => {
     }
   }
 
-  // 兜底选项：放行全部此类工具的调用
-  options.push({
-    label: `放行 ${formatToolName(tc.toolName) || '此工具'} 所有调用 (请谨慎选择)`,
-    key: 'all:*'
-  })
+  // 兜底选项：放行全部此类工具的调用。
+  // MCP 动态工具收敛展示为「MCP调用」后，若标签也不带原名，用户无法辨认放行的是哪个具体工具；
+  // 且 MCP 的精确范围完全由完整协议名 toolName 承载（contentPattern '*' 即该工具全部参数），
+  // 故此处展示原始协议名，语义即「精确放行此工具的所有调用」，上报内容与通用路径一致
+  if (tc.toolName && tc.toolName.startsWith('mcp__')) {
+    options.push({
+      label: `放行精确调用: "${tc.toolName}"`,
+      key: 'all:*'
+    })
+  } else {
+    options.push({
+      label: `放行 ${formatToolName(tc.toolName) || '此工具'} 所有调用 (请谨慎选择)`,
+      key: 'all:*'
+    })
+  }
 
   return options
 }
@@ -474,7 +507,9 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 .tool-name {
   font-family: monospace;
   font-weight: bold;
-  color: var(--text-color-bright);
+  /* 名称与入参刻意统一用正文色（非高亮色）：工具行整体保持克制不抢焦点，
+     状态语义交给左侧圆点与右侧状态标签的彩色表达 */
+  color: var(--text-color);
   font-size: 0.85rem;
   /* 工具名是行内主标识（左侧固定块），禁止换行且不参与 flex 收缩 */
   white-space: nowrap;
@@ -540,13 +575,14 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   color: var(--text-color-muted);
 }
 
-/* 出参：吃掉入参之外的全部剩余空间（入参短则自动变宽），可压缩出省略号 */
+/* 出参：吃掉入参之外的全部剩余空间（入参短则自动变宽），可压缩出省略号。
+   刻意用最低档渐隐色：入参是理解调用的关键信息（正文色），出参仅为辅助预览，压到最弱层级减少视觉噪音 */
 .tool-result-summary {
   flex: 1 1 0;
   /* 覆盖全局遗留的 max-width，改由弹性区动态决定可用宽度 */
   max-width: none;
   min-width: 0;
-  color: var(--text-color-muted);
+  color: var(--text-color-faint);
   font-size: 0.75rem;
   margin-left: 0;
   overflow: hidden;
@@ -647,10 +683,16 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   white-space: nowrap;
 }
 
-/* 窄屏降级：空间不足时隐藏出参，仅保留入参独占整个弹性区 */
+/* 窄屏降级：空间不足时隐藏出参，仅保留入参独占整个弹性区。
+   必须同步解除「有出参时入参压到 80%」的上限：出参已不可见却仍占位，
+   会让入参右侧凭空留出 20% 空白（完结态看起来像残留 dots/审批占位的假象），故此处一并回收 */
 @media (max-width: 768px) {
   .tool-result-summary {
     display: none;
+  }
+
+  .tool-io-zone.has-result .tool-args {
+    max-width: none;
   }
 }
 </style>
@@ -658,10 +700,10 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 <style>
 /* 自定义审批就地确认下拉菜单全局样式覆盖 */
 .n-dropdown-menu {
-  background-color: rgba(22, 22, 26, 0.94) !important;
+  background-color: var(--overlay-bg-glassy-strong) !important;
   backdrop-filter: blur(16px);
   border: 1px solid var(--overlay-veil-strong) !important;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6) !important;
+  box-shadow: var(--shadow-overlay) !important;
   padding: 6px !important;
   border-radius: 10px !important;
 }
@@ -701,10 +743,10 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   color: var(--primary-color) !important;
 }
 
-/* 选项中的代码块在选项悬浮时的联动变色效果：使用极深背景以确保文字高可读性 */
+/* 选项中的代码块在选项悬浮时的联动变色效果：使用实底确保文字高可读性 */
 .n-dropdown-menu .n-dropdown-option:hover code {
   color: var(--primary-color) !important;
   border-color: var(--primary-color) !important;
-  background-color: rgba(0, 0, 0, 0.75) !important; /* 加深背景色 */
+  background-color: var(--primary-bg-solid) !important;
 }
 </style>

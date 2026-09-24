@@ -9,9 +9,9 @@
     <n-drawer-content :title="t('logDrawer.title')" closable>
       <div style="display: flex; flex-direction: column; gap: 12px; height: 100%;">
 
-        <!-- 工具名称：黑框外独立标题，置于抽屉内容最顶部 -->
+        <!-- 工具名称：黑框外独立标题，置于抽屉内容最顶部（原始日志场景保留完整原名，不做「MCP调用」收敛翻译） -->
         <div v-if="toolMessage" class="log-section-title">
-          {{ t('chat.toolNameLabel') }}: {{ formatToolName(toolMessage.toolName) }}
+          {{ t('chat.toolNameLabel') }}: {{ rawToolName }}
         </div>
 
         <!-- 调用参数：标题在黑框外，内容黑框与执行结果统一样式 -->
@@ -44,7 +44,6 @@ import { useConversationStore } from '@/stores/conversation'
 import { useAgentStore } from '@/stores/agent'
 import { useResponsive } from '@/utils/useResponsive'
 import { t } from '@/i18n'
-import { formatToolName as sharedFormatToolName } from '@/utils/toolName'
 
 const { isMobile } = useResponsive()
 
@@ -114,9 +113,10 @@ const isExecuting = computed(() => {
   return status === 'RUNNING' || status === 'PENDING' || status === 'WAITING_APPROVAL'
 })
 
-const formatToolName = (name?: string) => {
-  return sharedFormatToolName(name)
-}
+// 原始日志场景展示完整原名（含 MCP 的 mcp__{serverName}__{toolName} 全协议名），不走展示层译名收敛
+const rawToolName = computed(() => {
+  return toolMessage.value?.toolName || ''
+})
 
 /**
  * 清洗终端 ANSI 控制序列（颜色、光标移动等，如 \u001b[36m），仅用于展示层
