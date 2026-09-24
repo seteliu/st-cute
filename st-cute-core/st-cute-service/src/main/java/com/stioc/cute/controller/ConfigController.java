@@ -34,9 +34,11 @@ public class ConfigController {
     public Result<BasicConfigDto> getConfig() {
         BasicConfigDto dto = new BasicConfigDto();
         dto.setLanguage(contractProperty.getLanguage());
+        dto.setTheme(contractProperty.getTheme());
         dto.setNewlineKey(contractProperty.getNewlineKey());
         dto.setHttpLog(contractProperty.getLlmLog().isHttpLog());
         dto.setHttpLogDays(contractProperty.getLlmLog().getHttpLogDays());
+        dto.setHttpLogIncludeResponse(contractProperty.getLlmLog().isIncludeResponse());
         dto.setPasswordSet(StringUtils.hasText(contractProperty.getPassword()));
         dto.setMaxViewHistoryLimit(contractProperty.getMaxViewHistoryLimit());
         dto.setPathSandboxEnabled(contractProperty.isPathSandboxEnabled());
@@ -50,26 +52,30 @@ public class ConfigController {
      */
     @PostMapping("/save")
     public Result<Boolean> saveConfig(@RequestBody BasicConfigDto body) {
-        log.info("请求保存基础设置: language={}, httpLog={}, httpLogDays={}",
-                body.getLanguage(), body.getHttpLog(), body.getHttpLogDays());
+        log.info("请求保存基础设置: language={}, theme={}, httpLog={}, httpLogDays={}",
+                body.getLanguage(), body.getTheme(), body.getHttpLog(), body.getHttpLogDays());
         String language = body.getLanguage();
+        String theme = body.getTheme();
         String newlineKey = body.getNewlineKey();
         Boolean httpLog = body.getHttpLog();
         Integer httpLogDays = body.getHttpLogDays();
+        Boolean httpLogIncludeResponse = body.getHttpLogIncludeResponse();
         Boolean pathSandboxEnabled = body.getPathSandboxEnabled();
         Boolean minimalSkillMode = body.getMinimalSkillMode();
         Boolean loadAllUserAttachments = body.getLoadAllUserAttachments();
 
         String finalLanguage = language != null ? language : "zh-CN";
+        String finalTheme = ("light".equalsIgnoreCase(theme)) ? "light" : "dark";
         String finalNewlineKey = newlineKey != null ? newlineKey : "enter";
         boolean finalHttpLog = httpLog != null ? httpLog : false;
         int finalHttpLogDays = httpLogDays != null ? httpLogDays : 7;
+        boolean finalHttpLogIncludeResponse = httpLogIncludeResponse != null ? httpLogIncludeResponse : true;
         boolean finalPathSandboxEnabled = pathSandboxEnabled != null ? pathSandboxEnabled : true;
         boolean finalMinimalSkillMode = minimalSkillMode != null ? minimalSkillMode : false;
         boolean finalLoadAllUserAttachments = loadAllUserAttachments != null ? loadAllUserAttachments : true;
 
-        providerService.saveSettings(finalLanguage, finalNewlineKey, finalHttpLog, finalHttpLogDays,
-                finalPathSandboxEnabled, finalMinimalSkillMode, finalLoadAllUserAttachments, body.getMaxViewHistoryLimit());
+        providerService.saveSettings(finalLanguage, finalTheme, finalNewlineKey, finalHttpLog, finalHttpLogDays,
+                finalHttpLogIncludeResponse, finalPathSandboxEnabled, finalMinimalSkillMode, finalLoadAllUserAttachments, body.getMaxViewHistoryLimit());
         return Result.success(true);
     }
 

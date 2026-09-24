@@ -14,6 +14,11 @@ public class BasicConfigDto {
     private String language;
 
     /**
+     * 系统界面主题设置（如 dark 或 light），默认为 dark
+     */
+    private String theme;
+
+    /**
      * 发送消息的触发换行按键名（如 enter 或 ctrl+enter）
      */
     private String newlineKey;
@@ -27,6 +32,11 @@ public class BasicConfigDto {
      * HTTP 原始 Payload 物理日志的最长留存天数
      */
     private Integer httpLogDays;
+
+    /**
+     * 是否记录响应部分（含 SSE 流式响应全文）：关闭后仅记录请求报文与异常，默认开启
+     */
+    private Boolean httpLogIncludeResponse;
 
     /**
      * 安全访问密码（SHA-256(原文) 传输摘要）。

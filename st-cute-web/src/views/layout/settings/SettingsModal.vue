@@ -88,23 +88,7 @@
         </n-form-item>
         <n-form-item>
           <template #label>
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span>{{ t('sider.multimodal') }}</span>
-              <n-tooltip trigger="hover" placement="top-start">
-                <template #trigger>
-                  <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                      <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                  </span>
-                </template>
-                <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                  {{ t('sider.multimodalTooltip') }}
-                </div>
-              </n-tooltip>
-            </div>
+            <SettingLabelTip :label="t('sider.multimodal')" :tip="t('sider.multimodalTooltip')" />
           </template>
           <n-switch v-model:value="providerStore.form.multimodal" />
         </n-form-item>
@@ -157,21 +141,7 @@
             <!-- 语言设置（放在最前面） -->
             <div class="setting-item-row setting-item-row--stack">
               <div class="setting-item-label">
-                <span>{{ t('settings.language') }}</span>
-                <n-tooltip trigger="hover" placement="top-start">
-                  <template #trigger>
-                    <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                      </svg>
-                    </span>
-                  </template>
-                  <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                    {{ t('settings.languageTooltip') }}
-                  </div>
-                </n-tooltip>
+                <SettingLabelTip :label="t('settings.language')" :tip="t('settings.languageTooltip')" />
               </div>
               <n-select
                 v-model:value="appStore.language"
@@ -184,23 +154,25 @@
               />
             </div>
 
+            <!-- 主题设置（放在语言设置下面） -->
             <div class="setting-item-row setting-item-row--stack">
               <div class="setting-item-label">
-                <span>{{ t('settings.newlineKey') }}</span>
-                <n-tooltip trigger="hover" placement="top-start">
-                  <template #trigger>
-                    <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                      </svg>
-                    </span>
-                  </template>
-                  <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                    {{ t('settings.newlineKeyTooltip') }}
-                  </div>
-                </n-tooltip>
+                <SettingLabelTip :label="t('settings.theme')" :tip="t('settings.themeTooltip')" />
+              </div>
+              <n-select
+                v-model:value="appStore.theme"
+                :options="[
+                  { label: t('settings.themeDark'), value: 'dark' },
+                  { label: t('settings.themeLight'), value: 'light' }
+                ]"
+                class="setting-item-control select-control"
+                @update:value="onThemeChange"
+              />
+            </div>
+
+            <div class="setting-item-row setting-item-row--stack">
+              <div class="setting-item-label">
+                <SettingLabelTip :label="t('settings.newlineKey')" :tip="t('settings.newlineKeyTooltip')" />
               </div>
               <n-select
                 v-model:value="appStore.newlineKey"
@@ -215,21 +187,7 @@
 
             <div class="setting-item-row">
               <div class="setting-item-label">
-                <span>{{ t('settings.pathSandbox') }}</span>
-                <n-tooltip trigger="hover" placement="top-start">
-                  <template #trigger>
-                    <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                      </svg>
-                    </span>
-                  </template>
-                  <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                    {{ t('settings.pathSandboxTooltip') }}
-                  </div>
-                </n-tooltip>
+                <SettingLabelTip :label="t('settings.pathSandbox')" :tip="t('settings.pathSandboxTooltip')" />
               </div>
               <n-switch
                 v-model:value="appStore.pathSandboxEnabled"
@@ -237,59 +195,46 @@
               />
             </div>
 
-            <div class="setting-item-row">
-              <div class="setting-item-label">
-                <span>{{ t('settings.httpLog') }}</span>
-                <n-tooltip trigger="hover" placement="top-start">
-                  <template #trigger>
-                    <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                      </svg>
-                    </span>
-                  </template>
-                  <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                    {{ t('settings.httpLogTooltip') }}
-                  </div>
-                </n-tooltip>
+            <!-- 原始 HTTP 日志组：父项为大选项标准行（右侧总开关），开启后子项经树形连接线缩进挂接 -->
+            <div class="setting-group">
+              <div class="setting-item-row setting-group-parent">
+                <div class="setting-item-label">
+                  <SettingLabelTip :label="t('settings.httpLog')" :tip="t('settings.httpLogTooltip')" />
+                </div>
+                <n-switch
+                  v-model:value="appStore.httpLog"
+                  @update:value="appStore.saveBasicConfig"
+                />
               </div>
-              <n-switch
-                v-model:value="appStore.httpLog"
-                @update:value="appStore.saveBasicConfig"
-              />
-            </div>
-
-            <div v-if="appStore.httpLog" class="setting-item-row">
-              <div class="setting-item-label-simple">{{ t('settings.httpLogDays') }}</div>
-              <n-input-number
-                v-model:value="appStore.httpLogDays"
-                :min="1"
-                :max="999"
-                size="small"
-                class="setting-item-control input-number-control"
-                @update:value="appStore.saveBasicConfig"
-              />
+              <div v-if="appStore.httpLog" class="setting-tree-children">
+                <div class="setting-item-row setting-tree-child">
+                  <div class="setting-item-label">
+                    <SettingLabelTip :label="t('settings.httpLogIncludeResponse')" :tip="t('settings.httpLogIncludeResponseTooltip')" />
+                  </div>
+                  <n-switch
+                    v-model:value="appStore.httpLogIncludeResponse"
+                    @update:value="appStore.saveBasicConfig"
+                  />
+                </div>
+                <div class="setting-item-row setting-tree-child">
+                  <div class="setting-item-label">
+                    <SettingLabelTip :label="t('settings.httpLogDays')" :tip="t('settings.httpLogDaysTooltip')" />
+                  </div>
+                  <n-input-number
+                    v-model:value="appStore.httpLogDays"
+                    :min="1"
+                    :max="999"
+                    size="small"
+                    class="setting-item-control input-number-control"
+                    @update:value="appStore.saveBasicConfig"
+                  />
+                </div>
+              </div>
             </div>
 
             <div class="setting-item-row">
               <div class="setting-item-label">
-                <span>{{ t('settings.minimalSkillMode') }}</span>
-                <n-tooltip trigger="hover" placement="top-start">
-                  <template #trigger>
-                    <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                      </svg>
-                    </span>
-                  </template>
-                  <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                    {{ t('settings.minimalSkillModeTooltip') }}
-                  </div>
-                </n-tooltip>
+                <SettingLabelTip :label="t('settings.minimalSkillMode')" :tip="t('settings.minimalSkillModeTooltip')" />
               </div>
               <n-switch
                 v-model:value="appStore.minimalSkillMode"
@@ -299,22 +244,10 @@
 
             <div class="setting-item-row">
               <div class="setting-item-label">
-                <span>{{ t('settings.password') }}</span>
-                <n-tooltip trigger="hover" placement="top-start">
-                  <template #trigger>
-                    <span style="cursor: help; color: var(--text-color-muted); display: inline-flex; align-items: center;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                      </svg>
-                    </span>
-                  </template>
-                  <div style="max-width: 280px; font-size: 0.8rem; line-height: 1.6;">
-                    <div>{{ appStore.passwordSet ? t('settings.passwordStatusSet') : t('settings.passwordStatusUnset') }}</div>
-                    <div style="margin-top: 4px; color: var(--text-color-muted);">{{ t('settings.passwordTooltip') }}</div>
-                  </div>
-                </n-tooltip>
+                <SettingLabelTip :label="t('settings.password')">
+                  <div>{{ appStore.passwordSet ? t('settings.passwordStatusSet') : t('settings.passwordStatusUnset') }}</div>
+                  <div style="margin-top: 4px; color: var(--text-color-muted);">{{ t('settings.passwordTooltip') }}</div>
+                </SettingLabelTip>
               </div>
               <!--
                 密码刻意不设常驻输入框：常驻输入框会被浏览器自动填充回填既有值，
@@ -339,10 +272,9 @@
                     {{ t('settings.passwordModifyBtn') }}
                   </n-button>
                   <n-button
-                    type="error"
+                    type="primary"
                     size="small"
                     secondary
-                    class="danger-secondary-btn"
                     @click="handleClearPassword"
                   >
                     {{ t('settings.passwordClearBtn') }}
@@ -411,7 +343,7 @@
                           placement="top-end"
                         >
                           <template #trigger>
-                            <n-button size="small" type="error" secondary class="danger-secondary-btn">
+                            <n-button type="primary" size="small" secondary>
                               {{ t('common.delete') }}
                             </n-button>
                           </template>
@@ -488,7 +420,10 @@ import { useMessage, useDialog } from 'naive-ui'
 import { useResponsive } from '@/utils/useResponsive'
 import { useAppStore } from '@/stores/app'
 import { useProviderStore } from '@/stores/provider'
+import SettingLabelTip from './SettingLabelTip.vue'
 import { t, setLanguage } from '@/i18n'
+import { switchTheme } from '@/styles/theme'
+import type { ThemeName } from '@/styles/themeVars'
 import pkg from '../../../../package.json'
 
 /**
@@ -523,6 +458,11 @@ watch(() => props.show, (v) => {
 
 const onLanguageChange = (val: 'zh-CN' | 'en-US') => {
   setLanguage(val)
+  appStore.saveBasicConfig()
+}
+
+const onThemeChange = (val: ThemeName) => {
+  switchTheme(val)
   appStore.saveBasicConfig()
 }
 
@@ -735,6 +675,52 @@ const saveProviderAndReturn = async () => {
 }
 .setting-item-row--stack {
   /* 默认保持与 setting-item-row 一致，移动端再做堆叠覆盖 */
+}
+
+/* 设置项分组容器：父项为标准大选项行，开启后子项经树形连接线缩进挂接（如原始 HTTP 日志组） */
+.setting-group {
+  border-bottom: 1px solid var(--overlay-veil-strong);
+}
+.setting-group-parent {
+  border-bottom: none;
+}
+/* 树形子项区：公共竖线按子项逐段绘制并精确止于最后一个分支，各子项经水平短线接入，形如文件树分支 */
+.setting-tree-children {
+  margin-left: 8px;
+  padding-left: 18px;
+}
+.setting-tree-child {
+  position: relative;
+  padding: 12px 0;
+  border-bottom: none;
+}
+/* 垂直段：贯穿本行全高，最后一个子项只画到中线（即分支接入点），形成树形收尾 */
+.setting-tree-child::after {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  border-radius: 1px;
+  background-color: var(--overlay-veil-strong);
+}
+.setting-tree-child:last-child::after {
+  height: 50%;
+}
+/* 水平支线：自垂直段接入本行中线 */
+.setting-tree-child::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  width: 18px;
+  height: 2px;
+  transform: translateY(-1px);
+  background-color: var(--overlay-veil-strong);
+}
+.setting-tree-child:last-child {
+  padding-bottom: 16px;
 }
 
 /* 设置项标签容器 */

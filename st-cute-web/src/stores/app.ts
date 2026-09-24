@@ -7,6 +7,8 @@ import { updateConversationConfigApi, cancelConversationApi } from '@/api/conver
 import { useConversationStore } from './conversation'
 import { useUserStore } from './user'
 import { setLanguage, Language, t } from '@/i18n'
+import { currentTheme, switchTheme } from '@/styles/theme'
+import { ThemeName } from '@/styles/themeVars'
 
 /**
  * 安全访问码复杂度策略：trim 后 8~32 位、须同时包含英文字母与数字、仅允许常见密码字符。
@@ -58,9 +60,12 @@ export const useAppStore = defineStore('app', () => {
 
   // 系统基础配置项
   const language = ref<Language>('zh-CN')
+  const theme = ref<ThemeName>(currentTheme.value)
   const newlineKey = ref<'enter' | 'alt+enter'>('enter')
   const httpLog = ref(false)
   const httpLogDays = ref(7)
+  // 是否记录响应部分（含 SSE 流式响应全文）：关闭后仅记录请求报文与异常，避免流式日志把文件冲爆
+  const httpLogIncludeResponse = ref(true)
   // 服务端密码状态：是否已设置安全访问密码（密码值本身全链路不回传，仅此布尔标记）
   const passwordSet = ref(false)
   const maxViewHistoryLimit = ref(2000)
@@ -181,9 +186,20 @@ export const useAppStore = defineStore('app', () => {
         language.value = data.language as Language
         setLanguage(language.value)
       }
+      if (data.theme && (data.theme === 'dark' || data.theme === 'light')) {
+        theme.value = data.theme
+        if (currentTheme.value !== data.theme) {
+          switchTheme(data.theme)
+        } else {
+          try {
+            localStorage.setItem('st-cute-theme', data.theme)
+          } catch (e) {}
+        }
+      }
       newlineKey.value = data.newlineKey || 'enter'
       httpLog.value = data.httpLog || false
       httpLogDays.value = data.httpLogDays !== undefined ? data.httpLogDays : 7
+      httpLogIncludeResponse.value = data.httpLogIncludeResponse !== undefined ? data.httpLogIncludeResponse : true
       // 仅取"是否已设置"布尔标记：密码值全链路不回传，界面据此渲染 设置 / 修改+清除 按钮
       passwordSet.value = data.passwordSet || false
       maxViewHistoryLimit.value = data.maxViewHistoryLimit || 2000
@@ -200,9 +216,11 @@ export const useAppStore = defineStore('app', () => {
       setLanguage(language.value)
       await saveConfigApi({
         language: language.value,
+        theme: theme.value,
         newlineKey: newlineKey.value,
         httpLog: httpLog.value,
         httpLogDays: httpLogDays.value,
+        httpLogIncludeResponse: httpLogIncludeResponse.value,
         pathSandboxEnabled: pathSandboxEnabled.value,
         minimalSkillMode: minimalSkillMode.value
       })
@@ -286,9 +304,11 @@ export const useAppStore = defineStore('app', () => {
     showMessageAvatar,
     
     language,
+    theme,
     newlineKey,
     httpLog,
     httpLogDays,
+    httpLogIncludeResponse,
     passwordSet,
     maxViewHistoryLimit,
     pathSandboxEnabled,

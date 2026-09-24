@@ -183,7 +183,7 @@ public class ProviderService implements ProviderResolver {
     }
 
     /**
-     * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数、路径沙箱保护、极简 Skill 模式）
+     * 保存系统基础参数（语言设置、换行热键、HTTP 日志开关、保留天数、响应部分记录开关、路径沙箱保护、极简 Skill 模式）
      * <p>
      * 刻意不含任何密码参数：密码有独立的专用接口 {@link #savePassword}。
      * 历史上本方法兼管密码，依赖「前端把已设置密码回填进常驻输入框再原样回传」，
@@ -196,14 +196,18 @@ public class ProviderService implements ProviderResolver {
      * 不可因保存其他设置而被重置）。
      * </p>
      */
-    public void saveSettings(String language, String newlineKey, boolean httpLog, int httpLogDays, boolean pathSandboxEnabled, boolean minimalSkillMode, Boolean loadAllUserAttachments, Integer maxViewHistoryLimit) {
+    public void saveSettings(String language, String theme, String newlineKey, boolean httpLog, int httpLogDays, boolean httpLogIncludeResponse, boolean pathSandboxEnabled, boolean minimalSkillMode, Boolean loadAllUserAttachments, Integer maxViewHistoryLimit) {
         contractProperty.setLanguage(language);
+        if (StringUtils.hasText(theme)) {
+            contractProperty.setTheme(theme);
+        }
         contractProperty.setNewlineKey(newlineKey);
         // llmLog 字段可能因配置合并路径未初始化（HttpLogCleanupJob 同款防御），判空兜底
         if (contractProperty.getLlmLog() == null) {
             contractProperty.setLlmLog(new ContractProperty.LlmLog());
         }
         contractProperty.getLlmLog().setHttpLog(httpLog);
+        contractProperty.getLlmLog().setIncludeResponse(httpLogIncludeResponse);
         contractProperty.getLlmLog().setHttpLogDays(httpLogDays);
         contractProperty.setPathSandboxEnabled(pathSandboxEnabled);
         contractProperty.setMinimalSkillMode(minimalSkillMode);
@@ -218,9 +222,11 @@ public class ProviderService implements ProviderResolver {
 
         BasicConfigDto dto = new BasicConfigDto();
         dto.setLanguage(language);
+        dto.setTheme(contractProperty.getTheme());
         dto.setNewlineKey(newlineKey);
         dto.setHttpLog(httpLog);
         dto.setHttpLogDays(httpLogDays);
+        dto.setHttpLogIncludeResponse(httpLogIncludeResponse);
         // 仅回传状态标记，绝不回传密码值本身
         dto.setPasswordSet(StringUtils.hasText(contractProperty.getPassword()));
         dto.setPathSandboxEnabled(pathSandboxEnabled);

@@ -48,6 +48,11 @@ public class ContractProperty {
     private String language = "zh-CN";
 
     /**
+     * 系统界面主题设置，默认为 dark（可选 dark / light）
+     */
+    private String theme = "dark";
+
+    /**
      * 接口调用或任务重试最大次数
      */
     private int retryCount = 3;
@@ -123,8 +128,8 @@ public class ContractProperty {
                 this.providers = new ArrayList<>(mergedMap.values());
             }
 
-            log.info("全局配置已成功与默认配置合并，当前共加载 {} 个供应商，系统语言: {}, 换行键: {}, 响应体日志: {}, 路径沙箱保护: {}",
-                    this.providers.size(), this.language, this.newlineKey, this.llmLog.isHttpLog(), this.pathSandboxEnabled);
+            log.info("全局配置已成功与默认配置合并，当前共加载 {} 个供应商，系统语言: {}, 系统主题: {}, 换行键: {}, 响应体日志: {}, 路径沙箱保护: {}",
+                    this.providers.size(), this.language, this.theme, this.newlineKey, this.llmLog.isHttpLog(), this.pathSandboxEnabled);
         } catch (Exception e) {
             log.error("读取或合并全局配置文件 config.json 异常: {}", e.getMessage(), e);
         }
@@ -156,6 +161,12 @@ public class ContractProperty {
          * 是否开启大模型接口调用的详细 HTTP 日志记录（包含 Payload 入参和出参）
          */
         private boolean httpLog = false;
+
+        /**
+         * 是否记录响应部分（含 SSE 流式响应全文）：关闭后仅记录请求报文与异常，
+         * 避免流式响应体积过大把日志文件冲爆，默认关闭
+         */
+        private boolean includeResponse = false;
 
         /**
          * 大模型物理 HTTP 原始日志的最长保留天数

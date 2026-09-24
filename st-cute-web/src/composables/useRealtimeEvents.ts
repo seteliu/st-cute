@@ -16,6 +16,7 @@ import { useProviderStore } from '@/stores/provider'
 import { useAgentStore } from '@/stores/agent'
 import { useProjectStore } from '@/stores/project'
 import { useGitStore } from '@/stores/git'
+import { currentTheme, switchTheme } from '@/styles/theme'
 
 /** 会话列表重拉防抖窗口（毫秒）：运行期间 CONVERSATION_UPDATED 随每条消息更新高频广播，直接全量拉取会风暴式打接口 */
 const LIST_RELOAD_DEBOUNCE_MS = 1500
@@ -129,7 +130,6 @@ export function useRealtimeEvents() {
     })
     wsService.on(LOCAL_EVENTS.CLOSE, () => {
       appStore.isConnected = false
-      appStore.loopRunning = false
     })
 
     // ---------------- 会话域事件 ----------------
@@ -187,7 +187,9 @@ export function useRealtimeEvents() {
         }
       } else {
         if (cid === conversationStore.activeCid) {
-          appStore.loopRunning = payload.loopRunning === 1
+          if (payload.loopRunning !== undefined) {
+            appStore.loopRunning = payload.loopRunning === 1
+          }
           appStore.applyPermissionMode(payload.permissionMode || 'STRICT_APPROVAL')
           appStore.currentIteration = payload.iterationCount || 0
 
@@ -323,19 +325,6 @@ export function useRealtimeEvents() {
           }
         }
 
-        if (normalized.role === 'assistant' && (normalized.status === 'SUCCESS' || normalized.status === 'FAILED' || normalized.status === 'CANCELED')) {
-          if (!isSub) {
-            appStore.loopRunning = false
-            // 助手终态时刻的列表重拉：语义上要立即反映终态，走即时路径（同时取消挂起的防抖请求避免双拉）
-            if (listReloadTimer !== null) {
-              clearTimeout(listReloadTimer)
-              listReloadTimer = null
-            }
-            conversationStore.loadConversations().catch(e => {
-              console.error('终态重拉会话列表失败:', e)
-            })
-          }
-        }
         if (isSub) {
           const sub = agentStore.getTargetAgent(Number(cid))
           if (sub) {
@@ -344,10 +333,6 @@ export function useRealtimeEvents() {
             } else if (normalized.status === 'FAILED' || normalized.status === 'CANCELED') {
               sub.status = 'failed'
             }
-          }
-        } else {
-          if (normalized.status === 'FAILED' || normalized.status === 'CANCELED') {
-            appStore.loopRunning = false
           }
         }
       }
@@ -370,7 +355,6 @@ export function useRealtimeEvents() {
       } else {
         if (cid === conversationStore.activeCid) {
           applyResetDeletion(conversationStore.messages, targetId)
-          appStore.loopRunning = false
         }
       }
     })
@@ -495,9 +479,16 @@ export function useRealtimeEvents() {
       if (payload.newlineKey !== undefined) appStore.newlineKey = payload.newlineKey
       if (payload.httpLog !== undefined) appStore.httpLog = payload.httpLog
       if (payload.httpLogDays !== undefined) appStore.httpLogDays = payload.httpLogDays
+      if (payload.httpLogIncludeResponse !== undefined) appStore.httpLogIncludeResponse = payload.httpLogIncludeResponse
       // 密码广播不携带密码值，仅同步"是否已设置"状态标记
       if (payload.passwordSet !== undefined) appStore.passwordSet = payload.passwordSet
       if (payload.minimalSkillMode !== undefined) appStore.minimalSkillMode = payload.minimalSkillMode
+      if (payload.theme !== undefined && (payload.theme === 'dark' || payload.theme === 'light')) {
+        appStore.theme = payload.theme
+        if (currentTheme.value !== payload.theme) {
+          switchTheme(payload.theme)
+        }
+      }
     })
 
     wsService.on(WS_EVENTS.PROVIDERS_UPDATED, (event) => {

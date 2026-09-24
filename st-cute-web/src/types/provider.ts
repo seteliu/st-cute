@@ -16,9 +16,12 @@ export interface Provider {
 /** 基础配置项（与后端 BasicConfigDto 对齐） */
 export interface BasicConfig {
   language?: 'zh-CN' | 'en-US'
+  theme?: 'dark' | 'light'
   newlineKey: 'enter' | 'alt+enter'
   httpLog: boolean
   httpLogDays: number
+  /** 是否记录响应部分（含 SSE 流式响应全文）：关闭后仅记录请求报文与异常，默认开启 */
+  httpLogIncludeResponse?: boolean
   /** 是否已设置安全密码（查询接口回传的状态标记；密码本身全链路不回传） */
   passwordSet?: boolean
   maxViewHistoryLimit?: number

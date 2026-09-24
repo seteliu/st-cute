@@ -32,6 +32,10 @@ export default {
     languageTooltip: '设置界面与系统的显示语言。',
     langZh: '中文 (Simplified Chinese)',
     langEn: 'English',
+    theme: '界面主题',
+    themeTooltip: '设置界面明暗主题，默认为黑色主题。',
+    themeDark: '黑色主题 (Dark)',
+    themeLight: '白色主题 (Light)',
     newlineKey: '消息换行键',
     newlineKeyTooltip: '设置在此设备上的输入框快捷键。',
     enterKey: 'Enter 发送，Shift+Enter 换行',
@@ -39,8 +43,11 @@ export default {
     pathSandbox: '路径沙箱保护',
     pathSandboxTooltip: '开启后限制智能体工具读写操作仅在当前项目目录下执行，防止误触系统关键文件。',
     httpLog: '原始 HTTP 日志',
-    httpLogTooltip: '开启后将物理记录与 LLM 交互的原始 HTTP 报文 payload（供调优排查使用）。',
+    httpLogTooltip: '开启后将记录与 LLM 通信的原始 HTTP 报文日志。',
+    httpLogIncludeResponse: '日志包含响应部分',
+    httpLogIncludeResponseTooltip: '关闭后仅记录请求报文与异常，不再记录响应内容（含 SSE 流式响应全文），避免流式输出体积过大把日志文件冲爆。',
     httpLogDays: '日志保留天数',
+    httpLogDaysTooltip: '日志文件（http_日期.log）存放在 ~/.st-cute/logs 目录下，超过保留天数的文件会在定时清理时自动删除。',
     minimalSkillMode: '极简 Skill 模式',
     minimalSkillModeTooltip: '开启后技能清单不再注入系统提示词以节省 Token，仅在用户明确触发（如 /xx-xx 或"调用 xxx skill"）时按需加载。',
     password: '安全访问密码',
@@ -177,6 +184,7 @@ export default {
     permissionRequestDesc: '智能体申请执行以下操作，请审阅并作出决定：',
     toolNameLabel: '工具名称',
     argumentsLabel: '调用参数',
+    mcpToolDisplayName: 'MCP调用',
     resultLabel: '执行结果',
     // 工具执行中/等待审批时详情抽屉的结果区占位提示
     toolRunningPlaceholder: '⏳ 工具执行中，结果尚未产生',
@@ -189,7 +197,7 @@ export default {
     allow: '允许执行',
     deny: '拒绝',
     cancelSuccess: '会话已取消运行',
-    foldedSummary: '已折叠：助手消息 {assistant} 条、工具消息 {tool} 条',
+    foldedSummary: '已折叠消息：助手 {assistant} 条、工具 {tool} 条',
     foldedWarningTitle: '折叠内容包含执行异常',
     foldedFailedTool: '工具 [{name}] 执行失败',
     foldedFailedMsg: '助手消息执行失败',
@@ -199,6 +207,8 @@ export default {
     foldedDetailMissingRange: '折叠区间信息缺失，无法加载详情',
     foldedDetailLoadError: '加载折叠详情消息失败，请稍后重试',
     contextWindow: '上下文窗口',
+    // 移动端头部触发文字前缀（含冒号）：移动端宽度紧张，触发文案精简为「上下文：xx.x%」仅百分比形式，完整明细走点击弹层
+    contextWindowShort: '上下文：',
     connected: '服务已连通',
     disconnected: '连接已断开 (重连中...)',
     contextDetails: '上下文详情',
@@ -206,7 +216,7 @@ export default {
     outputToken: '本次输出',
     cachedToken: '缓存',
     windowToken: '当前窗口',
-    sessionCacheRatio: '总计会话缓存比'
+    sessionCacheRatio: '累计缓存占比'
   },
   review: {
     branch: '分支:',

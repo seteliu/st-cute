@@ -38,6 +38,7 @@
   "newlineKey": "enter",
   "llmLog": {
     "httpLog": false,
+    "includeResponse": true,
     "httpLogDays": 7
   },
   "pathSandboxEnabled": true,

@@ -32,6 +32,10 @@ export default {
     languageTooltip: 'Set the display language of the UI and system.',
     langZh: '中文 (Simplified Chinese)',
     langEn: 'English',
+    theme: 'Theme',
+    themeTooltip: 'Set interface theme mode. Default is dark theme.',
+    themeDark: 'Dark Theme',
+    themeLight: 'Light Theme',
     newlineKey: 'Newline Shortcut',
     newlineKeyTooltip: 'Set the shortcut key for message sending in the input box.',
     enterKey: 'Enter to send, Shift+Enter for new line',
@@ -39,8 +43,11 @@ export default {
     pathSandbox: 'Path Sandbox',
     pathSandboxTooltip: 'Restrict agent file operations to current project workspace directory.',
     httpLog: 'Raw HTTP Logging',
-    httpLogTooltip: 'Physically log raw HTTP payloads exchanged with LLM for debugging.',
+    httpLogTooltip: 'When enabled, raw HTTP message logs of LLM communication are recorded.',
+    httpLogIncludeResponse: 'Include Response',
+    httpLogIncludeResponseTooltip: 'When disabled, only requests and errors are logged; response bodies (including full SSE streams) are omitted to keep log files from being flooded.',
     httpLogDays: 'Log Retention Days',
+    httpLogDaysTooltip: 'Log files (http_date.log) are stored in ~/.st-cute/logs; files older than the retention days are deleted automatically by the cleanup job.',
     minimalSkillMode: 'Minimal Skill Mode',
     minimalSkillModeTooltip: 'Omit skill list from system prompt to save tokens. Skills load on demand only when explicitly triggered (e.g. /xx-xx or "use xxx skill").',
     password: 'Security Access Password',
@@ -176,6 +183,7 @@ export default {
     permissionRequestDesc: 'Agent requests to execute the following operation. Please review and decide:',
     toolNameLabel: 'Tool Name',
     argumentsLabel: 'Arguments',
+    mcpToolDisplayName: 'MCP Call',
     resultLabel: 'Execution Result',
     // 工具执行中/等待审批时详情抽屉的结果区占位提示
     toolRunningPlaceholder: '⏳ Tool is running, result not yet available',
@@ -198,6 +206,8 @@ export default {
     foldedDetailMissingRange: 'Folded range info missing, cannot load details',
     foldedDetailLoadError: 'Failed to load folded details, please retry later',
     contextWindow: 'Context Window',
+    // 移动端头部触发文字前缀（含冒号）：移动端宽度紧张，触发文案精简为「Context: xx.x%」仅百分比形式，完整明细走点击弹层
+    contextWindowShort: 'Context: ',
     connected: 'Connected',
     disconnected: 'Disconnected (Reconnecting...)',
     contextDetails: 'Context Details',
@@ -205,7 +215,7 @@ export default {
     outputToken: 'Output',
     cachedToken: 'Cached',
     windowToken: 'Window',
-    sessionCacheRatio: 'Session Cache Ratio'
+    sessionCacheRatio: 'Cumulative Cache Ratio'
   },
   review: {
     branch: 'Branch:',

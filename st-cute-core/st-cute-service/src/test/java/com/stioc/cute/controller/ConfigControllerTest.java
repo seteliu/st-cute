@@ -44,11 +44,13 @@ class ConfigControllerTest extends AbstractControllerSliceTest {
         // 显式钉住断言依据的字段值：@PostConstruct 可能合并测试隔离目录遗留的 config.json，
         // 不依赖"默认值恰未被翻转"的环境假设
         contractProperty.setLanguage("zh-CN");
+        contractProperty.setTheme("dark");
 
         mockMvc.perform(localGet("/api/config/list"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.language").value("zh-CN"))
+                .andExpect(jsonPath("$.data.theme").value("dark"))
                 .andExpect(jsonPath("$.data.passwordSet").value(false))
                 .andExpect(jsonPath("$.data.password").doesNotExist());
     }
@@ -72,20 +74,24 @@ class ConfigControllerTest extends AbstractControllerSliceTest {
                 .andExpect(jsonPath("$.code").value(0));
 
         ArgumentCaptor<String> language = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> theme = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> newline = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Boolean> httpLog = ArgumentCaptor.forClass(Boolean.class);
         ArgumentCaptor<Integer> httpLogDays = ArgumentCaptor.forClass(Integer.class);
+        ArgumentCaptor<Boolean> includeResponse = ArgumentCaptor.forClass(Boolean.class);
         ArgumentCaptor<Boolean> sandbox = ArgumentCaptor.forClass(Boolean.class);
         ArgumentCaptor<Boolean> minimal = ArgumentCaptor.forClass(Boolean.class);
         ArgumentCaptor<Boolean> loadAll = ArgumentCaptor.forClass(Boolean.class);
         ArgumentCaptor<Integer> maxHistory = ArgumentCaptor.forClass(Integer.class);
-        verify(providerService).saveSettings(language.capture(), newline.capture(), httpLog.capture(),
-                httpLogDays.capture(), sandbox.capture(), minimal.capture(), loadAll.capture(), maxHistory.capture());
+        verify(providerService).saveSettings(language.capture(), theme.capture(), newline.capture(), httpLog.capture(),
+                httpLogDays.capture(), includeResponse.capture(), sandbox.capture(), minimal.capture(), loadAll.capture(), maxHistory.capture());
 
         assertEquals("zh-CN", language.getValue());
+        assertEquals("dark", theme.getValue());
         assertEquals("enter", newline.getValue());
         assertFalse(httpLog.getValue());
         assertEquals(7, httpLogDays.getValue());
+        assertTrue(includeResponse.getValue());
         assertTrue(sandbox.getValue());
         assertFalse(minimal.getValue());
         assertTrue(loadAll.getValue());
@@ -97,13 +103,13 @@ class ConfigControllerTest extends AbstractControllerSliceTest {
     void saveConfigWithExplicitValues() throws Exception {
         mockMvc.perform(localPost("/api/config/save")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"language\":\"en-US\",\"newlineKey\":\"ctrl+enter\",\"httpLog\":true," +
-                                "\"httpLogDays\":30,\"pathSandboxEnabled\":false,\"minimalSkillMode\":true," +
+                        .content("{\"language\":\"en-US\",\"theme\":\"light\",\"newlineKey\":\"ctrl+enter\",\"httpLog\":true," +
+                                "\"httpLogDays\":30,\"httpLogIncludeResponse\":false,\"pathSandboxEnabled\":false,\"minimalSkillMode\":true," +
                                 "\"loadAllUserAttachments\":false,\"maxViewHistoryLimit\":500}"))
                 .andExpect(status().isOk());
 
-        verify(providerService).saveSettings("en-US", "ctrl+enter", true, 30,
-                false, true, false, 500);
+        verify(providerService).saveSettings("en-US", "light", "ctrl+enter", true, 30,
+                false, false, true, false, 500);
     }
 
     @Test
