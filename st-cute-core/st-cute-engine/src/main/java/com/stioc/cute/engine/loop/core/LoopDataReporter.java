@@ -59,10 +59,7 @@ public class LoopDataReporter {
         Long cid = context.getCid();
         String waitingIdsStr = toolCallIds.isEmpty() ? null : String.join(",", toolCallIds);
 
-        // 1. 同步更新内存
-        context.setCallToolCount(toolCallIds.size());
-
-        // 2. 上报更新事件，委托持久化层写盘
+        // 上报更新事件，委托持久化层写盘并由同步事件链回填内存缓存
         ConversationPatch updatePayload = new ConversationPatch(cid)
                 .callToolCount(toolCallIds.size())
                 .waitingToolIds(waitingIdsStr)
@@ -231,18 +228,18 @@ public class LoopDataReporter {
     }
 
     /**
-     * 查库对账判定循环真完结后置 loopRunning=0（通过事件上报）。
-     * 基于库内最新等待指标判定，避免内存视图滞后误判；为全引擎唯一完结收口方法，
+     * 对账判定循环真完结后置 loopRunning=0（通过事件上报）。
+     * 基于内存上下文最新等待指标与本轮工具调用计数判定；为全引擎唯一完结收口方法，
      * 门内正常完结/压缩失败终结与门内收尾统一走此方法。
      */
     public void updateLoopRunningToFinished(AgentContext context, boolean hasException) {
-        Long cid = context.getCid();
-        Conversation conv = conversationStore.getById(cid);
-        if (conv == null) {
+        if (context == null) {
             return;
         }
-        boolean allWaitingEmpty = isBlank(conv.getWaitingToolIds()) && isBlank(conv.getWaitingSubCids());
-        boolean trulyFinished = hasException || allWaitingEmpty;
+        Long cid = context.getCid();
+        boolean allWaitingEmpty = context.getWaitingToolIds().isEmpty() && context.getWaitingSubCids().isEmpty();
+        boolean noToolsThisRound = context.getCallToolCount() == 0;
+        boolean trulyFinished = hasException || (allWaitingEmpty && noToolsThisRound);
         if (trulyFinished) {
             ConversationPatch updatePayload = new ConversationPatch(cid)
                     .loopRunning(0)

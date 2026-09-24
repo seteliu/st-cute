@@ -180,8 +180,8 @@ public class AgentLoopProcessor {
 
         // 7. 判断本次推理是否发起了工具调用
         if (pendingCalls.isEmpty()) {
-            // 正常完结：交由数据上报器查库对账后统一收口 loopRunning=0
-            loopDataReporter.updateLoopRunningToFinished(context, false);
+            // 零工具调用：统一上报清空当前轮工具账目（callToolCount=0, waitingToolIds=null），交由统一出口 finalizeContext 对账收口
+            initToolRound(context, List.of());
             return result;
         } else {
             handleToolExecution(context, result);

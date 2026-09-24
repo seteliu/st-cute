@@ -446,6 +446,10 @@ public class AgentLoopCoordinator {
         if (cid == null) {
             return false;
         }
+        AgentContext ctx = agentContextManager.getActiveContext(cid);
+        if (ctx != null) {
+            return ctx.isLoopRunning();
+        }
         return conversationStore.existsByQuery(ConversationQuery.builder()
                 .id(cid)
                 .loopRunning(1)
