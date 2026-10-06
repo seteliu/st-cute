@@ -122,70 +122,10 @@ jobs:
           echo "$FINAL_VERSION" > dist_app/version.txt
           echo "Resolved release version: $FINAL_VERSION (Tag: $TAG_NAME)"
 
-          # 生成 Windows 启动脚本 (st-cute.cmd)
-          cat << 'EOF' > dist_app/st-cute.cmd
-          @echo off
-          setlocal enabledelayedexpansion
-          cd /d "%~dp0"
-          
-          set "JAVA_CMD="
-          if exist "%~dp0jre\bin\java.exe" (
-              set "JAVA_CMD=%~dp0jre\bin\java.exe"
-              goto :RUN
-          )
-          if exist "%~dp0jdk\bin\java.exe" (
-              set "JAVA_CMD=%~dp0jdk\bin\java.exe"
-              goto :RUN
-          )
-          where java >nul 2>nul
-          if %errorlevel% equ 0 (
-              set "JAVA_CMD=java"
-              goto :RUN
-          )
-          
-          echo [ERROR] 未找到 Java 环境！
-          echo 请在当前目录下放置 jre 或 jdk 目录，或者配置系统 Java 环境变量。
-          pause
-          exit /b 1
-          
-          :RUN
-          set "JAVA_OPTS=%ST_CUTE_JAVA_OPTS%"
-          if not defined JAVA_OPTS set "JAVA_OPTS=-Xms256m -Xmx1024m"
-          "%JAVA_CMD%" %JAVA_OPTS% -jar "%~dp0app.jar"
-          pause
-          EOF
-          # 转换为 Windows CRLF 换行符
-          sed -i 's/$/\r/' dist_app/st-cute.cmd
-
-          # 生成 Linux 启动脚本 (st-cute.sh)
-          cat << 'EOF' > dist_app/st-cute.sh
-          #!/usr/bin/env bash
-          SCRIPT_DIR="$(cd "$(dirname "$0")"; pwd)"
-          cd "$SCRIPT_DIR"
-
-          JAVA_CMD=""
-          if [ -x "$SCRIPT_DIR/jre/bin/java" ]; then
-              JAVA_CMD="$SCRIPT_DIR/jre/bin/java"
-          elif [ -x "$SCRIPT_DIR/jdk/bin/java" ]; then
-              JAVA_CMD="$SCRIPT_DIR/jdk/bin/java"
-          elif command -v java >/dev/null 2>&1; then
-              JAVA_CMD="java"
-          fi
-
-          if [ -z "$JAVA_CMD" ]; then
-              echo "[ERROR] 未找到 Java 环境！"
-              echo "请在当前目录下放置 jre 或 jdk 目录，或者配置系统 Java 环境变量。"
-              exit 1
-          fi
-
-          JAVA_OPTS="${ST_CUTE_JAVA_OPTS:--Xms256m -Xmx1024m}"
-          "$JAVA_CMD" $JAVA_OPTS -jar "$SCRIPT_DIR/app.jar" "$@"
-          EOF
-          chmod +x dist_app/st-cute.sh
-
-          # 生成 macOS 双击启动脚本 (st-cute.command)
-          cp dist_app/st-cute.sh dist_app/st-cute.command
-          chmod +x dist_app/st-cute.command
+          # 生成三平台启动脚本 (st-cute.cmd / st-cute.sh / st-cute.command)
+          # 统一走共享生成器 script/gen-launcher-scripts.mjs（单一真源，本地构建同源调用），
+          # 脚本内置升级接力（断点续装 + 退出码 88 分派 + 一次性回滚）与底座身份声明
+          node script/gen-launcher-scripts.mjs --out dist_app --version "$FINAL_VERSION"
 
           # 生成 Base 包 (.zip，仅包含纯 app.jar)
           mkdir -p dist_base

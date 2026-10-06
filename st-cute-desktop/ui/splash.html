@@ -219,6 +219,21 @@
         spinner.style.display = 'block';
         errorBox.classList.remove('active');
         actions.classList.remove('active');
+      } else if (phase === 'upgrading') {
+        statusText.innerText = '检测到升级指令，正在替换新版本…';
+        spinner.style.display = 'block';
+        errorBox.classList.remove('active');
+        actions.classList.remove('active');
+      } else if (phase === 'upgrade-applied') {
+        statusText.innerText = '新版本已就位，正在启动…';
+        spinner.style.display = 'block';
+        errorBox.classList.remove('active');
+        actions.classList.remove('active');
+      } else if (phase === 'upgrade-rolled-back') {
+        statusText.innerText = '新版本启动失败，已回滚旧版本';
+        spinner.style.display = 'block';
+        errorBox.classList.remove('active');
+        actions.classList.remove('active');
       } else if (phase === 'ready' || phase === 'adopted') {
         statusText.innerText = '服务已就绪，正在进入…';
         spinner.style.display = 'block';

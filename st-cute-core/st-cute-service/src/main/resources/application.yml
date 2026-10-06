@@ -67,3 +67,7 @@ st-cute:
       token: st-searxng-gogogo
       # 搜索请求读取超时（秒）
       timeout-seconds: 15
+  # 应用自动升级（jar 热替换）配置；latest.json 元数据模板见 resources/update/latest.template.json
+  update:
+    # 升级元数据地址（latest.json 托管位置，手动维护）
+    latest-url: https://meta.61jun.com/st-cute/latest.json

@@ -1,0 +1,9 @@
+{
+  "jarVersion": "0.3.0",
+  "jarUrl": "https://xxx/xxx.jar",
+  "jarSha256": "sha256:发布时以 sha256sum app.jar 计算后填入（前缀可省略）",
+  "notes": "1. 本次更新内容示例\n2. 修复问题示例",
+  "minBaseVersion": "0.3.0",
+  "oldBaseTip": "当前底座版本过低，无法自动升级，请前往发布页下载最新安装包",
+  "releaseUrl": "https://github.com/seteliu/st-cute/releases"
+}

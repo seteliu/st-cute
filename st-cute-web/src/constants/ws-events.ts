@@ -38,7 +38,11 @@ export const WS_EVENTS = {
   /** 供应商配置更新（全局广播，payload: Provider[] 或 null） */
   PROVIDERS_UPDATED: 'S2C_PROVIDERS_UPDATED',
   /** MCP 状态更新（全局广播，payload: McpStatusVo[]） */
-  MCP_UPDATED: 'S2C_MCP_UPDATED'
+  MCP_UPDATED: 'S2C_MCP_UPDATED',
+  /** 升级流程进度（全局广播，payload: {phase, percent, detail}） */
+  UPDATE_PROGRESS: 'S2C_UPDATE_PROGRESS',
+  /** 升级就绪即将重启（全局广播，payload: {fromVersion, toVersion}） */
+  UPDATE_RESTARTING: 'S2C_UPDATE_RESTARTING'
   // S2C_HOOK_EVENT 无契约：后端 HookService.sendHookEventWs 仅记日志、不推送 WS 帧。
   // 若后端未来恢复推送，在此登记常量并补监听即可
 } as const

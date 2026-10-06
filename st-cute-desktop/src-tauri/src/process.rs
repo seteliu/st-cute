@@ -233,6 +233,9 @@ impl ProcessManager {
             // 同时后端日志子系统据此追加 desktop profile 关闭控制台 appender，仅写 service 日志文件。
             // stdout/stderr 保持重定向至 desktop 早期报错文件，仅承载 logback 接管前的 JVM 报错
             .env("ST_CUTE_DESKTOP_MANAGED", "1")
+            // 底座身份声明：Java 侧 LauncherType 据此判定 DESKTOP 运行方式与壳版本
+            .env("ST_CUTE_LAUNCHER_TYPE", "DESKTOP")
+            .env("ST_CUTE_LAUNCHER_VERSION", env!("CARGO_PKG_VERSION"))
             .stdout(Stdio::from(log_file))
             .stderr(Stdio::from(err_file));
 

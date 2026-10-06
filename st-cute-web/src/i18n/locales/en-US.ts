@@ -27,7 +27,6 @@ export default {
     aboutTab: 'About',
     aboutTitle: 'ST-Cute',
     aboutSubtitle: 'AI Programming Agent',
-    aboutVersion: 'Version',
     language: 'Language',
     languageTooltip: 'Set the display language of the UI and system.',
     langZh: '中文 (Simplified Chinese)',
@@ -45,13 +44,17 @@ export default {
     httpLog: 'Raw HTTP Logging',
     httpLogTooltip: 'When enabled, raw HTTP message logs of LLM communication are recorded.',
     httpLogIncludeResponse: 'Include Response',
-    httpLogIncludeResponseTooltip: 'When disabled, only requests and errors are logged; response bodies (including full SSE streams) are omitted to keep log files from being flooded.',
+    httpLogIncludeResponseTooltip:
+      'When disabled, only requests and errors are logged; response bodies (including full SSE streams) are omitted to keep log files from being flooded.',
     httpLogDays: 'Log Retention Days',
-    httpLogDaysTooltip: 'Log files (http_date.log) are stored in ~/.st-cute/logs; files older than the retention days are deleted automatically by the cleanup job.',
+    httpLogDaysTooltip:
+      'Log files (http_date.log) are stored in ~/.st-cute/logs; files older than the retention days are deleted automatically by the cleanup job.',
     minimalSkillMode: 'Minimal Skill Mode',
-    minimalSkillModeTooltip: 'Omit skill list from system prompt to save tokens. Skills load on demand only when explicitly triggered (e.g. /xx-xx or "use xxx skill").',
+    minimalSkillModeTooltip:
+      'Omit skill list from system prompt to save tokens. Skills load on demand only when explicitly triggered (e.g. /xx-xx or "use xxx skill").',
     password: 'Security Access Password',
-    passwordTooltip: 'Set a global security access password (8-32 chars with letters and digits) to protect against unauthorized access.',
+    passwordTooltip:
+      'Set a global security access password (8-32 chars with letters and digits) to protect against unauthorized access.',
     passwordPlaceholder: 'Enter password (leave empty to disable)',
     passwordStatusSet: 'Current status: access password is set',
     passwordStatusUnset: 'Current status: access password is not set',
@@ -61,19 +64,54 @@ export default {
     passwordSetTitle: 'Set Access Password',
     passwordModifyTitle: 'Change Access Password',
     passwordInputPlaceholder: 'Enter the new access password',
-    passwordPolicyHint: 'Requirement: 8-32 characters with both letters and digits. Only a digest is stored server-side; the plaintext never crosses the network.',
+    passwordPolicyHint:
+      'Requirement: 8-32 characters with both letters and digits. Only a digest is stored server-side; the plaintext never crosses the network.',
     passwordSaveSuccess: 'Access password saved',
     passwordClearSuccess: 'Access password cleared; password protection is now disabled',
     passwordClearConfirmTitle: 'Clear the access password?',
-    passwordClearConfirmContent: 'After clearing, no password will be required and only local requests are allowed. This takes effect immediately.',
+    passwordClearConfirmContent:
+      'After clearing, no password will be required and only local requests are allowed. This takes effect immediately.',
     passwordTooShort: 'Access password must be at least 8 characters (trimmed)',
     passwordTooLong: 'Access password must be at most 32 characters (trimmed)',
     passwordNeedLetterAndDigit: 'Access password must contain both English letters and digits',
-    passwordInvalidChar: 'Access password contains unsupported characters; only letters, digits and common symbols are allowed',
+    passwordInvalidChar:
+      'Access password contains unsupported characters; only letters, digits and common symbols are allowed',
     loginFailed: 'Login failed, please check the access password',
     saveSuccess: 'System settings saved successfully',
     saveFailed: 'Failed to save system settings',
-    loadFailed: 'Failed to load system settings'
+    loadFailed: 'Failed to load system settings',
+    // ── About page: version & update ──
+    aboutRunMode: 'Run Mode',
+    aboutLauncherVersion: 'Launcher Version',
+    aboutJarVersion: 'App Version',
+    aboutLauncherVersionUnknown: 'Not reported',
+    aboutUpdateSectionTitle: 'Updates',
+    updateCheckFailed: 'Update check failed, please check the network and retry',
+    updateRecheck: 'Check Again',
+    updateChecking: 'Checking for updates...',
+    updateUnsupportedTip:
+      'Automatic upgrade is not supported under the current run mode. Run via the official startup script or the desktop app to enable it.',
+    updateOldBaseTip: 'The launcher version is too old for automatic upgrade',
+    updateOldBaseGoRelease: 'Go to Releases',
+    updateUpdatableTip: 'A new version is available. Updating is recommended',
+    updateBtn: 'Update Now',
+    updateLatestTip: 'You are on the latest version',
+    updateMinBase: 'Automatic upgrade requires launcher version >= {version}',
+    // ── Upgrade execution flow ──
+    updateConfirmTitle: 'Start the update?',
+    updateConfirmContent:
+      'The update will download the new version and restart the service. In-progress conversations will be interrupted. Continue?',
+    updateDownloading: 'Downloading the new version',
+    updateDownloadingBytes: 'Downloading (received {size})',
+    updateDownloaded: 'Download complete, preparing to restart',
+    updateRestarting: 'Service restarting',
+    updateRestartingTip:
+      'Upgrading and restarting (about 10-30 seconds). The page will refresh automatically into the new version',
+    updateFailed: 'Upgrade failed',
+    updateRollbackTip: 'The new version failed to start and was rolled back automatically',
+    updateSuccessTip: 'Successfully upgraded to {version}',
+    updateVersionReady: 'Service is ready',
+    updateLastFailed: 'Last update failed: {reason}. You can retry directly'
   },
   sider: {
     newChat: 'New Chat',
@@ -85,13 +123,16 @@ export default {
     projectPath: 'Physical Path',
     projectPathPlaceholder: 'Enter local physical path (e.g. P:/MyProject)',
     deleteConfirmTitle: 'Delete Chat',
-    deleteConfirmContent: 'Are you sure you want to delete this chat session? This action cannot be undone.',
+    deleteConfirmContent:
+      'Are you sure you want to delete this chat session? This action cannot be undone.',
     permissionMode: 'Permission Mode',
     modeStrictApproval: 'Strict Approval',
     modeRelaxedApproval: 'Relaxed Approval',
     modeAllAllow: 'Allow All',
-    modeStrictApprovalTooltip: 'Only read-only tools enabled for direct execution. File write and command executions require approval.',
-    modeRelaxedApprovalTooltip: 'Allow file read/write and safe commands directly. Sensitive terminal commands require manual approval.',
+    modeStrictApprovalTooltip:
+      'Only read-only tools enabled for direct execution. File write and command executions require approval.',
+    modeRelaxedApprovalTooltip:
+      'Allow file read/write and safe commands directly. Sensitive terminal commands require manual approval.',
     modeAllAllowTooltip: 'Allow all tools to run directly without any manual approval.',
     permissionModeTooltip: 'Set security permission mode for agent tool executions.',
     modelSelect: 'Select Model',
@@ -126,7 +167,8 @@ export default {
     temperature: 'Temperature',
     temperaturePlaceholder: 'Recommended 0.1, leave empty if unsure',
     systemPasswordModalTitle: 'Enter Security Password',
-    systemPasswordModalDesc: 'Access restriction is enabled. Please enter password for authentication:',
+    systemPasswordModalDesc:
+      'Access restriction is enabled. Please enter password for authentication:',
     systemPasswordPlaceholder: 'Enter access password',
     verify: 'Verify',
     protocolRequired: 'Please select a protocol',
@@ -136,10 +178,14 @@ export default {
     apiKeyRequired: 'Please enter API Key',
     modelNameRequired: 'Please enter model name',
     contextSizeRequired: 'Please enter context window size',
-    groupInvalidChar: 'Group name cannot contain spaces or special characters (letters, digits, underscores and hyphens only)',
-    modelNameInvalidChar: 'Model name cannot contain spaces or special characters (letters, digits and _ . / @ : - only)',
-    reasoningEffortInvalidChar: 'Reasoning effort cannot contain spaces or special characters (letters, digits and hyphens only, e.g. low / medium / high)',
-    modelDuplicate: "Model '{model}' already exists in group '{group}', duplicate additions are not allowed",
+    groupInvalidChar:
+      'Group name cannot contain spaces or special characters (letters, digits, underscores and hyphens only)',
+    modelNameInvalidChar:
+      'Model name cannot contain spaces or special characters (letters, digits and _ . / @ : - only)',
+    reasoningEffortInvalidChar:
+      'Reasoning effort cannot contain spaces or special characters (letters, digits and hyphens only, e.g. low / medium / high)',
+    modelDuplicate:
+      "Model '{model}' already exists in group '{group}', duplicate additions are not allowed",
     groupPlaceholder: 'e.g. openrouter',
     modelNamePlaceholder: 'e.g. gpt-4',
     baseUrlPlaceholder: 'e.g. https://openrouter.ai/api/v1',
@@ -164,7 +210,8 @@ export default {
     attachmentLimitTip: 'Max 5 attachments',
     attachmentSizeLimit: 'File size cannot exceed 10MB',
     attachmentFormatError: 'Unsupported file format',
-    attachmentProcessedSizeLimit: 'Attachment [{name}] is {size} after processing, exceeding the 1024KB limit and was blocked',
+    attachmentProcessedSizeLimit:
+      'Attachment [{name}] is {size} after processing, exceeding the 1024KB limit and was blocked',
     uploadFailed: 'Failed to upload attachment, please retry',
     slashNoMatch: 'No matches',
     dragDropTip: 'Drag & drop files here to upload',
@@ -180,7 +227,8 @@ export default {
     copiedSuccess: 'Content copied to clipboard',
     copiedFailed: 'Copy failed: clipboard is not available in this environment',
     permissionRequestTitle: 'Permission Approval Request',
-    permissionRequestDesc: 'Agent requests to execute the following operation. Please review and decide:',
+    permissionRequestDesc:
+      'Agent requests to execute the following operation. Please review and decide:',
     toolNameLabel: 'Tool Name',
     argumentsLabel: 'Arguments',
     mcpToolDisplayName: 'MCP Call',
@@ -299,7 +347,8 @@ export default {
   },
   home: {
     basicConfigError: 'Failed to load system basic configuration. Please check network connection.',
-    providerConfigError: 'Failed to load model providers configuration. Please check database configuration.',
+    providerConfigError:
+      'Failed to load model providers configuration. Please check database configuration.',
     projectListError: 'Failed to load project list. Please check database status.',
     historyError: 'Failed to load chat history.',
     mcpError: 'Failed to load project MCP tools status.',

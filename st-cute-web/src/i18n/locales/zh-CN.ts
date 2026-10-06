@@ -27,7 +27,6 @@ export default {
     aboutTab: '关于',
     aboutTitle: 'ST-Cute',
     aboutSubtitle: 'AI 编程智能体',
-    aboutVersion: '版本',
     language: '语言设置',
     languageTooltip: '设置界面与系统的显示语言。',
     langZh: '中文 (Simplified Chinese)',
@@ -41,17 +40,22 @@ export default {
     enterKey: 'Enter 发送，Shift+Enter 换行',
     altEnterKey: 'Alt+Enter 发送，Enter 换行',
     pathSandbox: '路径沙箱保护',
-    pathSandboxTooltip: '开启后限制智能体工具读写操作仅在当前项目目录下执行，防止误触系统关键文件。',
+    pathSandboxTooltip:
+      '开启后限制智能体工具读写操作仅在当前项目目录下执行，防止误触系统关键文件。',
     httpLog: '原始 HTTP 日志',
     httpLogTooltip: '开启后将记录与 LLM 通信的原始 HTTP 报文日志。',
     httpLogIncludeResponse: '日志包含响应部分',
-    httpLogIncludeResponseTooltip: '关闭后仅记录请求报文与异常，不再记录响应内容（含 SSE 流式响应全文），避免流式输出体积过大把日志文件冲爆。',
+    httpLogIncludeResponseTooltip:
+      '关闭后仅记录请求报文与异常，不再记录响应内容（含 SSE 流式响应全文），避免流式输出体积过大把日志文件冲爆。',
     httpLogDays: '日志保留天数',
-    httpLogDaysTooltip: '日志文件（http_日期.log）存放在 ~/.st-cute/logs 目录下，超过保留天数的文件会在定时清理时自动删除。',
+    httpLogDaysTooltip:
+      '日志文件（http_日期.log）存放在 ~/.st-cute/logs 目录下，超过保留天数的文件会在定时清理时自动删除。',
     minimalSkillMode: '极简 Skill 模式',
-    minimalSkillModeTooltip: '开启后技能清单不再注入系统提示词以节省 Token，仅在用户明确触发（如 /xx-xx 或"调用 xxx skill"）时按需加载。',
+    minimalSkillModeTooltip:
+      '开启后技能清单不再注入系统提示词以节省 Token，仅在用户明确触发（如 /xx-xx 或"调用 xxx skill"）时按需加载。',
     password: '安全访问密码',
-    passwordTooltip: '可设置全局安全访问密码（8~32 位，须含英文字母和数字），保护系统免受未经授权的访问。',
+    passwordTooltip:
+      '可设置全局安全访问密码（8~32 位，须含英文字母和数字），保护系统免受未经授权的访问。',
     passwordPlaceholder: '请输入访问密码（留空表示关闭）',
     passwordStatusSet: '当前状态：已设置安全访问密码',
     passwordStatusUnset: '当前状态：尚未设置安全访问密码',
@@ -61,11 +65,13 @@ export default {
     passwordSetTitle: '设置安全访问密码',
     passwordModifyTitle: '修改安全访问密码',
     passwordInputPlaceholder: '请输入新的访问密码',
-    passwordPolicyHint: '要求：8~32 位，须同时包含英文字母和数字。密码仅以摘要形式在服务端落盘，原文不经过网络。',
+    passwordPolicyHint:
+      '要求：8~32 位，须同时包含英文字母和数字。密码仅以摘要形式在服务端落盘，原文不经过网络。',
     passwordSaveSuccess: '安全访问密码已保存',
     passwordClearSuccess: '安全访问密码已清除，系统当前未启用密码保护',
     passwordClearConfirmTitle: '确认清除安全访问密码？',
-    passwordClearConfirmContent: '清除后系统将不再校验访问密码，仅允许本机来源访问。此操作立即生效。',
+    passwordClearConfirmContent:
+      '清除后系统将不再校验访问密码，仅允许本机来源访问。此操作立即生效。',
     passwordTooShort: '安全访问码至少需要 8 位（按首尾去空格后计算）',
     passwordTooLong: '安全访问码最多 32 位（按首尾去空格后计算）',
     passwordNeedLetterAndDigit: '安全访问码必须同时包含英文字母和数字',
@@ -73,7 +79,39 @@ export default {
     loginFailed: '登录失败，请检查访问密码',
     saveSuccess: '系统配置保存成功',
     saveFailed: '保存系统配置失败',
-    loadFailed: '加载系统基础设置失败'
+    loadFailed: '加载系统基础设置失败',
+    // ── 关于页 · 版本与更新 ──
+    aboutRunMode: '运行方式',
+    aboutLauncherVersion: '底座版本',
+    aboutJarVersion: '应用版本',
+    aboutLauncherVersionUnknown: '未上报',
+    aboutUpdateSectionTitle: '版本更新',
+    updateCheckFailed: '检查更新失败，请检查网络后重试',
+    updateRecheck: '重新检查',
+    updateChecking: '正在检查更新...',
+    updateUnsupportedTip:
+      '当前运行方式不支持自动升级。建议使用官方启动脚本或桌面端运行，以获得自动升级能力。',
+    updateOldBaseTip: '底座版本过低，无法自动升级',
+    updateOldBaseGoRelease: '前往发布页下载',
+    updateUpdatableTip: '发现新版本，建议及时更新',
+    updateBtn: '开始更新',
+    updateLatestTip: '已是最新版本',
+    updateMinBase: '自动升级要求底座版本不低于 {version}',
+    // ── 升级执行流程 ──
+    updateConfirmTitle: '开始更新？',
+    updateConfirmContent:
+      '更新将下载新版本并自动重启服务，进行中的对话任务会被中断。确定继续吗？',
+    updateDownloading: '正在下载新版本',
+    updateDownloadingBytes: '正在下载（已接收 {size}）',
+    updateDownloaded: '下载完成，准备重启',
+    updateRestarting: '服务重启中',
+    updateRestartingTip:
+      '正在升级重启（预计 10~30 秒），完成后页面将自动刷新进入新版本，请稍候',
+    updateFailed: '升级失败',
+    updateRollbackTip: '新版本启动异常已自动回滚，系统已恢复上一版本',
+    updateSuccessTip: '已成功升级至 {version}',
+    updateVersionReady: '服务已就绪',
+    updateLastFailed: '上次更新失败：{reason}，可直接重试'
   },
   sider: {
     newChat: '新建会话',
@@ -137,8 +175,10 @@ export default {
     modelNameRequired: '请输入模型名称',
     contextSizeRequired: '请输入上下文窗口大小',
     groupInvalidChar: '分组名称不能包含空格或特殊字符（仅允许字母、数字、下划线和连字符）',
-    modelNameInvalidChar: '模型名称不能包含空格或特殊字符（仅允许字母、数字及 _ . / @ : - 等常见符号）',
-    reasoningEffortInvalidChar: '推理力度不能包含空格或特殊字符（仅允许字母、数字和连字符，如 low / medium / high）',
+    modelNameInvalidChar:
+      '模型名称不能包含空格或特殊字符（仅允许字母、数字及 _ . / @ : - 等常见符号）',
+    reasoningEffortInvalidChar:
+      '推理力度不能包含空格或特殊字符（仅允许字母、数字和连字符，如 low / medium / high）',
     modelDuplicate: "模型 '{model}' 在分组 '{group}' 中已存在，不允许重复添加",
     groupPlaceholder: '例如: openrouter',
     modelNamePlaceholder: '例如: gpt-4',
@@ -164,7 +204,8 @@ export default {
     attachmentLimitTip: '最多上传 5 个附件',
     attachmentSizeLimit: '单文件大小不能超过 10MB',
     attachmentFormatError: '不支持的文件格式',
-    attachmentProcessedSizeLimit: '附件【{name}】处理后大小为 {size}，超过了 1024KB 上限，已被拦截无法发送',
+    attachmentProcessedSizeLimit:
+      '附件【{name}】处理后大小为 {size}，超过了 1024KB 上限，已被拦截无法发送',
     uploadFailed: '上传附件失败，请重试',
     slashNoMatch: '无匹配项',
     dragDropTip: '拖拽文件至此上传',

@@ -28,7 +28,11 @@ public class WebSocketBroadcast {
         CONVERSATION_CREATED("S2C_CONVERSATION_CREATED"),
         CONVERSATION_UPDATED("S2C_CONVERSATION_UPDATED"),
         CONVERSATION_DELETED("S2C_CONVERSATION_DELETED"),
-        MCP_UPDATED("S2C_MCP_UPDATED");
+        MCP_UPDATED("S2C_MCP_UPDATED"),
+        /** 升级流程进度（payload: phase/percent/detail，发起方 UpdateService） */
+        UPDATE_PROGRESS("S2C_UPDATE_PROGRESS"),
+        /** 升级就绪即将重启（payload: toVersion，随后进程以退出码 88 结束） */
+        UPDATE_RESTARTING("S2C_UPDATE_RESTARTING");
 
         private final String value;
 
