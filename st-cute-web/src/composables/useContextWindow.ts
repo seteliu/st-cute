@@ -29,9 +29,9 @@ export function useContextWindow() {
   const contextLimit = computed<number | null>(() => {
     const activeCid = conversationStore.activeCid
     if (activeCid === null || activeCid === undefined) return null
-    const activeConv = conversationStore.conversationList.find(s => s.id === activeCid)
+    const activeConv = conversationStore.conversationList.find((s) => s.id === activeCid)
     if (activeConv && activeConv.providerGroup) {
-      const provider = providerStore.providerList.find(p => p.group === activeConv.providerGroup)
+      const provider = providerStore.providerList.find((p) => p.group === activeConv.providerGroup)
       if (provider && provider.contextSize) {
         return provider.contextSize
       }

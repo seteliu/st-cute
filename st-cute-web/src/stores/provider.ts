@@ -47,7 +47,8 @@ export const useProviderStore = defineStore('provider', () => {
     if (
       !form.value.group ||
       !form.value.modelName ||
-      form.value.contextSize === undefined || form.value.contextSize === null
+      form.value.contextSize === undefined ||
+      form.value.contextSize === null
     ) {
       if ((window as any).$message) {
         ;(window as any).$message.warning('请填写所有必要字段（名称、模型、窗口大小）')
@@ -104,11 +105,16 @@ export const useProviderStore = defineStore('provider', () => {
 
   // 同组同名查重助手：忽略大小写比对同分组下是否存在相同模型名称的条目
   // excludeModelName：需要排除自身的模型名（编辑模式传入当前正在编辑的模型名）
-  const isModelNameDuplicated = (group: string, modelName: string, excludeModelName?: string): boolean => {
-    return providerList.value.some(p =>
-      p.group.toLowerCase() === group.toLowerCase() &&
-      p.modelName.toLowerCase() === modelName.toLowerCase() &&
-      p.modelName.toLowerCase() !== (excludeModelName || '').toLowerCase()
+  const isModelNameDuplicated = (
+    group: string,
+    modelName: string,
+    excludeModelName?: string
+  ): boolean => {
+    return providerList.value.some(
+      (p) =>
+        p.group.toLowerCase() === group.toLowerCase() &&
+        p.modelName.toLowerCase() === modelName.toLowerCase() &&
+        p.modelName.toLowerCase() !== (excludeModelName || '').toLowerCase()
     )
   }
 

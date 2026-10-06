@@ -14,9 +14,11 @@ export function useConversationProvider() {
     const list = providerStore.providerList
     if (!list || list.length === 0) return null
     const activeId = conversationStore.activeCid
-    const sess = conversationStore.conversationList.find(s => s.id === activeId)
+    const sess = conversationStore.conversationList.find((s) => s.id === activeId)
     if (sess && sess.providerGroup) {
-      const bound = list.find(p => p.group === sess.providerGroup && p.modelName === sess.providerModelName)
+      const bound = list.find(
+        (p) => p.group === sess.providerGroup && p.modelName === sess.providerModelName
+      )
       if (bound) return bound
     }
     return list[0]
@@ -39,7 +41,7 @@ export function useConversationProvider() {
 
   const providerOptions = computed(() => {
     const groups: Record<string, any[]> = {}
-    providerStore.providerList.forEach(p => {
+    providerStore.providerList.forEach((p) => {
       const groupName = p.group || t('chat.defaultProvider')
       if (!groups[groupName]) {
         groups[groupName] = []
@@ -63,15 +65,15 @@ export function useConversationProvider() {
     const [group, modelName] = val.split('/')
     try {
       await updateConversationProviderApi(conversationStore.activeCid, group, modelName || '')
-      
+
       const activeId = conversationStore.activeCid
-      const sess = conversationStore.conversationList.find(s => s.id === activeId)
+      const sess = conversationStore.conversationList.find((s) => s.id === activeId)
       if (sess) {
         sess.providerGroup = group
         sess.providerModelName = modelName || ''
       }
 
-      conversationStore.conversationList.forEach(s => {
+      conversationStore.conversationList.forEach((s) => {
         if (s.parentCid === activeId) {
           s.providerGroup = group
           s.providerModelName = modelName || ''
@@ -90,7 +92,8 @@ export function useConversationProvider() {
   watch(
     [
       () => conversationStore.activeCid,
-      () => conversationStore.conversationList.map(s => [s.id, s.providerGroup, s.providerModelName]),
+      () =>
+        conversationStore.conversationList.map((s) => [s.id, s.providerGroup, s.providerModelName]),
       () => providerStore.providerList
     ],
     async () => {
@@ -98,19 +101,25 @@ export function useConversationProvider() {
       if (!activeId) return
       const list = providerStore.providerList
       if (!list || list.length === 0) return
-      const sess = conversationStore.conversationList.find(s => s.id === activeId)
+      const sess = conversationStore.conversationList.find((s) => s.id === activeId)
       if (!sess) return
 
       // 幂等去抖：同一会话已写回到同一目标则跳过，避免 watch 抖动或接口返回前的重复写回
       const eff = effectiveProvider.value
       if (!eff) return
       const writeKey = `${activeId}:${eff.group}/${eff.modelName || ''}`
-      if (providerWriteBackKey.value === writeKey && sess.providerGroup === eff.group && sess.providerModelName === eff.modelName) {
+      if (
+        providerWriteBackKey.value === writeKey &&
+        sess.providerGroup === eff.group &&
+        sess.providerModelName === eff.modelName
+      ) {
         return
       }
 
       // 仅在"绑定失效或未绑定"时才写回（绑定本身就指向 eff 的情况无需动作）
-      const boundExists = sess.providerGroup && list.some(p => p.group === sess.providerGroup && p.modelName === sess.providerModelName)
+      const boundExists =
+        sess.providerGroup &&
+        list.some((p) => p.group === sess.providerGroup && p.modelName === sess.providerModelName)
       if (boundExists) {
         providerWriteBackKey.value = ''
         return
@@ -125,7 +134,9 @@ export function useConversationProvider() {
         // 本地同步当前会话（后端接口会联动子会话，这里只同步主会话展示即可）
         sess.providerGroup = eff.group
         sess.providerModelName = eff.modelName || ''
-        console.log(`会话 ${activeId} 绑定的供应商已失效，已降级并写回为 ${eff.group}/${eff.modelName}`)
+        console.log(
+          `会话 ${activeId} 绑定的供应商已失效，已降级并写回为 ${eff.group}/${eff.modelName}`
+        )
       } catch (e) {
         console.error('降级写回会话供应商失败:', e)
         providerWriteBackKey.value = ''

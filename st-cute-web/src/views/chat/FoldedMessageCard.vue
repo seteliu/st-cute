@@ -4,8 +4,16 @@
       <div class="info-side">
         <!-- 精致的折叠状态小图标 -->
         <span class="folded-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 14h6v6H4zM14 4h6v6h-6zM4 4h6v6H4zM14 14h6v6h-6z"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M4 14h6v6H4zM14 4h6v6h-6zM4 4h6v6H4zM14 14h6v6h-6z" />
           </svg>
         </span>
         <span class="folded-text">
@@ -16,8 +24,19 @@
         <n-tooltip v-if="hasError" trigger="hover">
           <template #trigger>
             <span class="folded-warning-badge">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="folded-warning-icon">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="folded-warning-icon"
+              >
+                <path
+                  d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                ></path>
                 <line x1="12" y1="9" x2="12" y2="13"></line>
                 <line x1="12" y1="17" x2="12.01" y2="17"></line>
               </svg>
@@ -25,9 +44,7 @@
           </template>
           <div class="folded-warning-tooltip">
             <div class="warning-title">{{ t('chat.foldedWarningTitle') }}</div>
-            <div v-for="(err, idx) in errorTexts" :key="idx" class="warning-item">
-              • {{ err }}
-            </div>
+            <div v-for="(err, idx) in errorTexts" :key="idx" class="warning-item">• {{ err }}</div>
           </div>
         </n-tooltip>
       </div>
@@ -37,10 +54,7 @@
     </div>
 
     <!-- 弹窗式详情容器 -->
-    <n-modal
-      v-model:show="showDetail"
-      :style="modalStyle"
-    >
+    <n-modal v-model:show="showDetail" :style="modalStyle">
       <n-card
         class="folded-detail-card"
         :style="cardStyle"
@@ -52,7 +66,9 @@
         <template #header>
           <div class="detail-header">
             <span class="title-text">{{ t('chat.foldedDetailTitle') }}</span>
-            <span class="subtitle-text">{{ t('chat.foldedDetailSubtitle', { assistant: assistantCount, tool: toolCount }) }}</span>
+            <span class="subtitle-text">
+              {{ t('chat.foldedDetailSubtitle', { assistant: assistantCount, tool: toolCount }) }}
+            </span>
           </div>
         </template>
 
@@ -143,7 +159,7 @@ const openDetail = async () => {
   detailError.value = ''
   try {
     const res = await getConversationMessages(props.cid, { folded: false, minId, maxId })
-    detailMessages.value = (res.messages || []).map(msg => {
+    detailMessages.value = (res.messages || []).map((msg) => {
       if (msg.role) msg.role = msg.role.toLowerCase() as any
       return msg
     })
@@ -237,6 +253,7 @@ const contentStyle = computed<CSSProperties>(() => {
 <style scoped>
 .folded-message-card {
   /* 宽度收缩行为交给父级 .folded-wrapper 的 flex 对齐（与助手消息 .message 同机制），此处不再显式声明 fit-content */
+
   /* 上限统一消费全局变量 --msg-max-width（桌面 85% / 移动端媒体查询放宽到 96%），
      与助手气泡 (.message) 单一来源对齐，杜绝两端值各自为政导致右缘错位、摘要被提前挤换行 */
   max-width: var(--msg-max-width, 85%);
@@ -252,10 +269,13 @@ const contentStyle = computed<CSSProperties>(() => {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   box-shadow: var(--shadow-card);
+
   /* 左右 12px 与助手气泡横向留白对齐；fit-content 收缩下 space-between 本无多余空间可分，16px 的 gap 属纯浪费，收紧到 8px 避免窄屏把摘要文字顶到临界换行 */
   padding: 8px 12px;
   box-sizing: border-box;
-  transition: border-color 0.25s, background-color 0.25s;
+  transition:
+    border-color 0.25s,
+    background-color 0.25s;
   gap: 8px;
 }
 
@@ -269,6 +289,7 @@ const contentStyle = computed<CSSProperties>(() => {
   align-items: center;
   gap: 8px;
   font-size: 0.85rem;
+
   /* 折叠条摘要文字刻意用 muted 弱化色：仅是统计性提示，不与正文消息抢视觉层级 */
   color: var(--text-color-muted);
 }
@@ -322,10 +343,12 @@ const contentStyle = computed<CSSProperties>(() => {
 }
 
 @keyframes pulse-warning {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.9;
     transform: scale(1);
   }
+
   50% {
     opacity: 1;
     transform: scale(1.1);
@@ -342,6 +365,7 @@ const contentStyle = computed<CSSProperties>(() => {
   width: 100% !important;
   max-width: 100% !important;
   background-color: var(--bg-color-modal) !important;
+
   /* 卡片默认文字色刻意用正文色而非高亮色：弹窗内复用的助手消息正文（.msg-content 无显式 color，就近继承）
      若继承到高亮白会明显亮过主会话里的同一批消息（主会话继承 body 的正文色）。
      标题/副标题等需要更高层级的元素均已各自显式声明颜色，不受此默认值影响 */

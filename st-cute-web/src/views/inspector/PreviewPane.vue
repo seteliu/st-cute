@@ -6,5 +6,4 @@
 import ReviewPane from './ReviewPane.vue'
 </script>
 
-<style scoped>
-</style>
+<style scoped></style>

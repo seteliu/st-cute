@@ -12,10 +12,22 @@
     </n-layout>
 
     <!-- 移动端侧边栏 Drawer -->
-    <n-drawer v-if="isMobile" v-model:show="showLeftDrawer" placement="left" :width="280" body-style="padding: 0; background-color: var(--bg-color-card);">
+    <n-drawer
+      v-if="isMobile"
+      v-model:show="showLeftDrawer"
+      placement="left"
+      :width="280"
+      body-style="padding: 0; background-color: var(--bg-color-card);"
+    >
       <left-sider />
     </n-drawer>
-    <n-drawer v-if="isMobile" v-model:show="showRightDrawer" placement="right" :width="320" body-style="padding: 0; background-color: var(--bg-color-card);">
+    <n-drawer
+      v-if="isMobile"
+      v-model:show="showRightDrawer"
+      placement="right"
+      :width="320"
+      body-style="padding: 0; background-color: var(--bg-color-card);"
+    >
       <right-sider />
     </n-drawer>
 
@@ -60,19 +72,27 @@ useRealtimeEvents()
 
 const showLeftDrawer = computed({
   get: () => !appStore.leftSiderCollapsed,
-  set: (val) => { appStore.leftSiderCollapsed = !val }
+  set: (val) => {
+    appStore.leftSiderCollapsed = !val
+  }
 })
 const showRightDrawer = computed({
   get: () => !appStore.rightSiderCollapsed,
-  set: (val) => { appStore.rightSiderCollapsed = !val }
+  set: (val) => {
+    appStore.rightSiderCollapsed = !val
+  }
 })
 
-watch(isMobile, (newVal) => {
-  if (newVal) {
-    appStore.leftSiderCollapsed = true
-    appStore.rightSiderCollapsed = true
-  }
-}, { immediate: true })
+watch(
+  isMobile,
+  (newVal) => {
+    if (newVal) {
+      appStore.leftSiderCollapsed = true
+      appStore.rightSiderCollapsed = true
+    }
+  },
+  { immediate: true }
+)
 
 onMounted(async () => {
   // 0. 初始化移动端响应式检测

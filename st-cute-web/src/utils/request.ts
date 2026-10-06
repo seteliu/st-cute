@@ -75,7 +75,11 @@ service.interceptors.response.use(
       const errMsg = res.msg || '后端返回业务错误'
       // 弹窗豁免两类场景：登录接口的失败提示由登录页统一展示（避免同一条错误弹两次）；
       // 静默请求（后台轮询）失败不弹窗，避免轮询期间错误弹窗轰炸
-      if (!isLoginRequest(response.config?.url) && !response.config.silent && (window as any).$message) {
+      if (
+        !isLoginRequest(response.config?.url) &&
+        !response.config.silent &&
+        (window as any).$message
+      ) {
         ;(window as any).$message.error(errMsg)
       }
       return Promise.reject(new Error(errMsg))

@@ -5,11 +5,47 @@ import type { StagedFile } from '@/types'
 import { t } from '@/i18n'
 
 const ALLOWED_EXTS = new Set([
-  'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg',
-  'pdf', 'txt', 'md', 'markdown', 'json', 'csv', 'xml', 'yaml', 'yml', 'log',
-  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-  'java', 'py', 'js', 'ts', 'html', 'css', 'sql', 'sh', 'bat', 'cmd',
-  'c', 'cpp', 'h', 'hpp', 'go', 'rs', 'kt', 'vue'
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'gif',
+  'bmp',
+  'svg',
+  'pdf',
+  'txt',
+  'md',
+  'markdown',
+  'json',
+  'csv',
+  'xml',
+  'yaml',
+  'yml',
+  'log',
+  'doc',
+  'docx',
+  'xls',
+  'xlsx',
+  'ppt',
+  'pptx',
+  'java',
+  'py',
+  'js',
+  'ts',
+  'html',
+  'css',
+  'sql',
+  'sh',
+  'bat',
+  'cmd',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'go',
+  'rs',
+  'kt',
+  'vue'
 ])
 
 export const formatFileSize = (bytes: number): string => {
@@ -65,12 +101,12 @@ export function useChatAttachments(options: {
     }
   }
 
-  const handleDragOver = (e: DragEvent) => {
+  const handleDragOver = (_e: DragEvent) => {
     if (!options.isMultimodal.value) return
     isDragging.value = true
   }
 
-  const handleDragLeave = (e: DragEvent) => {
+  const handleDragLeave = (_e: DragEvent) => {
     isDragging.value = false
   }
 
@@ -99,7 +135,10 @@ export function useChatAttachments(options: {
             let fileName = file.name
             if (!fileName || fileName === 'image.png' || fileName === 'blob') {
               const ext = file.type.split('/')[1] || 'png'
-              const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)
+              const timestamp = new Date()
+                .toISOString()
+                .replace(/[-:T.Z]/g, '')
+                .slice(0, 14)
               fileName = `paste_${timestamp}.${ext}`
             }
             const namedFile = new File([file], fileName, { type: file.type })
@@ -141,7 +180,9 @@ export function useChatAttachments(options: {
       }
 
       const ext = f.name.includes('.') ? f.name.split('.').pop()?.toLowerCase() || '' : ''
-      const isImg = f.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg'].includes(ext)
+      const isImg =
+        f.type.startsWith('image/') ||
+        ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg'].includes(ext)
       const isAllowed = isImg || (ext && ALLOWED_EXTS.has(ext))
 
       if (!isAllowed) {
@@ -169,7 +210,7 @@ export function useChatAttachments(options: {
   const removeStagedFile = (id: string) => {
     const list = ensureStagedList()
     if (!list) return
-    const idx = list.findIndex(item => item.id === id)
+    const idx = list.findIndex((item) => item.id === id)
     if (idx >= 0) {
       const item = list[idx]
       if (item.previewUrl) {
@@ -199,7 +240,9 @@ export function useChatAttachments(options: {
             if (res.size && res.size > 1024 * 1024) {
               item.status = 'idle'
               const sizeStr = formatFileSize(res.size)
-              throw new Error(t('chat.attachmentProcessedSizeLimit', { name: item.name, size: sizeStr }))
+              throw new Error(
+                t('chat.attachmentProcessedSizeLimit', { name: item.name, size: sizeStr })
+              )
             }
             item.status = 'success'
             item.uploadedPath = res.path
@@ -215,9 +258,9 @@ export function useChatAttachments(options: {
       await Promise.all(uploadTasks)
 
       // 短暂延时 300ms 呈现半透明遮罩与打勾动画
-      await new Promise(resolve => setTimeout(resolve, 300))
+      await new Promise((resolve) => setTimeout(resolve, 300))
 
-      const attachmentsData = stagedFiles.value.map(item => ({
+      const attachmentsData = stagedFiles.value.map((item) => ({
         path: item.uploadedPath || '',
         name: item.name,
         size: item.size,
@@ -229,7 +272,7 @@ export function useChatAttachments(options: {
     } catch (e: any) {
       isUploading.value = false
       // 将所有由于中断或异常仍处于 uploading 状态的附件复位为 idle，避免持续转圈卡死
-      stagedFiles.value.forEach(item => {
+      stagedFiles.value.forEach((item) => {
         if (item.status === 'uploading') {
           item.status = 'idle'
         }

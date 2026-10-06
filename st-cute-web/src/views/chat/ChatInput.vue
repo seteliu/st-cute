@@ -9,7 +9,17 @@
   >
     <!-- 拖拽上传覆盖遮罩提示 -->
     <div v-if="isDragging && isMultimodal" class="drag-drop-overlay">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        width="32"
+        height="32"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
         <polyline points="17 8 12 3 7 8"></polyline>
         <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -30,7 +40,7 @@
       type="file"
       multiple
       accept="image/*,.pdf,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.log,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.java,.py,.js,.ts,.html,.css,.sql,.sh,.bat,.cmd,.c,.cpp,.h,.hpp,.go,.rs,.kt,.vue"
-      style="display: none;"
+      style="display: none"
       @change="handleFileInputChange"
     />
 
@@ -53,12 +63,12 @@
         :disabled="isInputDisabled"
         :bordered="false"
         :autosize="{ minRows: 2, maxRows: 10 }"
-        @keydown.capture="handleEnterKey"
         maxlength="50000"
+        @keydown.capture="handleEnterKey"
       />
       <!-- 桌面端操作区域 -->
-      <div v-if="!isMobile" class="input-actions" style="margin-top: 8px;">
-        <div class="input-configs" style="display: flex; align-items: center; gap: 12px;">
+      <div v-if="!isMobile" class="input-actions" style="margin-top: 8px">
+        <div class="input-configs" style="display: flex; align-items: center; gap: 12px">
           <!-- 供应商选择 -->
           <n-select
             v-if="conversationStore.activeCid"
@@ -70,21 +80,42 @@
             class="provider-select"
             @update:value="handleProviderChange"
           />
-          
+
           <!-- 权限安全级别 -->
-          <div class="permission-select-wrapper" style="display: flex; align-items: center; gap: 4px;">
+          <div
+            class="permission-select-wrapper"
+            style="display: flex; align-items: center; gap: 4px"
+          >
             <n-select
               :value="appStore.permissionMode"
               :options="appStore.permissionModeOptions"
               :disabled="isConfigSelectDisabled"
-              @update:value="appStore.handlePermissionModeChange"
               size="small"
               class="permission-select"
+              @update:value="appStore.handlePermissionModeChange"
             />
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
-                <div class="permission-help-tooltip" style="cursor: help; color: var(--text-color-faint); display: flex; align-items: center;">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <div
+                  class="permission-help-tooltip"
+                  style="
+                    cursor: help;
+                    color: var(--text-color-faint);
+                    display: flex;
+                    align-items: center;
+                  "
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <circle cx="12" cy="12" r="10"></circle>
                     <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
                     <line x1="12" y1="17" x2="12.01" y2="17"></line>
@@ -92,11 +123,37 @@
                 </div>
               </template>
               <!-- tooltip 正文刻意用正文色而非高亮色：说明文字为主阅读内容，层级交给 strong 加粗的条目名区分 -->
-              <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: var(--text-color); max-width: 260px;">
-                <div style="font-weight: bold; border-bottom: 1px solid var(--border-color); margin-bottom: 6px; padding-bottom: 4px;">{{ t('sider.permissionMode') }}:</div>
-                <div><strong>{{ t('sider.modeStrictApproval') }}: </strong>{{ t('sider.modeStrictApprovalTooltip') }}</div>
-                <div style="margin-top: 4px;"><strong>{{ t('sider.modeRelaxedApproval') }}: </strong>{{ t('sider.modeRelaxedApprovalTooltip') }}</div>
-                <div style="margin-top: 4px;"><strong>{{ t('sider.modeAllAllow') }}: </strong>{{ t('sider.modeAllAllowTooltip') }}</div>
+              <div
+                style="
+                  font-size: 0.8rem;
+                  line-height: 1.6;
+                  padding: 4px;
+                  color: var(--text-color);
+                  max-width: 260px;
+                "
+              >
+                <div
+                  style="
+                    font-weight: bold;
+                    border-bottom: 1px solid var(--border-color);
+                    margin-bottom: 6px;
+                    padding-bottom: 4px;
+                  "
+                >
+                  {{ t('sider.permissionMode') }}:
+                </div>
+                <div>
+                  <strong>{{ t('sider.modeStrictApproval') }}:</strong>
+                  {{ t('sider.modeStrictApprovalTooltip') }}
+                </div>
+                <div style="margin-top: 4px">
+                  <strong>{{ t('sider.modeRelaxedApproval') }}:</strong>
+                  {{ t('sider.modeRelaxedApprovalTooltip') }}
+                </div>
+                <div style="margin-top: 4px">
+                  <strong>{{ t('sider.modeAllAllow') }}:</strong>
+                  {{ t('sider.modeAllAllowTooltip') }}
+                </div>
               </div>
             </n-tooltip>
           </div>
@@ -111,7 +168,17 @@
             @click="triggerSelectFile"
           >
             <template #icon>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
@@ -120,17 +187,36 @@
           </n-button>
         </div>
 
-        <div class="input-buttons" style="display: flex; gap: 8px;">
+        <div class="input-buttons" style="display: flex; gap: 8px">
           <n-button
             type="primary"
             class="send-btn"
-            :class="{ 'send-btn-active': !appStore.loopRunning && (appStore.userInput || stagedFiles.length > 0) && !isSendBlocked }"
-            :disabled="!appStore.loopRunning && ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)"
+            :class="{
+              'send-btn-active':
+                !appStore.loopRunning &&
+                (appStore.userInput || stagedFiles.length > 0) &&
+                !isSendBlocked
+            }"
+            :disabled="
+              !appStore.loopRunning &&
+              ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)
+            "
             @click="appStore.loopRunning ? appStore.cancelLoop() : executeSend()"
           >
             <template v-if="appStore.loopRunning || isUploading" #icon>
-              <span style="display: inline-flex; align-items: center; gap: 4px;">
-                <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <span style="display: inline-flex; align-items: center; gap: 4px">
+                <svg
+                  class="spin-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="13"
+                  height="13"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <line x1="12" y1="2" x2="12" y2="6"></line>
                   <line x1="12" y1="18" x2="12" y2="22"></line>
                   <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
@@ -142,33 +228,43 @@
                 </svg>
               </span>
             </template>
-            {{ appStore.loopRunning ? t('chat.cancelLoop') : isUploading ? t('chat.uploading') : t('chat.send') }}
+            {{
+              appStore.loopRunning
+                ? t('chat.cancelLoop')
+                : isUploading
+                  ? t('chat.uploading')
+                  : t('chat.send')
+            }}
           </n-button>
         </div>
       </div>
 
       <!-- 移动端操作区域 -->
-      <div v-else class="input-actions-mobile" style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px; width: 100%;">
+      <div
+        v-else
+        class="input-actions-mobile"
+        style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px; width: 100%"
+      >
         <!-- 第一排：供应商大模型选择 (占满 100%) -->
-        <div v-if="conversationStore.activeCid" style="width: 100%;">
+        <div v-if="conversationStore.activeCid" style="width: 100%">
           <n-select
             :value="activeConversationProviderValue"
             :options="providerOptions"
             :placeholder="t('sider.groupSelect')"
             :disabled="isConfigSelectDisabled"
             size="small"
-            style="width: 100%;"
+            style="width: 100%"
             @update:value="handleProviderChange"
           />
         </div>
-        
+
         <!-- 第二排：换行按钮 + 多模态上传 + 权限模式 (flex: 1 撑满) + 发送按钮 -->
-        <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+        <div style="display: flex; gap: 8px; align-items: center; width: 100%">
           <n-button
             secondary
             size="small"
             :disabled="isInputDisabled"
-            style="min-width: 60px;"
+            style="min-width: 60px"
             @click="insertNewline"
           >
             {{ t('chat.newline') }}
@@ -184,15 +280,15 @@
           >
             +
           </n-button>
-          
-          <div style="flex: 1;">
+
+          <div style="flex: 1">
             <n-select
               :value="appStore.permissionMode"
               :options="appStore.permissionModeOptions"
               :disabled="isConfigSelectDisabled"
-              @update:value="appStore.handlePermissionModeChange"
               size="small"
-              style="width: 100%;"
+              style="width: 100%"
+              @update:value="appStore.handlePermissionModeChange"
             />
           </div>
 
@@ -200,13 +296,32 @@
             type="primary"
             size="small"
             class="send-btn"
-            :class="{ 'send-btn-active': !appStore.loopRunning && (appStore.userInput || stagedFiles.length > 0) && !isSendBlocked }"
-            :disabled="!appStore.loopRunning && ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)"
+            :class="{
+              'send-btn-active':
+                !appStore.loopRunning &&
+                (appStore.userInput || stagedFiles.length > 0) &&
+                !isSendBlocked
+            }"
+            :disabled="
+              !appStore.loopRunning &&
+              ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)
+            "
             @click="appStore.loopRunning ? appStore.cancelLoop() : executeSend()"
           >
             <template v-if="appStore.loopRunning || isUploading" #icon>
-              <span style="display: inline-flex; align-items: center; gap: 4px;">
-                <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <span style="display: inline-flex; align-items: center; gap: 4px">
+                <svg
+                  class="spin-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="13"
+                  height="13"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <line x1="12" y1="2" x2="12" y2="6"></line>
                   <line x1="12" y1="18" x2="12" y2="22"></line>
                   <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
@@ -218,7 +333,13 @@
                 </svg>
               </span>
             </template>
-            {{ appStore.loopRunning ? t('chat.cancelLoop') : isUploading ? t('chat.uploading') : t('chat.send') }}
+            {{
+              appStore.loopRunning
+                ? t('chat.cancelLoop')
+                : isUploading
+                  ? t('chat.uploading')
+                  : t('chat.send')
+            }}
           </n-button>
         </div>
       </div>
@@ -247,15 +368,12 @@ const projectStore = useProjectStore()
 const providerStore = useProviderStore()
 
 const inputInstRef = ref<any>(null)
-const getTextareaEl = () => inputInstRef.value?.textareaElRef as HTMLTextAreaElement | null | undefined
+const getTextareaEl = () =>
+  inputInstRef.value?.textareaElRef as HTMLTextAreaElement | null | undefined
 
 // 供应商与多模态感知
-const {
-  activeConversationProviderValue,
-  isMultimodal,
-  providerOptions,
-  handleProviderChange
-} = useConversationProvider()
+const { activeConversationProviderValue, isMultimodal, providerOptions, handleProviderChange } =
+  useConversationProvider()
 
 const isInputDisabled = computed(() => {
   return (
@@ -455,7 +573,9 @@ const handleEnterKey = (e: KeyboardEvent) => {
 <style scoped>
 .chat-footer {
   position: relative;
-  transition: border-color 0.2s, background-color 0.2s;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
 }
 
 .chat-footer.dragging-active {
@@ -465,10 +585,7 @@ const handleEnterKey = (e: KeyboardEvent) => {
 
 .drag-drop-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 20;
   background-color: var(--overlay-bg-glassy-strong);
   backdrop-filter: blur(8px);
@@ -490,14 +607,23 @@ const handleEnterKey = (e: KeyboardEvent) => {
   letter-spacing: 2px;
   text-indent: 2px;
   padding: 0 18px !important;
-  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s,
+    background-color 0.2s;
 }
 
 .send-btn-active {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-pressed) 100%) !important;
+  background: linear-gradient(
+    135deg,
+    var(--primary-color) 0%,
+    var(--primary-color-pressed) 100%
+  ) !important;
   border: none !important;
   box-shadow: 0 2px 8px var(--border-color-active);
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .send-btn-active:hover {
@@ -515,7 +641,12 @@ const handleEnterKey = (e: KeyboardEvent) => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

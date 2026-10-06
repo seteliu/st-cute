@@ -1,12 +1,28 @@
 <template>
   <div
     class="pane-content review-pane-v2"
-    style="display: flex; flex-direction: column; height: 100%; gap: 12px; padding: 12px 16px; box-sizing: border-box; overflow: hidden;"
+    style="
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      gap: 12px;
+      padding: 12px 16px;
+      box-sizing: border-box;
+      overflow: hidden;
+    "
   >
     <!-- 1. 加载中状态 -->
     <div
       v-if="gitStore.loadingBranches && gitStore.branches.length === 0"
-      style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; color: var(--text-color-muted);"
+      style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        text-align: center;
+        color: var(--text-color-muted);
+      "
     >
       <n-spin size="medium" :description="t('common.loading')" />
     </div>
@@ -15,12 +31,36 @@
     <div
       v-else-if="gitStore.branches.length === 0"
       class="empty-state"
-      style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; color: var(--text-color-muted);"
+      style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        text-align: center;
+        color: var(--text-color-muted);
+      "
     >
-      <span style="font-size: 1.0rem; font-weight: bold; margin-bottom: 6px; color: var(--text-color-bright);">      {{ t('inspector.noBranches') }}</span>
-      <span style="font-size: 0.85rem; max-width: 280px; line-height: 1.5; color: var(--text-color-muted);"
-        >{{ t('review.noChanges') }}</span
+      <span
+        style="
+          font-size: 1rem;
+          font-weight: bold;
+          margin-bottom: 6px;
+          color: var(--text-color-bright);
+        "
       >
+        {{ t('inspector.noBranches') }}
+      </span>
+      <span
+        style="
+          font-size: 0.85rem;
+          max-width: 280px;
+          line-height: 1.5;
+          color: var(--text-color-muted);
+        "
+      >
+        {{ t('review.noChanges') }}
+      </span>
     </div>
 
     <!-- 3. 正常渲染 -->
@@ -28,21 +68,37 @@
       <!-- 头部工具栏 -->
       <div
         class="branch-toolbar"
-        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; flex-shrink: 0;"
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid var(--border-color);
+          padding-bottom: 12px;
+          flex-shrink: 0;
+        "
       >
         <n-select
           :value="gitStore.selectedBranch?.branch"
-          :options="gitStore.branches.map(w => ({
-            label: `${t('review.branch')} ${w.branch}`,
-            value: w.branch,
-            disabled: !w.current,
-            // 当前分支高亮、其余置灰：下拉仅作分支清单展示，暂不提供切换
-            class: w.current ? 'branch-option-current' : 'branch-option-muted'
-          }))"
+          :options="
+            gitStore.branches.map((w) => ({
+              label: `${t('review.branch')} ${w.branch}`,
+              value: w.branch,
+              disabled: !w.current,
+              // 当前分支高亮、其余置灰：下拉仅作分支清单展示，暂不提供切换
+              class: w.current ? 'branch-option-current' : 'branch-option-muted'
+            }))
+          "
           :consistent-menu-width="false"
-          style="flex: 1;"
+          style="flex: 1"
         />
-        <n-button size="tiny" type="primary" secondary style="margin-left: 8px;" :loading="gitStore.loadingBranches" @click="gitStore.fetchBranches()">
+        <n-button
+          size="tiny"
+          type="primary"
+          secondary
+          style="margin-left: 8px"
+          :loading="gitStore.loadingBranches"
+          @click="gitStore.fetchBranches()"
+        >
           {{ t('review.refresh') }}
         </n-button>
       </div>
@@ -50,48 +106,79 @@
       <!-- 变动文件列表区 (单栏宽敞展示) -->
       <div
         class="branch-content"
-        style="display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 8px; overflow: hidden;"
+        style="
+          display: flex;
+          flex: 1;
+          min-height: 0;
+          flex-direction: column;
+          gap: 8px;
+          overflow: hidden;
+        "
       >
-        <div style="display: flex; align-items: center; margin-bottom: 4px; flex-shrink: 0;">
-          <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-color-muted);">
+        <div style="display: flex; align-items: center; margin-bottom: 4px; flex-shrink: 0">
+          <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-color-muted)">
             {{ t('review.modifiedFiles') }} ({{ gitStore.branchDiffs.length }})
           </span>
         </div>
 
         <div
           v-if="gitStore.branchDiffs.length === 0"
-          style="color: var(--text-color-muted); font-size: 0.85rem; padding: 12px 0; text-align: center;"
+          style="
+            color: var(--text-color-muted);
+            font-size: 0.85rem;
+            padding: 12px 0;
+            text-align: center;
+          "
         >
           {{ t('review.noChanges') }}
         </div>
         <div
           v-else
           class="file-list"
-          style="flex: 1; display: flex; flex-direction: column; gap: 4px; overflow-y: auto;"
+          style="flex: 1; display: flex; flex-direction: column; gap: 4px; overflow-y: auto"
         >
-            <div
-              v-for="fd in gitStore.branchDiffs"
-              :key="fd.filename"
-              class="file-item"
-              @click="handleFileClick(fd)"
-              style="padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; word-break: break-all; transition: all 0.2s; display: flex; align-items: center; justify-content: space-between; gap: 8px;"
-            >
-              <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
-                <span :class="['change-dot', fd.changeType?.toLowerCase() || 'modify']"></span>
-                <span
-                  class="file-name-text"
-                  :title="fd.filename"
-                  style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; min-width: 0; flex: 1;"
-                >
-                  <bdi>{{ fd.filename }}</bdi>
-                </span>
-              </div>
-              
-              <span :class="['change-badge', fd.changeType?.toLowerCase() || 'modify']">
-                {{ getChangeBadgeText(fd.changeType) }}
+          <div
+            v-for="fd in gitStore.branchDiffs"
+            :key="fd.filename"
+            class="file-item"
+            style="
+              padding: 8px 12px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 0.85rem;
+              word-break: break-all;
+              transition: all 0.2s;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 8px;
+            "
+            @click="handleFileClick(fd)"
+          >
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1">
+              <span :class="['change-dot', fd.changeType?.toLowerCase() || 'modify']"></span>
+              <span
+                class="file-name-text"
+                :title="fd.filename"
+                style="
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                  direction: rtl;
+                  text-align: left;
+                  min-width: 0;
+                  flex: 1;
+                "
+              >
+                <bdi>{{ fd.filename }}</bdi>
               </span>
             </div>
+
+            <span :class="['change-badge', fd.changeType?.toLowerCase() || 'modify']">
+              {{ getChangeBadgeText(fd.changeType) }}
+            </span>
           </div>
+        </div>
       </div>
     </template>
 
@@ -99,20 +186,39 @@
     <n-modal
       v-model:show="showDiffModal"
       preset="card"
-      style="width: 85vw; max-width: 1400px; height: 80vh; border: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
+      style="
+        width: 85vw;
+        max-width: 1400px;
+        height: 80vh;
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-overlay);
+      "
       :title="t('review.viewDiffTitle')"
     >
-      <div style="display: flex; flex-direction: column; height: calc(80vh - 120px); gap: 12px;">
-        <div style="font-size: 0.95rem; font-weight: bold; word-break: break-all; color: var(--text-color-bright);">
-          File: <span style="color: var(--accent-color);">{{ gitStore.selectedFileDiff?.filename }}</span>
+      <div style="display: flex; flex-direction: column; height: calc(80vh - 120px); gap: 12px">
+        <div
+          style="
+            font-size: 0.95rem;
+            font-weight: bold;
+            word-break: break-all;
+            color: var(--text-color-bright);
+          "
+        >
+          File:
+          <span style="color: var(--accent-color)">{{ gitStore.selectedFileDiff?.filename }}</span>
         </div>
-        <div style="flex: 1; min-height: 0; overflow: auto; background: var(--bg-color-code); border-radius: 6px; border: 1px solid var(--border-color);">
+        <div
+          style="
+            flex: 1;
+            min-height: 0;
+            overflow: auto;
+            background: var(--bg-color-code);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+          "
+        >
           <div v-if="showDiffModal && gitStore.selectedFileDiff" class="diff-table">
-            <div
-              v-for="(line, idx) in formattedDiff"
-              :key="idx"
-              :class="['diff-row', line.type]"
-            >
+            <div v-for="(line, idx) in formattedDiff" :key="idx" :class="['diff-row', line.type]">
               <div class="line-num left-num">{{ line.leftNum }}</div>
               <div class="line-num right-num">{{ line.rightNum }}</div>
               <div class="line-sign">{{ line.sign }}</div>
@@ -150,17 +256,18 @@ const getChangeBadgeText = (type?: string) => {
 const formattedDiff = computed(() => {
   const diff = gitStore.selectedFileDiff?.diffContent
   if (!diff) return []
-  
+
   const lines = diff.split('\n')
   let leftLineNum = 0
   let rightLineNum = 0
-  
-  return lines.map(line => {
-    let type = 'normal'
-    let sign = ' '
+
+  return lines.map((line) => {
+    // 各行类型判定：add/delete/info(@@)/meta(文件头)/normal，行号仅对 normal 与 add/delete 计数
+    let type: 'normal' | 'add' | 'delete' | 'info' | 'meta'
+    let sign: string
     let leftNumStr = ''
     let rightNumStr = ''
-    
+
     if (line.startsWith('+') && !line.startsWith('+++')) {
       type = 'add'
       sign = '+'
@@ -177,7 +284,12 @@ const formattedDiff = computed(() => {
         leftLineNum = parseInt(match[1], 10) - 1
         rightLineNum = parseInt(match[2], 10) - 1
       }
-    } else if (line.startsWith('diff') || line.startsWith('index') || line.startsWith('---') || line.startsWith('+++')) {
+    } else if (
+      line.startsWith('diff') ||
+      line.startsWith('index') ||
+      line.startsWith('---') ||
+      line.startsWith('+++')
+    ) {
       type = 'meta'
       sign = ''
     } else {
@@ -186,12 +298,12 @@ const formattedDiff = computed(() => {
       leftNumStr = String(++leftLineNum)
       rightNumStr = String(++rightLineNum)
     }
-    
-    let displayText = line;
+
+    let displayText = line
     if (type === 'add' || type === 'delete') {
-      displayText = line.substring(1);
+      displayText = line.substring(1)
     }
-    
+
     return {
       text: displayText,
       type,
@@ -227,12 +339,15 @@ const formattedDiff = computed(() => {
   min-width: 6px;
   border-radius: 50%;
 }
+
 .change-dot.add {
   background-color: var(--status-success);
 }
+
 .change-dot.modify {
   background-color: var(--accent-color);
 }
+
 .change-dot.delete {
   background-color: var(--status-error);
 }
@@ -247,12 +362,15 @@ const formattedDiff = computed(() => {
   user-select: none;
   padding-right: 4px;
 }
+
 .change-badge.add {
   color: var(--status-success);
 }
+
 .change-badge.modify {
   color: var(--accent-color);
 }
+
 .change-badge.delete {
   color: var(--status-error);
 }
@@ -303,12 +421,15 @@ const formattedDiff = computed(() => {
 .diff-row.add {
   background-color: var(--diff-add-bg) !important;
 }
+
 .diff-row.add .line-content {
   color: var(--text-color-bright);
 }
+
 .diff-row.add .line-sign {
   color: var(--status-success);
 }
+
 .diff-row.add .line-num {
   color: var(--status-success);
 }
@@ -316,13 +437,16 @@ const formattedDiff = computed(() => {
 .diff-row.delete {
   background-color: var(--diff-remove-bg) !important;
 }
+
 .diff-row.delete .line-content {
   color: var(--text-color-muted);
   text-decoration: line-through rgba(208, 48, 80, 0.4);
 }
+
 .diff-row.delete .line-sign {
   color: var(--status-error);
 }
+
 .diff-row.delete .line-num {
   color: var(--status-error);
 }
@@ -330,10 +454,12 @@ const formattedDiff = computed(() => {
 .diff-row.info {
   background-color: var(--overlay-veil) !important;
 }
+
 .diff-row.info .line-content {
   font-weight: 500;
   color: var(--accent-color);
 }
+
 .diff-row.info .line-num {
   background-color: var(--overlay-veil);
   color: var(--text-color-muted);
@@ -344,10 +470,12 @@ const formattedDiff = computed(() => {
   color: var(--accent-color);
   border-bottom: 1px dashed rgba(187, 187, 233, 0.25);
 }
+
 .diff-row.meta .line-content {
   font-weight: bold;
   color: var(--accent-color);
 }
+
 .diff-row.meta .line-num {
   background-color: var(--accent-bg-weak);
 }
@@ -355,6 +483,7 @@ const formattedDiff = computed(() => {
 .diff-row.normal {
   color: var(--text-color);
 }
+
 .diff-row.normal:hover {
   background-color: var(--overlay-veil);
 }
@@ -364,10 +493,15 @@ const formattedDiff = computed(() => {
   color: var(--primary-color);
   font-weight: bold;
 }
+
 :deep(.branch-option-muted.n-base-select-option .n-base-select-option__content) {
   color: var(--text-color-muted);
 }
-:deep(.branch-option-muted.n-base-select-option.n-base-select-option--disabled .n-base-select-option__content) {
+
+:deep(
+  .branch-option-muted.n-base-select-option.n-base-select-option--disabled
+    .n-base-select-option__content
+) {
   color: var(--text-color-faint);
 }
 </style>

@@ -28,7 +28,9 @@ export function getStoredTheme(): ThemeName {
 export const currentTheme = ref<ThemeName>(getStoredTheme())
 
 /** Naive UI 明暗模式的主题名（dark 之外的都按 light 处理） */
-export const naiveThemeMode = computed<ThemeName>(() => (currentTheme.value === 'dark' ? 'dark' : 'light'))
+export const naiveThemeMode = computed<ThemeName>(() =>
+  currentTheme.value === 'dark' ? 'dark' : 'light'
+)
 
 /** 当前主题的主题变量快照（派生 Naive UI 覆盖用） */
 export const activeThemeVars = computed(() => THEMES[currentTheme.value])

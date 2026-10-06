@@ -18,10 +18,21 @@
       </n-tab-pane>
 
       <n-tab-pane name="advanced" :tab="t('inspector.advanced')">
-        <div style="display: flex; flex-direction: column; height: 100%;">
+        <div style="display: flex; flex-direction: column; height: 100%">
           <!-- 统一重载控制头部 -->
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px dashed var(--border-color); margin-bottom: 4px;">
-            <span style="font-size: 0.78rem; color: var(--text-color-bright); font-weight: bold;">{{ t('inspector.assetsTitle') }}</span>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: 12px 16px;
+              border-bottom: 1px dashed var(--border-color);
+              margin-bottom: 4px;
+            "
+          >
+            <span style="font-size: 0.78rem; color: var(--text-color-bright); font-weight: bold">
+              {{ t('inspector.assetsTitle') }}
+            </span>
             <n-button
               size="tiny"
               type="primary"
@@ -32,7 +43,7 @@
               {{ t('inspector.hotReload') }}
             </n-button>
           </div>
-          
+
           <n-tabs type="line" justify-content="space-evenly" class="advanced-sub-tabs">
             <n-tab-pane name="rule-sub" tab="RULE">
               <rules-pane />
@@ -49,19 +60,14 @@
           </n-tabs>
         </div>
       </n-tab-pane>
-      
+
       <n-tab-pane name="preview" :tab="t('inspector.preview')">
         <preview-pane />
       </n-tab-pane>
-
     </n-tabs>
-    
+
     <!-- 自定义拖拽边框条 -->
-    <div 
-      v-if="!isMobile"
-      ref="resizeHandleRef" 
-      class="custom-resize-handle right-handle"
-    >
+    <div v-if="!isMobile" ref="resizeHandleRef" class="custom-resize-handle right-handle">
       <div class="resize-line"></div>
     </div>
   </n-layout-sider>
@@ -70,7 +76,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { useAgentStore } from '@/stores/agent'
 import { useConversationStore } from '@/stores/conversation'
 import { useResponsive } from '@/utils/useResponsive'
 import { t } from '@/i18n'
@@ -92,14 +97,13 @@ import HooksPane from '../inspector/HooksPane.vue'
 import RulesPane from '../inspector/RulesPane.vue'
 
 const appStore = useAppStore()
-const agentStore = useAgentStore()
 const conversationStore = useConversationStore()
 const isReloading = ref(false)
 
 // 热重载按钮的最小 loading 保底时长（毫秒）：本机请求往往几十毫秒内完成，
 // 转圈一闪而过毫无感知，保底展示让用户确认「重载已生效」
 const MIN_RELOADING_MS = 400
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 const handleUnifiedReload = async () => {
   const start = Date.now()
@@ -211,7 +215,7 @@ const initResizeEvents = () => {
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
     document.body.classList.add('sider-resizing')
-    
+
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
     e.preventDefault()
@@ -245,19 +249,23 @@ onUnmounted(() => {
   justify-content: center;
   align-items: center;
 }
+
 .right-handle {
   left: -4px;
   cursor: default;
 }
+
 .resize-line {
   width: 1px;
   height: 100%;
   background-color: transparent;
   transition: all 0.2s ease;
 }
+
 .custom-resize-handle.active-resizing {
   cursor: col-resize !important;
 }
+
 .custom-resize-handle.active-resizing .resize-line {
   width: 4px;
   background-color: var(--primary-color) !important;

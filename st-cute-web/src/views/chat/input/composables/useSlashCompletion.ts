@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, watch, type Ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useConversationStore } from '@/stores/conversation'
 import { getSlashListApi } from '@/api/slash'
@@ -53,15 +53,15 @@ export function useSlashCompletion(options: {
     const keyword = slashKeyword.value.trim().toLowerCase()
     let flatIndex = 0
     return slashGroups.value
-      .map(group => {
-        const filteredItems = (group.items || []).filter(item =>
-          !keyword || item.name.toLowerCase().includes(keyword)
+      .map((group) => {
+        const filteredItems = (group.items || []).filter(
+          (item) => !keyword || item.name.toLowerCase().includes(keyword)
         )
         const startFlatIndex = flatIndex
         flatIndex += filteredItems.length
         return { group: group.group, items: filteredItems, startFlatIndex }
       })
-      .filter(group => group.items.length > 0)
+      .filter((group) => group.items.length > 0)
   })
 
   /**
@@ -189,7 +189,8 @@ export function useSlashCompletion(options: {
       case 'ArrowUp':
         if (slashFilteredCount.value > 0) {
           e.preventDefault()
-          slashHighlightIndex.value = (slashHighlightIndex.value - 1 + slashFilteredCount.value) % slashFilteredCount.value
+          slashHighlightIndex.value =
+            (slashHighlightIndex.value - 1 + slashFilteredCount.value) % slashFilteredCount.value
           scrollHighlightedIntoView()
         }
         break
@@ -228,7 +229,9 @@ export function useSlashCompletion(options: {
     (newVal) => {
       const textarea = options.getTextareaEl()
       // 取光标位置：取不到时退回文本末尾（与旧版整体匹配行为对齐）
-      const cursorPos = textarea ? (textarea.selectionStart ?? (newVal || '').length) : (newVal || '').length
+      const cursorPos = textarea
+        ? (textarea.selectionStart ?? (newVal || '').length)
+        : (newVal || '').length
       const textBeforeCursor = (newVal || '').slice(0, cursorPos)
       // 光标前文本须严格匹配 /关键词 形态，/ 前不能再有其他字符
       const match = textBeforeCursor.match(/^\/([a-zA-Z0-9_-]*)$/)

@@ -41,7 +41,9 @@ export function t(key: string, args?: Record<string, any>): string {
     }
   }
   if (typeof res === 'string' && args) {
-    return res.replace(/\{(\w+)\}/g, (_, p1) => args[p1] !== undefined ? String(args[p1]) : `{${p1}}`)
+    return res.replace(/\{(\w+)\}/g, (_, p1) =>
+      args[p1] !== undefined ? String(args[p1]) : `{${p1}}`
+    )
   }
   return typeof res === 'string' ? res : key
 }

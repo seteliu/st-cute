@@ -248,7 +248,8 @@ const LIGHT_THEME: ThemeVars = {
   // 登录卡片（浅色）：轻盈白毛玻璃，与深色的厚重实底形成鲜明主题差异（故不复用共享 overlay 令牌）
   loginCardBg: 'rgba(255, 255, 255, 0.98)',
   loginCardBorder: '#e2e8f0',
-  loginCardShadow: '0 12px 36px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04)',
+  loginCardShadow:
+    '0 12px 36px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04)',
   loginInputBg: '#ffffff',
 
   // 滚动条（浅色）：中性灰 #a6a6a6 与全站文字灰阶同调，白底合成约 #dbdbdb，轻盈克制；悬浮提亮 0.20

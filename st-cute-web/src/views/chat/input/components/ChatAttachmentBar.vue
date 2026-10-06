@@ -4,7 +4,10 @@
       v-for="item in stagedFiles"
       :key="item.id"
       class="staged-attachment-card"
-      :class="{ 'card-uploading': item.status === 'uploading', 'card-success': item.status === 'success' }"
+      :class="{
+        'card-uploading': item.status === 'uploading',
+        'card-success': item.status === 'success'
+      }"
     >
       <!-- 图片缩略图预览 (支持点击放大查看) -->
       <div v-if="item.isImage && item.previewUrl" class="card-thumb-wrapper">
@@ -18,7 +21,17 @@
       </div>
       <!-- 普通文件图标 -->
       <div v-else class="card-icon-wrapper">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
           <polyline points="13 2 13 9 20 9"></polyline>
         </svg>
@@ -42,7 +55,18 @@
 
       <!-- 上传中 Loading 遮罩转圈 -->
       <div v-if="item.status === 'uploading'" class="card-status-overlay uploading-overlay">
-        <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          class="spin-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <line x1="12" y1="2" x2="12" y2="6"></line>
           <line x1="12" y1="18" x2="12" y2="22"></line>
           <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
@@ -56,7 +80,17 @@
 
       <!-- 上传完成打勾遮罩 (降低透明度) -->
       <div v-if="item.status === 'success'" class="card-status-overlay success-overlay">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--success-green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="var(--success-green)"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       </div>
@@ -83,8 +117,7 @@ const emit = defineEmits<{
 .staged-attachments-bar {
   display: flex;
   flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto hidden;
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--overlay-veil);
@@ -119,7 +152,9 @@ const emit = defineEmits<{
   padding: 4px 8px;
   max-width: 220px;
   overflow: hidden;
-  transition: opacity 0.3s ease, border-color 0.3s;
+  transition:
+    opacity 0.3s ease,
+    border-color 0.3s;
 }
 
 .staged-attachment-card.card-success {
@@ -187,7 +222,9 @@ const emit = defineEmits<{
   padding: 2px 4px;
   font-size: 0.75rem;
   border-radius: 4px;
-  transition: color 0.2s, background-color 0.2s;
+  transition:
+    color 0.2s,
+    background-color 0.2s;
 }
 
 .card-remove-btn:hover {
@@ -197,10 +234,7 @@ const emit = defineEmits<{
 
 .card-status-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -222,7 +256,12 @@ const emit = defineEmits<{
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

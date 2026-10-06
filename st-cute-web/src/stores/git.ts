@@ -15,7 +15,7 @@ export const useGitStore = defineStore('git', () => {
   // 手动刷新的 loading 最小展示时长（毫秒）：本机请求往往几十毫秒内完成，
   // 转圈一闪而过毫无感知，保底展示让用户确认「刷新已生效」
   const MIN_LOADING_MS = 400
-  const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
   // 加载分支列表
   const fetchBranches = async (silent = false) => {
@@ -39,7 +39,7 @@ export const useGitStore = defineStore('git', () => {
       if (branches.value && branches.value.length > 0) {
         // 下拉仅作分支清单展示（不可切换），选中项始终跟随仓库当前检出分支（current 标记）：
         // 用户在终端切分支后，轮询刷新会让下拉自动跟切；无标记（异常防御）时回退第一个
-        const currentBranch = branches.value.find(w => w.current)
+        const currentBranch = branches.value.find((w) => w.current)
         selectedBranch.value = currentBranch || branches.value[0]
         await handleBranchChange(silent)
       } else {
@@ -77,7 +77,9 @@ export const useGitStore = defineStore('git', () => {
       if (newDiffs.length > 0) {
         // 如果之前已经有选中的文件，且该文件依然在新列表中存在，则继续保持选中它，避免被强行重置为第一个
         const currentSelected = selectedFileDiff.value
-        const stillExists = currentSelected ? newDiffs.find(fd => fd.filename === currentSelected.filename) : null
+        const stillExists = currentSelected
+          ? newDiffs.find((fd) => fd.filename === currentSelected.filename)
+          : null
 
         if (stillExists) {
           selectedFileDiff.value = stillExists

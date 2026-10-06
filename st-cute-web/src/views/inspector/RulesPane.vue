@@ -1,16 +1,31 @@
 <template>
   <div class="pane-content">
-    <div style="margin-bottom: 12px;">
-      <h4 style="margin: 0; border: none; padding: 0; font-size: 0.85rem; color: var(--text-color-bright); font-weight: bold;">{{ t('inspector.customRules') }}</h4>
+    <div style="margin-bottom: 12px">
+      <h4
+        style="
+          margin: 0;
+          border: none;
+          padding: 0;
+          font-size: 0.85rem;
+          color: var(--text-color-bright);
+          font-weight: bold;
+        "
+      >
+        {{ t('inspector.customRules') }}
+      </h4>
     </div>
 
     <!-- 空白状态 -->
-    <div v-if="agentStore.rulesList.length === 0" class="empty-state" style="text-align: center; padding: 20px 0;">
+    <div
+      v-if="agentStore.rulesList.length === 0"
+      class="empty-state"
+      style="text-align: center; padding: 20px 0"
+    >
       <span>{{ t('inspector.noRules') }}</span>
     </div>
 
     <!-- 规约列表 -->
-    <div v-else class="rules-list" style="display: flex; flex-direction: column; gap: 12px;">
+    <div v-else class="rules-list" style="display: flex; flex-direction: column; gap: 12px">
       <div
         v-for="rule in agentStore.rulesList"
         :key="rule.path"
@@ -23,7 +38,7 @@
             {{ t('chat.detail') }}
           </n-button>
         </div>
-        
+
         <div class="rule-details">
           <div class="detail-item">
             <span class="label">{{ t('inspector.workspacePath') }}</span>
@@ -45,11 +60,16 @@
     <n-modal
       v-model:show="showModal"
       preset="card"
-      style="width: 90%; max-width: 800px; border: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
+      style="
+        width: 90%;
+        max-width: 800px;
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-overlay);
+      "
       :title="selectedRule?.name + ' - AGENTS.md ' + t('chat.detail')"
     >
-      <n-scrollbar style="max-height: 60vh;" trigger="none">
-        <div style="padding: 4px 16px 16px 4px;">
+      <n-scrollbar style="max-height: 60vh" trigger="none">
+        <div style="padding: 4px 16px 16px 4px">
           <div class="msg-content markdown-body" v-html="renderedMarkdown"></div>
         </div>
       </n-scrollbar>
@@ -120,7 +140,7 @@ const formatSize = (bytes: number) => {
 }
 
 .rule-name {
-  color: var(--text-color-bright)fff;
+  color: var(--text-color-bright) fff;
   font-size: 0.9rem;
   flex: 1;
   min-width: 0;

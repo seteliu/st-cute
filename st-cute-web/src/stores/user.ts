@@ -38,7 +38,7 @@ export const useUserStore = defineStore('user', () => {
    * 避免"服务端会话已失效但本地仍显示已登录"的错位</p>
    */
   const logout = () => {
-    logoutApi().catch(err => {
+    logoutApi().catch((err) => {
       console.warn('通知服务端登出失败，本地登录态照常清理:', err)
     })
     setUserInfo(null)

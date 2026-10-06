@@ -1,22 +1,38 @@
 <template>
-  <n-tooltip :trigger="trigger" placement="bottom" :show="tooltipVisible" @update:show="onTooltipShowChange">
+  <n-tooltip
+    :trigger="trigger"
+    placement="bottom"
+    :show="tooltipVisible"
+    @update:show="onTooltipShowChange"
+  >
     <template #trigger>
-      <span style="cursor: help;">
-        <slot :total="totalTokens">
-          {{ labelPrefix }}{{ totalTokens }}
-        </slot>
+      <span style="cursor: help">
+        <slot :total="totalTokens">{{ labelPrefix }}{{ totalTokens }}</slot>
       </span>
     </template>
     <!-- 弹层正文刻意用正文色而非高亮色：明细数据为主阅读内容，层级交给加粗标题与紫色缓存比行区分 -->
-    <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: var(--text-color);">
-      <div style="font-weight: bold; border-bottom: 1px solid var(--border-color); margin-bottom: 6px; padding-bottom: 4px;">
+    <div style="font-size: 0.8rem; line-height: 1.6; padding: 4px; color: var(--text-color)">
+      <div
+        style="
+          font-weight: bold;
+          border-bottom: 1px solid var(--border-color);
+          margin-bottom: 6px;
+          padding-bottom: 4px;
+        "
+      >
         {{ displayTitle }}
       </div>
-      <div>{{ t('chat.inputToken') }}：{{ inputTokens }}<template v-if="cachedTokens !== undefined">（缓存 {{ cachedTokens }}）</template></div>
+      <div>
+        {{ t('chat.inputToken') }}：{{ inputTokens }}
+        <template v-if="cachedTokens !== undefined">（缓存 {{ cachedTokens }}）</template>
+      </div>
       <div>{{ t('chat.outputToken') }}：{{ outputTokens }}</div>
       <div v-if="windowPercentage">{{ t('chat.windowToken') }}：{{ windowPercentage }}%</div>
-      <div v-if="cid" style="color: var(--accent-color); font-weight: bold; margin-top: 6px;">
-        {{ t('chat.sessionCacheRatio') }}：<template v-if="cacheRatioLoading"><n-spin :size="11" /></template><template v-else-if="cacheRatioText !== null">{{ cacheRatioText }}%</template><template v-else>--</template>
+      <div v-if="cid" style="color: var(--accent-color); font-weight: bold; margin-top: 6px">
+        {{ t('chat.sessionCacheRatio') }}：
+        <template v-if="cacheRatioLoading"><n-spin :size="11" /></template>
+        <template v-else-if="cacheRatioText !== null">{{ cacheRatioText }}%</template>
+        <template v-else>--</template>
       </div>
     </div>
   </n-tooltip>

@@ -3,12 +3,11 @@
     v-model:show="appStore.showLogDrawer"
     :width="width"
     placement="right"
-    style="border-left: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
+    style="border-left: 1px solid var(--border-color); box-shadow: var(--shadow-overlay)"
     @after-enter="stickToBottom"
   >
     <n-drawer-content :title="t('logDrawer.title')" closable>
-      <div style="display: flex; flex-direction: column; gap: 12px; height: 100%;">
-
+      <div style="display: flex; flex-direction: column; gap: 12px; height: 100%">
         <!-- 工具名称：黑框外独立标题，置于抽屉内容最顶部（原始日志场景保留完整原名，不做「MCP调用」收敛翻译） -->
         <div v-if="toolMessage" class="log-section-title">
           {{ t('chat.toolNameLabel') }}: {{ rawToolName }}
@@ -21,10 +20,12 @@
         </template>
 
         <!-- 执行结果展示 -->
-        <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; gap: 12px;">
+        <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; gap: 12px">
           <div class="log-section-title">{{ t('chat.resultLabel') }}:</div>
           <!-- 执行中且尚无任何输出时才展示占位提示：一旦日志流有内容即展示内容本身，避免实时日志被占位挡住 -->
-          <pre v-if="showExecutingPlaceholder" class="log-pre log-pre-main log-pre-executing">{{ t('chat.toolRunningPlaceholder') }}</pre>
+          <pre v-if="showExecutingPlaceholder" class="log-pre log-pre-main log-pre-executing">{{
+            t('chat.toolRunningPlaceholder')
+          }}</pre>
           <pre
             v-else
             ref="resultBoxRef"
@@ -92,7 +93,7 @@ const handleResultScroll = () => {
 const toolMessage = computed(() => {
   const targetId = appStore.currentViewToolMessageId
   if (!targetId) return null
-  const mainMsg = conversationStore.messages.find(m => m.id === targetId)
+  const mainMsg = conversationStore.messages.find((m) => m.id === targetId)
   if (mainMsg) return mainMsg
   const subAgent = agentStore.activeSubAgent
   if (subAgent && subAgent.messages) {
@@ -122,6 +123,7 @@ const rawToolName = computed(() => {
  * 清洗终端 ANSI 控制序列（颜色、光标移动等，如 \u001b[36m），仅用于展示层
  */
 const stripAnsi = (text: string): string => {
+  // eslint-disable-next-line no-control-regex -- 正则本身即匹配 ANSI 控制字符 \u001b
   return text.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, '')
 }
 

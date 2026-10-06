@@ -1,6 +1,12 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getProjects, saveProject, deleteProjectById, updateProjectExpanded, setActiveProject } from '@/api/project'
+import {
+  getProjects,
+  saveProject,
+  deleteProjectById,
+  updateProjectExpanded,
+  setActiveProject
+} from '@/api/project'
 import { Project } from '@/types'
 import { useConversationStore } from './conversation'
 
@@ -13,9 +19,9 @@ export const useProjectStore = defineStore('project', () => {
       const data = await getProjects()
       projectList.value = data
       if (data.length > 0) {
-        if (activeProjectId.value === null || !data.some(p => p.id === activeProjectId.value)) {
+        if (activeProjectId.value === null || !data.some((p) => p.id === activeProjectId.value)) {
           // 容错逻辑：筛选出 active === true 的项目，若有多个按 id 降序排列取 id 最大的一个
-          const activeProjects = data.filter(p => p.active === true)
+          const activeProjects = data.filter((p) => p.active === true)
           if (activeProjects.length > 0) {
             activeProjects.sort((a, b) => b.id - a.id)
             activeProjectId.value = activeProjects[0].id
@@ -36,8 +42,8 @@ export const useProjectStore = defineStore('project', () => {
   const changeActiveProject = async (id: number) => {
     try {
       activeProjectId.value = id
-      projectList.value.forEach(p => {
-        p.active = (p.id === id)
+      projectList.value.forEach((p) => {
+        p.active = p.id === id
       })
       await setActiveProject(id)
     } catch (e) {
@@ -50,7 +56,7 @@ export const useProjectStore = defineStore('project', () => {
       const saved = await saveProject(project)
       await loadProjects()
       await changeActiveProject(saved.id)
-      return saved;
+      return saved
     } catch (e: any) {
       console.error('保存项目失败:', e)
       throw e
@@ -60,12 +66,12 @@ export const useProjectStore = defineStore('project', () => {
   const handleDeleteProject = async (id: number) => {
     try {
       await deleteProjectById(id)
-      
+
       const conversationStore = useConversationStore()
       if (activeProjectId.value === id) {
         activeProjectId.value = null
       }
-      
+
       await loadProjects()
       // 项目级联删除，需要重新加载会话列表
       await conversationStore.loadConversations()
@@ -76,7 +82,7 @@ export const useProjectStore = defineStore('project', () => {
 
   const handleUpdateExpanded = async (id: number, expanded: boolean) => {
     try {
-      const proj = projectList.value.find(p => p.id === id)
+      const proj = projectList.value.find((p) => p.id === id)
       if (proj) {
         proj.expanded = expanded
       }

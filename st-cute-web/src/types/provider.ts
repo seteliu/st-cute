@@ -38,4 +38,3 @@ export interface PasswordPayload {
   /** 显式清除标记：true 时清除密码（优先级高于 password） */
   passwordClear?: boolean
 }
-

@@ -6,6 +6,13 @@ export const getBranches = async (cid?: number, silent = false): Promise<GitBran
   return request.get('/api/git/list' + (cid ? `?cid=${cid}` : ''), { silent })
 }
 
-export const getBranchDiff = async (branchName: string, cid?: number, silent = false): Promise<FileDiff[]> => {
-  return request.get(`/api/git/diff?branchName=${encodeURIComponent(branchName)}` + (cid ? `&cid=${cid}` : ''), { silent })
+export const getBranchDiff = async (
+  branchName: string,
+  cid?: number,
+  silent = false
+): Promise<FileDiff[]> => {
+  return request.get(
+    `/api/git/diff?branchName=${encodeURIComponent(branchName)}` + (cid ? `&cid=${cid}` : ''),
+    { silent }
+  )
 }

@@ -6,12 +6,12 @@
         message.role === 'user'
           ? 'user-message'
           : message.role === 'system'
-          ? 'system-message'
-          : message.role === 'branch'
-          ? 'branch-message'
-          : message.role === 'compressed'
-          ? 'compressed-message'
-          : 'assistant-message',
+            ? 'system-message'
+            : message.role === 'branch'
+              ? 'branch-message'
+              : message.role === 'compressed'
+                ? 'compressed-message'
+                : 'assistant-message',
         'status-' + (message.status || 'SUCCESS').toLowerCase(),
         { 'is-conv-running': running }
       ]"
@@ -20,8 +20,18 @@
         <!-- 角色头像：受全局开关 showMessageAvatar 控制（默认关闭），关闭后不渲染，flex gap 间隙随之自动收缩 -->
         <div v-if="appStore.showMessageAvatar" class="avatar">{{ avatarLabel }}</div>
         <div class="msg-content-wrapper">
-          <div 
-            v-if="message.content || hasThought || message.attachments || message.status === 'FAILED' || message.status === 'CANCELED' || showEmptyDots || ((message.status === 'RUNNING' || message.status === 'PENDING') && !message.content && !hasThought)" 
+          <div
+            v-if="
+              message.content ||
+              hasThought ||
+              message.attachments ||
+              message.status === 'FAILED' ||
+              message.status === 'CANCELED' ||
+              showEmptyDots ||
+              ((message.status === 'RUNNING' || message.status === 'PENDING') &&
+                !message.content &&
+                !hasThought)
+            "
             class="msg-content"
           >
             <!-- 附件区域展示 -->
@@ -50,15 +60,27 @@
 
             <!-- 正文内容 (简单渲染 HTML 换行以支持纯文本换行) -->
             <div v-if="message.role === 'branch'" class="branch-label">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="12"
+                height="12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <polyline points="4 17 10 11 4 5"></polyline>
                 <line x1="12" y1="19" x2="20" y2="19"></line>
               </svg>
               SubAgent Report
             </div>
-            
+
             <div v-if="message.role === 'compressed'" class="compressed-status-text">
-              <span v-if="message.status === 'RUNNING' || message.status === 'PENDING'">上下文压缩中...</span>
+              <span v-if="message.status === 'RUNNING' || message.status === 'PENDING'">
+                上下文压缩中...
+              </span>
               <span v-else-if="message.status === 'SUCCESS'">上下文压缩完成</span>
               <span v-else-if="message.status === 'FAILED'">上下文压缩失败</span>
               <span v-else>上下文压缩状态: {{ message.status }}</span>
@@ -75,24 +97,61 @@
             <!-- 思考中指示 (末条助手消息处于非完结态且尚无正文产出时，显示三个小点跳动动效)。
                  条件由父级 MessageListFlow 判定后经 showEmptyDots 下发，此处不再依赖所属会话 running：
                  移动端重连时 loopRunning 可能尚未同步回来，若仍要求 running，末条空助手会退化成一片空白 -->
-            <div
-              v-if="message.role !== 'compressed' && showEmptyDots"
-              class="thinking-animation"
-            >
+            <div v-if="message.role !== 'compressed' && showEmptyDots" class="thinking-animation">
               <thinking-dots />
             </div>
 
             <!-- 取消/失败/等待等文字标志 -->
-            <div v-if="message.status === 'FAILED'" style="color: var(--status-error); font-size: 0.8rem; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <div
+              v-if="message.status === 'FAILED'"
+              style="
+                color: var(--status-error);
+                font-size: 0.8rem;
+                margin-top: 6px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+              "
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="8" x2="12" y2="12"></line>
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
               </svg>
               执行失败，您可以点击下方的重试按钮。
             </div>
-            <div v-if="message.status === 'CANCELED'" style="color: var(--text-color-muted); font-size: 0.8rem; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <div
+              v-if="message.status === 'CANCELED'"
+              style="
+                color: var(--text-color-muted);
+                font-size: 0.8rem;
+                margin-top: 6px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+              "
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="15" y1="9" x2="9" y2="15"></line>
                 <line x1="9" y1="9" x2="15" y2="15"></line>
@@ -124,10 +183,10 @@
               <!-- 重置到此节点按钮（仅限用户消息，且当前会话未在进行中时可点击，使用与删除会话一致的气泡确认框样式） -->
               <n-popconfirm
                 v-if="message.role === 'user'"
-                @positive-click="handleRollback"
                 positive-text="确认"
                 negative-text="取消"
                 placement="top"
+                @positive-click="handleRollback"
               >
                 <template #trigger>
                   <n-button
@@ -138,31 +197,45 @@
                     :disabled="appStore.loopRunning"
                   >
                     <template #icon>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        width="12"
+                        height="12"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
                         <polyline points="9 14 4 9 9 4"></polyline>
                         <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
                       </svg>
                     </template>
                   </n-button>
                 </template>
-                <div style="white-space: normal; max-width: 220px; line-height: 1.4;">
+                <div style="white-space: normal; max-width: 220px; line-height: 1.4">
                   确定重置至此节点吗？
-                  <div style="font-size: 0.75rem; opacity: 0.75; margin-top: 4px;">
+                  <div style="font-size: 0.75rem; opacity: 0.75; margin-top: 4px">
                     后续消息将被删除，不可恢复。
                   </div>
                 </div>
               </n-popconfirm>
 
               <!-- 复制按钮 (常驻) -->
-              <n-button
-                quaternary
-                circle
-                size="tiny"
-                title="复制消息内容"
-                @click="handleCopy"
-              >
+              <n-button quaternary circle size="tiny" title="复制消息内容" @click="handleCopy">
                 <template #icon>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                   </svg>
@@ -180,7 +253,17 @@
                 @click="handleRetry"
               >
                 <template #icon>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
                   </svg>
                 </template>
@@ -271,11 +354,13 @@ const avatarLabel = computed(() => {
 // （如进程重启导致 loopRunning 归零），该消息会永久停在 PENDING，导致边框脉冲与
 // 打字光标常亮。故要求所属会话确实在运行，才认定为活跃态。
 const isStreamingRunning = computed(() => {
-  return props.message.role !== 'compressed' &&
+  return (
+    props.message.role !== 'compressed' &&
     props.message.role !== 'user' &&
     props.message.role !== 'branch' &&
     (props.message.status === 'RUNNING' || props.message.status === 'PENDING') &&
     props.running
+  )
 })
 
 // 高速打字指示：流式快速吐字时保持光标常亮稳定，停顿思考时转入柔和呼吸
@@ -309,7 +394,7 @@ const canRetry = computed(() => {
   if (props.isSubAgent || props.message.status !== 'FAILED') {
     return false
   }
-  const userMessages = conversationStore.messages.filter(m => m.role === 'user')
+  const userMessages = conversationStore.messages.filter((m) => m.role === 'user')
   if (userMessages.length === 0) {
     return true
   }
@@ -320,7 +405,7 @@ const canRetry = computed(() => {
 const formattedContent = computed(() => {
   const text = props.message.content
   if (!text) return ''
-  
+
   let targetText = text
   if (props.message.role === 'branch') {
     const idx = text.indexOf('结果摘要:')
@@ -352,9 +437,9 @@ const handleCopy = async () => {
   const ok = await copyTextToClipboard(text)
   if ((window as any).$message) {
     if (ok) {
-      (window as any).$message.success(t('chat.copiedSuccess'))
+      ;(window as any).$message.success(t('chat.copiedSuccess'))
     } else {
-      (window as any).$message.error(t('chat.copiedFailed'))
+      ;(window as any).$message.error(t('chat.copiedFailed'))
     }
   }
 }
@@ -365,7 +450,7 @@ const handleRollback = async () => {
     await conversationStore.resetToMessage(props.message.id)
     appStore.userInput = text
     if ((window as any).$message) {
-      (window as any).$message.success('消息已重置并退回到输入框')
+      ;(window as any).$message.success('消息已重置并退回到输入框')
     }
   } catch (e) {
     console.error('重置到此节点失败:', e)
@@ -381,7 +466,7 @@ const formatTime = (timeStr?: string) => {
   try {
     const date = new Date(timeStr)
     if (isNaN(date.getTime())) return timeStr
-    
+
     const pad = (n: number) => String(n).padStart(2, '0')
     const yyyy = date.getFullYear()
     const MM = pad(date.getMonth() + 1)
@@ -389,24 +474,17 @@ const formatTime = (timeStr?: string) => {
     const hh = pad(date.getHours())
     const mm = pad(date.getMinutes())
     const ss = pad(date.getSeconds())
-    
+
     return `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}`
   } catch {
     return timeStr
   }
 }
 
-const cachedTime = ref('')
-
-const displayTime = computed(() => {
-  // 时间格式化纯函数化：缓存命中直接返回，未命中才格式化并回写缓存。
-  // （原实现把回写副作用放在 computed 内，属 Vue 反模式；此写法保持缓存语义且无副作用）
-  const formatted = formatTime(props.message.createTime || (props.message as any).createdAt)
-  if (formatted && formatted !== cachedTime.value) {
-    cachedTime.value = formatted
-  }
-  return cachedTime.value || formatted
-})
+// 时间展示：纯 computed，无回写副作用（formatTime 内部含 try-catch 兜底，重复计算成本可忽略）
+const displayTime = computed(() =>
+  formatTime(props.message.createTime || (props.message as any).createdAt)
+)
 </script>
 
 <style scoped>
@@ -428,7 +506,8 @@ const displayTime = computed(() => {
 }
 
 /* 高速吐字状态：光标保持稳定常亮，不播放呼吸动画，彻底消除 DOM 频繁重建导致的抽搐与闪烁 */
-.markdown-content.is-running.is-typing-fast :deep(> :last-child:not(pre):not(ul):not(ol):not(blockquote)::after),
+.markdown-content.is-running.is-typing-fast
+  :deep(> :last-child:not(pre):not(ul):not(ol):not(blockquote)::after),
 .markdown-content.is-running.is-typing-fast :deep(> pre:last-child > code::after),
 .markdown-content.is-running.is-typing-fast :deep(> ul:last-child > li:last-child::after),
 .markdown-content.is-running.is-typing-fast :deep(> ol:last-child > li:last-child::after),
@@ -438,9 +517,11 @@ const displayTime = computed(() => {
 }
 
 @keyframes cursor-breathe {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.15;
   }
+
   50% {
     opacity: 0.95;
   }
@@ -486,9 +567,17 @@ const displayTime = computed(() => {
 }
 
 @keyframes pulse-pending {
-  0% { opacity: 0.5; }
-  50% { opacity: 0.8; }
-  100% { opacity: 0.5; }
+  0% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
+
+  100% {
+    opacity: 0.5;
+  }
 }
 
 .message-item-wrapper {
@@ -502,7 +591,9 @@ const displayTime = computed(() => {
   align-items: flex-end;
 }
 
-.assistant-wrapper, .branch-wrapper, .compressed-wrapper {
+.assistant-wrapper,
+.branch-wrapper,
+.compressed-wrapper {
   align-items: flex-start;
 }
 
@@ -518,7 +609,8 @@ const displayTime = computed(() => {
   align-items: flex-end;
 }
 
-.assistant-message .msg-content-wrapper, .branch-message .msg-content-wrapper {
+.assistant-message .msg-content-wrapper,
+.branch-message .msg-content-wrapper {
   align-items: stretch;
 }
 
@@ -542,6 +634,7 @@ const displayTime = computed(() => {
 .message-time {
   user-select: none;
   font-family: monospace;
+
   /* 物理盒子模型高度锁死（与右侧按钮一致），防止 align-items 浮点对齐偏差 */
   height: 24px;
   line-height: 24px;

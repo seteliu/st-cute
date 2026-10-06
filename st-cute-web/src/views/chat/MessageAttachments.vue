@@ -24,7 +24,17 @@
       <!-- 普通文件类型卡片展示 -->
       <div v-else class="attachment-file-card" @click="handleDownload(att)">
         <div class="file-icon-box">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="22"
+            height="22"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
             <polyline points="13 2 13 9 20 9"></polyline>
           </svg>
@@ -34,7 +44,17 @@
           <span class="file-size">{{ formatFileSize(att.size) }}</span>
         </div>
         <div class="file-action-icon" title="点击下载">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -51,7 +71,7 @@
       :y="contextMenuY"
       :options="dropdownOptions"
       :show="showContextMenu"
-      :on-clickoutside="() => showContextMenu = false"
+      :on-clickoutside="() => (showContextMenu = false)"
       @select="handleDropdownSelect"
     />
   </div>
@@ -172,7 +192,9 @@ const handleDownload = (att: AttachmentItem) => {
   width: 130px;
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .attachment-image-card:hover {
@@ -218,7 +240,10 @@ const handleDownload = (att: AttachmentItem) => {
   border-radius: 8px;
   cursor: pointer;
   max-width: 240px;
-  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .attachment-file-card:hover {

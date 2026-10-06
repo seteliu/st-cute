@@ -98,7 +98,7 @@ const handleLogin = async () => {
   justify-content: center;
   align-items: center;
   width: 100vw;
-  height: 100vh;  /* 回退：不支持小视口单位的环境 */
+  height: 100vh; /* 回退：不支持小视口单位的环境 */
   height: 100svh; /* 移动端小视口：按地址栏展开时的最小可视区域取高，避免登录页底部被截断 */
   background: radial-gradient(circle at center, var(--login-bg-start) 0%, var(--login-bg-end) 100%);
   overflow: hidden;
@@ -136,7 +136,9 @@ const handleLogin = async () => {
   position: absolute;
   border-radius: 50%;
   border: 1.5px solid var(--border-color-active);
-  box-shadow: 0 0 40px var(--border-color-active), inset 0 0 25px var(--primary-soft);
+  box-shadow:
+    0 0 40px var(--border-color-active),
+    inset 0 0 25px var(--primary-soft);
   width: 100%;
   height: 100%;
   opacity: 0;
@@ -161,9 +163,11 @@ const handleLogin = async () => {
     height: 150px;
     opacity: 0.95;
   }
+
   50% {
     opacity: 0.6;
   }
+
   100% {
     width: 850px;
     height: 850px;
@@ -193,7 +197,7 @@ const handleLogin = async () => {
   font-size: 32px;
   font-weight: 700;
   color: var(--text-color-bright);
-  margin: 0 0 8px 0;
+  margin: 0 0 8px;
   letter-spacing: 2px;
 }
 
@@ -225,14 +229,14 @@ const handleLogin = async () => {
   transition: all 0.3s ease;
   background: linear-gradient(135deg, var(--primary-color), var(--primary-color-pressed));
   border: none;
-  color: #ffffff !important;
+  color: var(--text-color-bright) !important;
 }
 
 .login-btn:hover {
   background: linear-gradient(135deg, var(--primary-color-hover), var(--primary-color));
   transform: translateY(-1px);
   box-shadow: 0 4px 12px var(--border-color-active);
-  color: #ffffff !important;
+  color: var(--text-color-bright) !important;
 }
 
 @keyframes fadeIn {
@@ -240,6 +244,7 @@ const handleLogin = async () => {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

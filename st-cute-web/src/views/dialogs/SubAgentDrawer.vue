@@ -14,26 +14,46 @@
       @close="agentStore.showSubAgentDrawer = false"
     >
       <template #header>
-        <div style="display: flex; flex-direction: column; width: 100%;">
-          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span style="font-weight: bold;">
-              {{ isMobile ? '' : '子代理: ' }}{{ agentStore.activeSubAgent.role }} (ID: {{ agentStore.activeSubAgent.cid }})
+        <div style="display: flex; flex-direction: column; width: 100%">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <span style="font-weight: bold">
+              {{ isMobile ? '' : '子代理: ' }}{{ agentStore.activeSubAgent.role }} (ID:
+              {{ agentStore.activeSubAgent.cid }})
             </span>
             <sub-agent-status-tag :status="agentStore.activeSubAgent.status" />
           </div>
           <!-- 移动端额外操作栏，折行展示 -->
-          <div v-if="isMobile" style="display: flex; align-items: center; gap: 12px; margin-top: 6px; font-size: 0.8rem; color: var(--text-color-muted); font-weight: 500;">
+          <div
+            v-if="isMobile"
+            style="
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              margin-top: 6px;
+              font-size: 0.8rem;
+              color: var(--text-color-muted);
+              font-weight: 500;
+            "
+          >
             <token-metrics-tooltip
               :input-tokens="agentStore.activeSubAgent.inputTokens || 0"
               :output-tokens="agentStore.activeSubAgent.outputTokens || 0"
               :cached-tokens="agentStore.activeSubAgent.cachedTokens"
               title="子代理上下文详情"
               trigger="click"
-              :cid="agentStore.activeSubAgent?.cid ? Number(agentStore.activeSubAgent.cid) : undefined"
+              :cid="
+                agentStore.activeSubAgent?.cid ? Number(agentStore.activeSubAgent.cid) : undefined
+              "
               :context-limit="contextLimit"
             >
               <template #default="{ total }">
-                上下文窗口: <strong style="color: var(--text-color-bright); font-weight: bold;">{{ formatTokenCount(total) }}</strong><template v-if="contextLimitText"> / {{ contextLimitText }} ({{ usagePercentage(total) }}%)</template>
+                上下文窗口:
+                <strong style="color: var(--text-color-bright); font-weight: bold">
+                  {{ formatTokenCount(total) }}
+                </strong>
+                <template v-if="contextLimitText">
+                  / {{ contextLimitText }} ({{ usagePercentage(total) }}%)
+                </template>
               </template>
             </token-metrics-tooltip>
 
@@ -44,7 +64,18 @@
               @click="agentStore.handleKillMember"
             >
               <template #icon>
-                <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  class="spin-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="11"
+                  height="11"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <line x1="12" y1="2" x2="12" y2="6"></line>
                   <line x1="12" y1="18" x2="12" y2="22"></line>
                   <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
@@ -60,8 +91,18 @@
           </div>
         </div>
       </template>
-      <template #header-extra v-if="!isMobile">
-        <div style="display: flex; align-items: center; gap: 12px; padding-right: 12px; font-size: 0.85rem; color: var(--text-color-muted); font-weight: 500;">
+      <template v-if="!isMobile" #header-extra>
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-right: 12px;
+            font-size: 0.85rem;
+            color: var(--text-color-muted);
+            font-weight: 500;
+          "
+        >
           <n-button
             v-if="agentStore.activeSubAgent.status === 'running'"
             size="tiny"
@@ -69,7 +110,18 @@
             @click="agentStore.handleKillMember"
           >
             <template #icon>
-              <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                class="spin-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="11"
+                height="11"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <line x1="12" y1="2" x2="12" y2="6"></line>
                 <line x1="12" y1="18" x2="12" y2="22"></line>
                 <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
@@ -87,29 +139,36 @@
             :output-tokens="agentStore.activeSubAgent.outputTokens || 0"
             :cached-tokens="agentStore.activeSubAgent.cachedTokens"
             title="子代理上下文详情"
-            :cid="agentStore.activeSubAgent?.cid ? Number(agentStore.activeSubAgent.cid) : undefined"
+            :cid="
+              agentStore.activeSubAgent?.cid ? Number(agentStore.activeSubAgent.cid) : undefined
+            "
             :context-limit="contextLimit"
           >
             <template #default="{ total }">
-              上下文窗口: <strong style="color: var(--text-color-bright); font-weight: bold;">{{ formatTokenCount(total) }}</strong><template v-if="contextLimitText"> / {{ contextLimitText }} ({{ usagePercentage(total) }}%)</template>
+              上下文窗口:
+              <strong style="color: var(--text-color-bright); font-weight: bold">
+                {{ formatTokenCount(total) }}
+              </strong>
+              <template v-if="contextLimitText">
+                / {{ contextLimitText }} ({{ usagePercentage(total) }}%)
+              </template>
             </template>
           </token-metrics-tooltip>
         </div>
       </template>
       <div class="subagent-modal-content" :style="contentStyle">
-
-      <!-- 独立消息列表内嵌区域：使用主会话聊天底色 var(--bg-color)，独立边框与滚动 -->
-      <div class="subagent-chat-flow">
-        <message-list-flow
-          ref="messageListFlowRef"
-          :messages="filteredMessages"
-          :is-sub-agent="true"
-          :cid="Number(agentStore.activeSubAgent?.cid)"
-          :running="agentStore.activeSubAgent?.status === 'running'"
-        />
+        <!-- 独立消息列表内嵌区域：使用主会话聊天底色 var(--bg-color)，独立边框与滚动 -->
+        <div class="subagent-chat-flow">
+          <message-list-flow
+            ref="messageListFlowRef"
+            :messages="filteredMessages"
+            :is-sub-agent="true"
+            :cid="Number(agentStore.activeSubAgent?.cid)"
+            :running="agentStore.activeSubAgent?.status === 'running'"
+          />
+        </div>
       </div>
-    </div>
-  </n-card>
+    </n-card>
   </n-modal>
 </template>
 
@@ -121,7 +180,6 @@ import TokenMetricsTooltip from '@/components/TokenMetricsTooltip.vue'
 import SubAgentStatusTag from '@/components/SubAgentStatusTag.vue'
 import { useResponsive } from '@/utils/useResponsive'
 import { useContextWindow, formatTokenCount } from '@/composables/useContextWindow'
-import { Message } from '@/types'
 import { t } from '@/i18n'
 import { buildRenderItems, type RenderItem } from '@/utils/foldEngine'
 
@@ -186,9 +244,7 @@ const cardContentStyle = computed<CSSProperties>(() => {
 })
 
 const cardHeaderStyle = computed<CSSProperties | undefined>(() => {
-  return isMobile.value
-    ? { padding: '12px 16px 8px 16px' }
-    : undefined
+  return isMobile.value ? { padding: '12px 16px 8px 16px' } : undefined
 })
 
 const contentStyle = computed<CSSProperties>(() => {
@@ -223,14 +279,14 @@ export type { RenderItem }
 
 // 渲染序列组装：统一走共享折叠引擎（与主会话 ChatContainer 复用同一实现，含 FOLDED 虚拟块透传）
 const filteredMessages = computed<RenderItem[]>(() => {
-  const subAgent = agentStore.activeSubAgent;
-  if (!subAgent || !subAgent.messages) return [];
-  const result = buildRenderItems(subAgent.messages);
+  const subAgent = agentStore.activeSubAgent
+  if (!subAgent || !subAgent.messages) return []
+  const result = buildRenderItems(subAgent.messages)
   if (subAgent.truncated) {
-    result.unshift({ type: 'truncated_tip' });
+    result.unshift({ type: 'truncated_tip' })
   }
-  return result;
-});
+  return result
+})
 
 const messageListFlowRef = ref<any>(null)
 
@@ -243,30 +299,36 @@ const scrollToBottom = (smooth = true) => {
 }
 
 // 监听弹窗显示事件：四段式开窗贴底（nextTick、100ms、250ms、450ms 动效完全收敛后）
-watch(() => agentStore.showSubAgentDrawer, (show) => {
-  if (show) {
-    scrollToBottom(false)
-    setTimeout(() => {
+watch(
+  () => agentStore.showSubAgentDrawer,
+  (show) => {
+    if (show) {
       scrollToBottom(false)
-    }, 100)
-    setTimeout(() => {
-      scrollToBottom(false)
-    }, 250)
-    setTimeout(() => {
-      scrollToBottom(false)
-    }, 450)
+      setTimeout(() => {
+        scrollToBottom(false)
+      }, 100)
+      setTimeout(() => {
+        scrollToBottom(false)
+      }, 250)
+      setTimeout(() => {
+        scrollToBottom(false)
+      }, 450)
+    }
   }
-})
+)
 
 // 监听活动子智能体切换：切换后也执行贴底
-watch(() => agentStore.activeSubAgent?.cid, () => {
-  if (agentStore.showSubAgentDrawer) {
-    scrollToBottom(false)
-    setTimeout(() => {
+watch(
+  () => agentStore.activeSubAgent?.cid,
+  () => {
+    if (agentStore.showSubAgentDrawer) {
       scrollToBottom(false)
-    }, 120)
+      setTimeout(() => {
+        scrollToBottom(false)
+      }, 120)
+    }
   }
-})
+)
 
 // 监听子代理消息条目变化：实时更新内嵌区域贴底
 watch(
@@ -284,7 +346,7 @@ watch(
     const msgs = filteredMessages.value
     if (!msgs || msgs.length === 0) return ''
     const last = msgs[msgs.length - 1]
-    return last.type === 'message' ? (last.data.content || '') : ''
+    return last.type === 'message' ? last.data.content || '' : ''
   },
   () => {
     if (agentStore.showSubAgentDrawer && agentStore.activeSubAgent?.status === 'running') {
@@ -339,6 +401,7 @@ watch(
   width: 100%;
   max-width: 100%;
   background-color: var(--bg-color-modal) !important;
+
   /* 卡片默认文字色刻意用正文色而非高亮色：弹窗内复用的助手消息正文（.msg-content 无显式 color，就近继承）
      若继承到高亮白会明显亮过主会话里的同一批消息（与 FoldedMessageCard 折叠详情弹窗同款问题与修法）。
      标题等需要更高层级的元素均已各自显式声明颜色，不受此默认值影响 */
@@ -354,7 +417,12 @@ watch(
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

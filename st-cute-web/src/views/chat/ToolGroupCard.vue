@@ -1,10 +1,6 @@
 <template>
   <div class="tool-calls-container">
-    <div
-      v-for="tc in tools"
-      :key="tc.id"
-      class="tool-call-item"
-    >
+    <div v-for="tc in tools" :key="tc.id" class="tool-call-item">
       <div class="tool-call-row">
         <!-- 1. 状态圆点（左侧固定块，不参与收缩） -->
         <span :class="['tool-status-dot', getStatusClass(tc.status)]"></span>
@@ -17,14 +13,22 @@
           <!-- 入参精简提示（完整参数不做悬浮展示，全状态可点击右侧"详情"查看抽屉详情） -->
           <span class="tool-args">{{ formatToolArgs(tc.toolArguments, tc.toolName) }}</span>
           <!-- 出参摘要：只要结果内容非空即展示（执行中/失败等状态若已有内容同样呈现） -->
-          <span v-if="hasResultContent(tc.content)" class="tool-result-summary">› {{ getResultSummary(tc.content) }}</span>
+          <span v-if="hasResultContent(tc.content)" class="tool-result-summary">
+            › {{ getResultSummary(tc.content) }}
+          </span>
         </div>
 
         <!-- 4. 状态栏（右侧固定块，含状态标签/执行动效与详情按钮，不参与收缩） -->
         <div class="tool-status-bar">
-          <span v-if="tc.status === 'WAITING_APPROVAL'" class="status-label waiting-approval">[{{ t('chat.permissionRequestTitle') }}]</span>
-          <span v-else-if="tc.status === 'REJECTED'" class="status-label rejected">[{{ t('common.failed') }}]</span>
-          <span v-else-if="tc.status === 'CANCELED'" class="status-label canceled">[{{ t('chat.cancelLoop') }}]</span>
+          <span v-if="tc.status === 'WAITING_APPROVAL'" class="status-label waiting-approval">
+            [{{ t('chat.permissionRequestTitle') }}]
+          </span>
+          <span v-else-if="tc.status === 'REJECTED'" class="status-label rejected">
+            [{{ t('common.failed') }}]
+          </span>
+          <span v-else-if="tc.status === 'CANCELED'" class="status-label canceled">
+            [{{ t('chat.cancelLoop') }}]
+          </span>
 
           <!-- 执行中指示：任何工具只要处于执行中/待执行，即在详情按钮左侧显示三点跳动动效。
                此条件刻意与上方状态标签解耦为独立判断（而非挂在 v-else-if 链尾），
@@ -47,7 +51,14 @@
 
       <!-- 6. 就地审批控制面板 -->
       <div v-if="tc.status === 'WAITING_APPROVAL'" class="approval-panel">
-        <n-button size="tiny" type="primary" secondary @click="approveTool(tc.toolId, 'ALLOW', tc.toolName)">{{ t('chat.allow') }}</n-button>
+        <n-button
+          size="tiny"
+          type="primary"
+          secondary
+          @click="approveTool(tc.toolId, 'ALLOW', tc.toolName)"
+        >
+          {{ t('chat.allow') }}
+        </n-button>
         <n-dropdown
           trigger="click"
           :options="getAlwaysAllowOptions(tc)"
@@ -55,38 +66,31 @@
           :placement="dropdownPlacement"
           :show="activeDropdownId === tc.id"
           :menu-props="() => ({ class: 'approval-dropdown' })"
-          @update:show="(show: boolean) => activeDropdownId = show ? tc.id : null"
+          @update:show="(show: boolean) => (activeDropdownId = show ? tc.id : null)"
           @select="(key: string | number) => handleAlwaysAllowSelect(tc, String(key))"
         >
           <n-button size="tiny" type="primary" secondary>{{ t('chat.alwaysAllow') }} ▾</n-button>
         </n-dropdown>
-        <n-button size="tiny" type="error" secondary class="approval-deny-btn danger-secondary-btn" @click="approveTool(tc.toolId, 'DENY', tc.toolName)">{{ t('chat.deny') }}</n-button>
+        <n-button
+          size="tiny"
+          type="error"
+          secondary
+          class="approval-deny-btn danger-secondary-btn"
+          @click="approveTool(tc.toolId, 'DENY', tc.toolName)"
+        >
+          {{ t('chat.deny') }}
+        </n-button>
       </div>
 
       <!-- 7. 绑定的 Hook 状态渲染 -->
-      <div
-        v-if="tc.hooks && tc.hooks.length > 0"
-        class="tool-hooks-container"
-      >
-        <div
-          v-for="hk in tc.hooks"
-          :key="hk.name"
-          class="tool-hook-row"
-        >
-          <span
-            :class="['tool-hook-dot', hk.status.toLowerCase()]"
-          ></span>
+      <div v-if="tc.hooks && tc.hooks.length > 0" class="tool-hooks-container">
+        <div v-for="hk in tc.hooks" :key="hk.name" class="tool-hook-row">
+          <span :class="['tool-hook-dot', hk.status.toLowerCase()]"></span>
           <span class="tool-hook-label">[Hook: {{ hk.name }}]</span>
-          <span
-            :class="['tool-hook-status', hk.status.toLowerCase()]"
-          >{{ hk.status.toUpperCase() }}</span>
-          <span
-            v-if="hk.error"
-            class="tool-hook-error"
-            :title="hk.error"
-          >
-            - {{ hk.error }}
+          <span :class="['tool-hook-status', hk.status.toLowerCase()]">
+            {{ hk.status.toUpperCase() }}
           </span>
+          <span v-if="hk.error" class="tool-hook-error" :title="hk.error">- {{ hk.error }}</span>
         </div>
       </div>
     </div>
@@ -169,16 +173,17 @@ const formatToolArgs = (argsStr: string | undefined, toolName?: string) => {
     // lastIndexOf 兜底 serverName 自身含 "__" 的极端情况：最后一个 "__" 之后必为原生工具名
     const nativeName = toolName.slice(toolName.lastIndexOf('__') + 2)
     let extra = ''
-    let parsed: any = null
+    let parsed: any
     try {
       parsed = argsStr ? JSON.parse(argsStr) : null
-    } catch (e) {
+    } catch {
       parsed = null
     }
     if (parsed && typeof parsed === 'object') {
       // 附加首个标量参数（string/number/boolean），数组与嵌套对象不做摘要展示
-      const entry = Object.entries(parsed).find(([, v]) =>
-        typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+      const entry = Object.entries(parsed).find(
+        ([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+      )
       if (entry) {
         extra = `, ${entry[0]}="${String(entry[1])}"`
       }
@@ -188,10 +193,10 @@ const formatToolArgs = (argsStr: string | undefined, toolName?: string) => {
 
   if (!argsStr) return ''
 
-  let parsed: any = null
+  let parsed: any
   try {
     parsed = JSON.parse(argsStr)
-  } catch (e) {
+  } catch {
     return `(${argsStr})`
   }
 
@@ -229,9 +234,14 @@ const hasResultContent = (content: string | undefined) => {
 }
 
 // 人在回路就地确认
-const approveTool = (toolCallId: string | undefined, decision: 'ALLOW' | 'ALLOW_ALWAYS' | 'DENY', toolName: string | undefined) => {
+const approveTool = (
+  toolCallId: string | undefined,
+  decision: 'ALLOW' | 'ALLOW_ALWAYS' | 'DENY',
+  toolName: string | undefined
+) => {
   if (!toolCallId || !toolName) return
-  const cid = props.cid !== undefined && props.cid !== null ? props.cid : conversationStore.activeCid
+  const cid =
+    props.cid !== undefined && props.cid !== null ? props.cid : conversationStore.activeCid
   if (cid !== null) {
     approveConversationPermissionApi(cid, {
       id: toolCallId,
@@ -239,7 +249,7 @@ const approveTool = (toolCallId: string | undefined, decision: 'ALLOW' | 'ALLOW_
       alwaysAllow: decision === 'ALLOW_ALWAYS',
       toolName: toolName,
       contentPattern: '*'
-    }).catch(err => {
+    }).catch((err) => {
       console.error('发送就地审批决定失败:', err)
     })
   }
@@ -258,7 +268,11 @@ const getAlwaysAllowOptions = (tc: any) => {
   }
 
   const isCmd = tc.toolName === 'execute_command' || tc.toolName === 'RunCommandTool'
-  const isFile = tc.toolName === 'write_file' || tc.toolName === 'edit_file' || tc.toolName === 'WriteFileTool' || tc.toolName === 'EditFileTool'
+  const isFile =
+    tc.toolName === 'write_file' ||
+    tc.toolName === 'edit_file' ||
+    tc.toolName === 'WriteFileTool' ||
+    tc.toolName === 'EditFileTool'
 
   if (isCmd) {
     if (command) {
@@ -336,7 +350,7 @@ onUnmounted(() => {
   window.removeEventListener('scroll', handleGlobalScroll, true)
 })
 
-const dropdownPlacement = computed(() => isMobile.value ? 'bottom-end' : 'bottom-start')
+const dropdownPlacement = computed(() => (isMobile.value ? 'bottom-end' : 'bottom-start'))
 
 const renderDropdownLabel = (option: any) => {
   const labelText = option.label as string
@@ -358,24 +372,28 @@ const renderDropdownLabel = (option: any) => {
       },
       [
         h('span', { style: { color: 'var(--text-color-bright)', marginRight: '4px' } }, prefix),
-        h('code', {
-          style: {
-            fontFamily: 'monospace',
-            backgroundColor: 'rgba(0, 0, 0, 0.25)',
-            color: 'var(--text-color-bright)',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            border: '1px solid var(--overlay-veil)',
-            fontSize: '0.75rem',
-            display: 'inline-block',
-            marginTop: '2px',
-            transition: 'all 0.15s ease',
-            maxWidth: '100%',
-            boxSizing: 'border-box',
-            whiteSpace: 'normal',
-            wordBreak: 'break-all'
-          }
-        }, code)
+        h(
+          'code',
+          {
+            style: {
+              fontFamily: 'monospace',
+              backgroundColor: 'rgba(0, 0, 0, 0.25)',
+              color: 'var(--text-color-bright)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              border: '1px solid var(--overlay-veil)',
+              fontSize: '0.75rem',
+              display: 'inline-block',
+              marginTop: '2px',
+              transition: 'all 0.15s ease',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              whiteSpace: 'normal',
+              wordBreak: 'break-all'
+            }
+          },
+          code
+        )
       ]
     )
   }
@@ -400,10 +418,10 @@ const renderDropdownLabel = (option: any) => {
 const handleAlwaysAllowSelect = (tc: any, key: string) => {
   const colonIdx = key.indexOf(':')
   if (colonIdx === -1) return
-  const mode = key.substring(0, colonIdx)
   const pattern = key.substring(colonIdx + 1)
 
-  const cid = props.cid !== undefined && props.cid !== null ? props.cid : conversationStore.activeCid
+  const cid =
+    props.cid !== undefined && props.cid !== null ? props.cid : conversationStore.activeCid
   if (cid !== null && tc.toolId && tc.toolName) {
     approveConversationPermissionApi(cid, {
       id: tc.toolId,
@@ -411,7 +429,7 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
       alwaysAllow: true,
       toolName: tc.toolName,
       contentPattern: pattern
-    }).catch(err => {
+    }).catch((err) => {
       console.error('发送总是放行审批决定失败:', err)
     })
   }
@@ -499,18 +517,31 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.95); opacity: 0.5; }
-  50% { transform: scale(1.05); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.5; }
+  0% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
 }
 
 .tool-name {
   font-family: monospace;
   font-weight: bold;
+
   /* 名称与入参刻意统一用正文色（非高亮色）：工具行整体保持克制不抢焦点，
      状态语义交给左侧圆点与右侧状态标签的彩色表达 */
   color: var(--text-color);
   font-size: 0.85rem;
+
   /* 工具名是行内主标识（左侧固定块），禁止换行且不参与 flex 收缩 */
   white-space: nowrap;
   flex-shrink: 0;
@@ -530,6 +561,7 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
    flex-basis 用 auto 而非 0，是其「内容决定初始宽度」的关键 */
 .tool-args {
   flex: 0 1 auto;
+
   /* 覆盖全局遗留的 max-width: 250px，否则会把弹性区卡死 */
   max-width: none;
   min-width: 0;
@@ -558,6 +590,7 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
   font-size: 0.75rem;
   margin-left: 0;
   font-weight: bold;
+
   /* 状态标签（如“[等待审批]”）为短文本，禁止换行；且为关键状态信息，不参与 flex 收缩 */
   white-space: nowrap;
   flex-shrink: 0;
@@ -579,6 +612,7 @@ const handleAlwaysAllowSelect = (tc: any, key: string) => {
    刻意用最低档渐隐色：入参是理解调用的关键信息（正文色），出参仅为辅助预览，压到最弱层级减少视觉噪音 */
 .tool-result-summary {
   flex: 1 1 0;
+
   /* 覆盖全局遗留的 max-width，改由弹性区动态决定可用宽度 */
   max-width: none;
   min-width: 0;

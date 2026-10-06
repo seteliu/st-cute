@@ -3,7 +3,7 @@
     v-model:show="appStore.showThoughtDrawer"
     :width="width"
     placement="right"
-    style="border-left: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
+    style="border-left: 1px solid var(--border-color); box-shadow: var(--shadow-overlay)"
     @after-enter="stickToBottom"
   >
     <n-drawer-content :title="t('chat.thoughtDetailTitle')" closable>
@@ -13,14 +13,19 @@
           <div class="thought-stats">
             <span>{{ charCountText }}</span>
           </div>
-          <n-button
-            size="tiny"
-            quaternary
-            type="primary"
-            @click="handleCopy"
-          >
+          <n-button size="tiny" quaternary type="primary" @click="handleCopy">
             <template #icon>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="12"
+                height="12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
@@ -31,11 +36,9 @@
 
         <!-- 思考内容全文展示 -->
         <div class="thought-drawer-body">
-          <pre
-            ref="contentBoxRef"
-            class="thought-full-content"
-            @scroll="handleContentScroll"
-          >{{ currentThoughtText }}</pre>
+          <pre ref="contentBoxRef" class="thought-full-content" @scroll="handleContentScroll">{{
+            currentThoughtText
+          }}</pre>
         </div>
       </div>
     </n-drawer-content>
@@ -93,7 +96,7 @@ const currentThoughtText = computed(() => {
   const targetId = appStore.currentViewThoughtMessageId
   if (targetId) {
     // 1. 先在主会话消息列表中查找
-    const mainMsg = conversationStore.messages.find(m => m.id === targetId)
+    const mainMsg = conversationStore.messages.find((m) => m.id === targetId)
     if (mainMsg && mainMsg.thought != null) {
       return mainMsg.thought.trim()
     }
@@ -147,9 +150,9 @@ const handleCopy = async () => {
   const ok = await copyTextToClipboard(text)
   if ((window as any).$message) {
     if (ok) {
-      (window as any).$message.success(t('chat.copiedSuccess'))
+      ;(window as any).$message.success(t('chat.copiedSuccess'))
     } else {
-      (window as any).$message.error(t('chat.copiedFailed'))
+      ;(window as any).$message.error(t('chat.copiedFailed'))
     }
   }
 }

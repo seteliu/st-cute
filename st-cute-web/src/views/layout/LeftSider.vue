@@ -44,14 +44,14 @@
       <n-collapse
         v-else
         :expanded-names="expandedNames"
-        @update:expanded-names="handleExpandedChange"
         arrow-placement="left"
+        @update:expanded-names="handleExpandedChange"
       >
         <n-collapse-item
           v-for="proj in projectStore.projectList"
+          :id="'project-item-' + proj.id"
           :key="proj.id"
           :name="proj.id"
-          :id="'project-item-' + proj.id"
         >
           <template #header>
             <div
@@ -70,11 +70,19 @@
                 size="tiny"
                 quaternary
                 circle
-                @click="conversationStore.createConversation(proj.id)"
                 :title="t('sider.newChat')"
+                @click="conversationStore.createConversation(proj.id)"
               >
                 <template #icon>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                   </svg>
@@ -83,16 +91,27 @@
 
               <!-- 批量多选管理按钮 (批量管理位于第二位，仅在存在会话时展示) -->
               <n-button
-                v-if="pagedConversationsByProject[proj.id] && pagedConversationsByProject[proj.id].total > 0"
+                v-if="
+                  pagedConversationsByProject[proj.id] &&
+                  pagedConversationsByProject[proj.id].total > 0
+                "
                 size="tiny"
                 quaternary
                 circle
                 :class="{ 'active-batch-btn': isBatchMode(proj.id) }"
-                @click.stop="toggleBatchMode(proj.id)"
                 :title="isBatchMode(proj.id) ? '退出批量管理' : '批量管理会话'"
+                @click.stop="toggleBatchMode(proj.id)"
               >
                 <template #icon>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <polyline points="9 11 12 14 22 4"></polyline>
                     <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
                   </svg>
@@ -100,23 +119,27 @@
               </n-button>
 
               <n-popconfirm
-                @positive-click="projectStore.handleDeleteProject(proj.id)"
                 positive-text="确认"
                 negative-text="取消"
                 placement="bottom-end"
+                @positive-click="projectStore.handleDeleteProject(proj.id)"
               >
                 <template #trigger>
-                  <n-button
-                    size="tiny"
-                    quaternary
-                    circle
-                    class="delete-proj-btn"
-                    title="删除项目"
-                  >
+                  <n-button size="tiny" quaternary circle class="delete-proj-btn" title="删除项目">
                     <template #icon>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
                         <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <path
+                          d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                        ></path>
                       </svg>
                     </template>
                   </n-button>
@@ -129,18 +152,31 @@
           <!-- 项目下的会话列表 -->
           <div class="conversation-list">
             <div
-              v-if="!pagedConversationsByProject[proj.id] || pagedConversationsByProject[proj.id].total === 0"
+              v-if="
+                !pagedConversationsByProject[proj.id] ||
+                pagedConversationsByProject[proj.id].total === 0
+              "
               class="empty-conversations"
             >
               暂无会话
             </div>
             <template v-else>
               <div
-                v-for="sess in (isBatchMode(proj.id) ? (rawConversationsByProject[proj.id] || []) : pagedConversationsByProject[proj.id].list)"
+                v-for="sess in isBatchMode(proj.id)
+                  ? rawConversationsByProject[proj.id] || []
+                  : pagedConversationsByProject[proj.id].list"
                 :key="sess.id"
-                :class="['conversation-item', conversationStore.activeCid === sess.id ? 'active' : '', isBatchMode(proj.id) ? 'batch-item' : '']"
-                @click="isBatchMode(proj.id) ? toggleSelectCid(proj.id, sess.id) : conversationStore.selectConversation(sess.id)"
-                style="position: relative;"
+                :class="[
+                  'conversation-item',
+                  conversationStore.activeCid === sess.id ? 'active' : '',
+                  isBatchMode(proj.id) ? 'batch-item' : ''
+                ]"
+                style="position: relative"
+                @click="
+                  isBatchMode(proj.id)
+                    ? toggleSelectCid(proj.id, sess.id)
+                    : conversationStore.selectConversation(sess.id)
+                "
               >
                 <!-- 多选模式勾选框 -->
                 <div v-if="isBatchMode(proj.id)" class="batch-checkbox" @click.stop>
@@ -153,16 +189,16 @@
                 <!-- 编辑状态的输入框 -->
                 <div v-if="editingCid === sess.id" class="conversation-edit-wrapper" @click.stop>
                   <n-input
+                    ref="editInputRef"
                     v-model:value="editingTitle"
                     size="tiny"
                     type="textarea"
                     :autosize="{ minRows: 1, maxRows: 1 }"
-                    ref="editInputRef"
                     spellcheck="false"
+                    maxlength="50"
                     @blur="saveTitle(sess)"
                     @keydown.enter.prevent="saveTitle(sess)"
                     @keyup.esc="cancelEdit"
-                    maxlength="50"
                   />
                 </div>
                 <template v-else>
@@ -170,8 +206,23 @@
                   <div class="conversation-meta">
                     {{ formatTime(sess.updateTime) }}
                     <!-- 运行状态监控：running 时显示转圈动效（右缘对齐 ✕ 按钮） -->
-                    <span v-if="sess.loopRunning === 1 && !isBatchMode(proj.id)" class="running-spinner" title="会话运行中">
-                      <svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <span
+                      v-if="sess.loopRunning === 1 && !isBatchMode(proj.id)"
+                      class="running-spinner"
+                      title="会话运行中"
+                    >
+                      <svg
+                        class="spin-icon"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        width="100%"
+                        height="100%"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
                         <line x1="12" y1="2" x2="12" y2="6"></line>
                         <line x1="12" y1="18" x2="12" y2="22"></line>
                         <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
@@ -189,10 +240,19 @@
                     <!-- 重命名按钮 -->
                     <span
                       class="edit-conversation-btn"
-                      @click.stop="startEdit(sess)"
                       title="重命名会话"
+                      @click.stop="startEdit(sess)"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 11px; height: 11px;">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        style="width: 11px; height: 11px"
+                      >
                         <path d="M12 20h9"></path>
                         <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
                       </svg>
@@ -200,19 +260,13 @@
 
                     <!-- 删除按钮 -->
                     <n-popconfirm
-                      @positive-click="conversationStore.deleteConversation(sess.id)"
                       :positive-text="t('common.confirm')"
                       :negative-text="t('common.cancel')"
                       placement="bottom-end"
+                      @positive-click="conversationStore.deleteConversation(sess.id)"
                     >
                       <template #trigger>
-                        <span
-                          class="delete-conversation-btn"
-                          @click.stop
-                          title="删除会话"
-                        >
-                          ✕
-                        </span>
+                        <span class="delete-conversation-btn" title="删除会话" @click.stop>✕</span>
                       </template>
                       {{ t('sider.deleteConfirmContent') }}
                     </n-popconfirm>
@@ -224,16 +278,23 @@
               <div v-if="isBatchMode(proj.id)" class="batch-action-bar">
                 <div class="batch-action-left">
                   <n-button size="tiny" secondary @click.stop="toggleSelectAllProjectCids(proj.id)">
-                    {{ (selectedCidsMap[proj.id] || []).length === (rawConversationsByProject[proj.id] || []).length ? '取消全选' : '全选' }}
+                    {{
+                      (selectedCidsMap[proj.id] || []).length ===
+                      (rawConversationsByProject[proj.id] || []).length
+                        ? '取消全选'
+                        : '全选'
+                    }}
                   </n-button>
-                  <span class="selected-count-text">已选 {{ (selectedCidsMap[proj.id] || []).length }} 项</span>
+                  <span class="selected-count-text">
+                    已选 {{ (selectedCidsMap[proj.id] || []).length }} 项
+                  </span>
                 </div>
                 <div class="batch-action-right">
                   <n-popconfirm
-                    @positive-click="executeBatchDeleteConversations(proj.id)"
                     positive-text="确认删除"
                     negative-text="取消"
                     placement="bottom-end"
+                    @positive-click="executeBatchDeleteConversations(proj.id)"
                   >
                     <template #trigger>
                       <n-button
@@ -244,14 +305,19 @@
                         批量删除
                       </n-button>
                     </template>
-                    确定物理级联删除已选中的 {{ (selectedCidsMap[proj.id] || []).length }} 条会话吗？
+                    确定物理级联删除已选中的
+                    {{ (selectedCidsMap[proj.id] || []).length }} 条会话吗？
                   </n-popconfirm>
                 </div>
               </div>
 
               <!-- 迷你极简假分页栏 (仅在未开启多选且总条数 > 5 时保留显示) -->
               <div
-                v-if="!isBatchMode(proj.id) && pagedConversationsByProject[proj.id] && pagedConversationsByProject[proj.id].total > 5"
+                v-if="
+                  !isBatchMode(proj.id) &&
+                  pagedConversationsByProject[proj.id] &&
+                  pagedConversationsByProject[proj.id].total > 5
+                "
                 class="conversation-pagination"
               >
                 <!-- 左侧：120 / 5 ▾ 下拉选择 -->
@@ -263,7 +329,8 @@
                     size="small"
                   >
                     <span class="page-size-selector" title="点击切换每页展示条数">
-                      {{ pagedConversationsByProject[proj.id].total }} / {{ pageSize === 999999 ? '全部' : pageSize }} ▾
+                      {{ pagedConversationsByProject[proj.id].total }} /
+                      {{ pageSize === 999999 ? '全部' : pageSize }} ▾
                     </span>
                   </n-popselect>
                 </div>
@@ -276,19 +343,23 @@
                   <button
                     class="page-arrow-btn"
                     :disabled="pagedConversationsByProject[proj.id].currentPage <= 1"
-                    @click="prevPage(proj.id)"
                     title="上一页"
+                    @click="prevPage(proj.id)"
                   >
                     ‹
                   </button>
                   <span class="page-num-text">
-                    {{ pagedConversationsByProject[proj.id].currentPage }} / {{ pagedConversationsByProject[proj.id].pageCount }}
+                    {{ pagedConversationsByProject[proj.id].currentPage }} /
+                    {{ pagedConversationsByProject[proj.id].pageCount }}
                   </span>
                   <button
                     class="page-arrow-btn"
-                    :disabled="pagedConversationsByProject[proj.id].currentPage >= pagedConversationsByProject[proj.id].pageCount"
-                    @click="nextPage(proj.id)"
+                    :disabled="
+                      pagedConversationsByProject[proj.id].currentPage >=
+                      pagedConversationsByProject[proj.id].pageCount
+                    "
                     title="下一页"
+                    @click="nextPage(proj.id)"
                   >
                     ›
                   </button>
@@ -301,10 +372,28 @@
     </div>
 
     <!-- 底部固定展示：系统设置 -->
-    <div class="sider-footer" style="padding: 12px; border-top: 1px solid var(--border-color); margin-top: auto;">
+    <div
+      class="sider-footer"
+      style="padding: 12px; border-top: 1px solid var(--border-color); margin-top: auto"
+    >
       <n-button block quaternary @click="showSettingsModal = true">
         <template #icon>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="3"></circle>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+            ></path>
+          </svg>
         </template>
         {{ t('settings.title') }}
       </n-button>
@@ -317,11 +406,7 @@
     <settings-modal v-model:show="showSettingsModal" />
 
     <!-- 自定义拖拽边框条 -->
-    <div
-      v-if="!isMobile"
-      ref="resizeHandleRef"
-      class="custom-resize-handle left-handle"
-    >
+    <div v-if="!isMobile" ref="resizeHandleRef" class="custom-resize-handle left-handle">
       <div class="resize-line"></div>
     </div>
   </n-layout-sider>
@@ -431,9 +516,7 @@ watch(
   () => projectStore.projectList,
   (newList) => {
     if (newList && newList.length > 0) {
-      const initialExpanded = newList
-        .filter((p) => p.expanded !== false)
-        .map((p) => p.id)
+      const initialExpanded = newList.filter((p) => p.expanded !== false).map((p) => p.id)
       expandedNames.value = initialExpanded
       scrollToActiveProject()
     }
@@ -539,7 +622,7 @@ const toggleSelectCid = (projId: number, cid: number) => {
   if (list.includes(cid)) {
     selectedCidsMap.value = {
       ...selectedCidsMap.value,
-      [projId]: list.filter(id => id !== cid)
+      [projId]: list.filter((id) => id !== cid)
     }
   } else {
     selectedCidsMap.value = {
@@ -551,7 +634,7 @@ const toggleSelectCid = (projId: number, cid: number) => {
 
 const toggleSelectAllProjectCids = (projId: number) => {
   const allList = rawConversationsByProject.value[projId] || []
-  const allIds = allList.map(s => s.id)
+  const allIds = allList.map((s) => s.id)
   const currentSelected = selectedCidsMap.value[projId] || []
 
   if (currentSelected.length === allIds.length && allIds.length > 0) {
@@ -609,12 +692,15 @@ const rawConversationsByProject = computed(() => {
 
 // 根据当前页码及前端内存 pageSize 对各个项目的会话进行假分页切片
 const pagedConversationsByProject = computed(() => {
-  const result: Record<number, {
-    list: any[]
-    total: number
-    pageCount: number
-    currentPage: number
-  }> = {}
+  const result: Record<
+    number,
+    {
+      list: any[]
+      total: number
+      pageCount: number
+      currentPage: number
+    }
+  > = {}
 
   const ps = pageSize.value || 5
 
@@ -859,6 +945,7 @@ onUnmounted(() => {
 .project-title {
   font-size: 0.95rem;
   font-weight: 600;
+
   /* 常态刻意用正文色而非高亮色：侧边栏条目不抢焦点，悬浮时才提亮（见下方 hover 规则） */
   color: var(--text-color);
   width: 100%;
@@ -912,7 +999,9 @@ onUnmounted(() => {
   color: var(--text-color-muted);
   font-size: 0.8rem;
   opacity: 0.6;
-  transition: opacity 0.2s, color 0.2s;
+  transition:
+    opacity 0.2s,
+    color 0.2s;
 }
 
 .delete-conversation-btn:hover {
@@ -930,19 +1019,23 @@ onUnmounted(() => {
   justify-content: center;
   align-items: center;
 }
+
 .left-handle {
   right: -4px;
   cursor: default;
 }
+
 .resize-line {
   width: 1px;
   height: 100%;
   background-color: transparent;
   transition: all 0.2s ease;
 }
+
 .custom-resize-handle.active-resizing {
   cursor: col-resize !important;
 }
+
 .custom-resize-handle.active-resizing .resize-line {
   width: 4px;
   background-color: var(--primary-color) !important;
@@ -965,7 +1058,9 @@ onUnmounted(() => {
   color: var(--text-color-muted);
   font-size: 0.8rem;
   opacity: 0.6;
-  transition: opacity 0.2s, color 0.2s;
+  transition:
+    opacity 0.2s,
+    color 0.2s;
 }
 
 .conversation-item:hover .edit-conversation-btn {
@@ -1007,8 +1102,13 @@ onUnmounted(() => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .conversation-pagination {

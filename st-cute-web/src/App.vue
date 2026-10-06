@@ -1,5 +1,10 @@
 <template>
-  <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides" :locale="naiveLocale" :date-locale="naiveDateLocale">
+  <n-config-provider
+    :theme="naiveTheme"
+    :theme-overrides="themeOverrides"
+    :locale="naiveLocale"
+    :date-locale="naiveDateLocale"
+  >
     <n-message-provider>
       <message-provider-content />
       <n-dialog-provider>
@@ -12,9 +17,19 @@
 
 <script setup lang="ts">
 import { defineComponent, computed } from 'vue'
-import { darkTheme, lightTheme, GlobalThemeOverrides, useMessage, useDialog, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
+import {
+  darkTheme,
+  lightTheme,
+  GlobalThemeOverrides,
+  useMessage,
+  useDialog,
+  zhCN,
+  dateZhCN,
+  enUS,
+  dateEnUS
+} from 'naive-ui'
 import { currentLang } from '@/i18n'
-import { currentTheme, naiveThemeMode, naiveThemeOverrides } from '@/styles/theme'
+import { naiveThemeMode, naiveThemeOverrides } from '@/styles/theme'
 
 const naiveLocale = computed(() => (currentLang.value === 'en-US' ? enUS : zhCN))
 const naiveDateLocale = computed(() => (currentLang.value === 'en-US' ? dateEnUS : dateZhCN))
@@ -25,14 +40,14 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => naiveThemeOverrides.
 
 const MessageProviderContent = defineComponent({
   setup() {
-    (window as any).$message = useMessage()
+    ;(window as any).$message = useMessage()
     return () => null
   }
 })
 
 const DialogProviderContent = defineComponent({
   setup() {
-    (window as any).$dialog = useDialog()
+    ;(window as any).$dialog = useDialog()
     return () => null
   }
 })

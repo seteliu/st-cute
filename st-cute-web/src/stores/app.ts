@@ -1,7 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { Message } from '@/types'
-import { wsService } from '@/services/websocket'
 import { getConfigApi, saveConfigApi, savePasswordApi, clearPasswordApi } from '@/api/config'
 import { updateConversationConfigApi, cancelConversationApi } from '@/api/conversation'
 import { useConversationStore } from './conversation'
@@ -17,6 +16,9 @@ import { ThemeName } from '@/styles/themeVars'
  */
 const PASSWORD_MIN_LENGTH = 8
 const PASSWORD_MAX_LENGTH = 32
+// 字符集与后端 PasswordPolicy 保持同一口径（显式保留全部转义以肉眼对齐后端正则，
+// 故豁免 no-useless-escape）
+// eslint-disable-next-line no-useless-escape
 const PASSWORD_ALLOWED_RE = /^[A-Za-z0-9 !"#\$%&'\(\)\*\+,\-.\/:;<=>\?@\[\\\]\^_`\{\|}~]+$/
 
 /**
@@ -48,7 +50,7 @@ export const useAppStore = defineStore('app', () => {
   // 左右边栏完全折叠控制
   const leftSiderCollapsed = ref(false)
   const rightSiderCollapsed = ref(false)
-  
+
   // 左右侧边栏宽度控制，默认分别为 280 和 291
   const leftSiderWidth = ref(280)
   const rightSiderWidth = ref(291)
@@ -102,7 +104,7 @@ export const useAppStore = defineStore('app', () => {
   // 应用权限模式（统一收口点）：后端返回值若匹配不到任何选项（如 DB 存量旧值 READ_ONLY / SMART_APPROVAL），
   // 回退选中第一档（严格审批），保证下拉框选中值恒与选项列表精确匹配、不出现原始串显示
   const applyPermissionMode = (val: string) => {
-    permissionMode.value = permissionModeOptions.value.some(option => option.value === val)
+    permissionMode.value = permissionModeOptions.value.some((option) => option.value === val)
       ? val
       : permissionModeOptions.value[0].value
   }
@@ -112,17 +114,19 @@ export const useAppStore = defineStore('app', () => {
     permissionMode.value = val
     const conversationStore = useConversationStore()
     if (conversationStore.activeCid !== null) {
-      updateConversationConfigApi(conversationStore.activeCid, { permissionMode: val }).then(() => {
-        const activeId = conversationStore.activeCid
-        // 联动更新直接子会话的 permissionMode
-        conversationStore.conversationList.forEach(s => {
-          if (s.parentCid === activeId) {
-            s.permissionMode = val
-          }
+      updateConversationConfigApi(conversationStore.activeCid, { permissionMode: val })
+        .then(() => {
+          const activeId = conversationStore.activeCid
+          // 联动更新直接子会话的 permissionMode
+          conversationStore.conversationList.forEach((s) => {
+            if (s.parentCid === activeId) {
+              s.permissionMode = val
+            }
+          })
         })
-      }).catch(err => {
-        console.error('更新权限模式失败:', err)
-      })
+        .catch((err) => {
+          console.error('更新权限模式失败:', err)
+        })
     }
   }
 
@@ -171,7 +175,7 @@ export const useAppStore = defineStore('app', () => {
   const cancelLoop = () => {
     const conversationStore = useConversationStore()
     if (conversationStore.activeCid !== null) {
-      cancelConversationApi(conversationStore.activeCid).catch(err => {
+      cancelConversationApi(conversationStore.activeCid).catch((err) => {
         console.error('取消会话失败:', err)
       })
     }
@@ -199,11 +203,13 @@ export const useAppStore = defineStore('app', () => {
       newlineKey.value = data.newlineKey || 'enter'
       httpLog.value = data.httpLog || false
       httpLogDays.value = data.httpLogDays !== undefined ? data.httpLogDays : 7
-      httpLogIncludeResponse.value = data.httpLogIncludeResponse !== undefined ? data.httpLogIncludeResponse : true
+      httpLogIncludeResponse.value =
+        data.httpLogIncludeResponse !== undefined ? data.httpLogIncludeResponse : true
       // 仅取"是否已设置"布尔标记：密码值全链路不回传，界面据此渲染 设置 / 修改+清除 按钮
       passwordSet.value = data.passwordSet || false
       maxViewHistoryLimit.value = data.maxViewHistoryLimit || 2000
-      pathSandboxEnabled.value = data.pathSandboxEnabled !== undefined ? data.pathSandboxEnabled : true
+      pathSandboxEnabled.value =
+        data.pathSandboxEnabled !== undefined ? data.pathSandboxEnabled : true
       minimalSkillMode.value = data.minimalSkillMode || false
     } catch (e) {
       console.error(t('settings.loadFailed'), e)
@@ -296,13 +302,13 @@ export const useAppStore = defineStore('app', () => {
     isInitialized,
     userInput,
     loopRunning,
-    
+
     leftSiderCollapsed,
     rightSiderCollapsed,
     leftSiderWidth,
     rightSiderWidth,
     showMessageAvatar,
-    
+
     language,
     theme,
     newlineKey,
@@ -313,13 +319,13 @@ export const useAppStore = defineStore('app', () => {
     maxViewHistoryLimit,
     pathSandboxEnabled,
     minimalSkillMode,
-    
+
     permissionMode,
-    
+
     showLogDrawer,
     currentViewToolMessageId,
     currentViewToolFallback,
-    
+
     permissionModeOptions,
     applyPermissionMode,
     handlePermissionModeChange,
@@ -335,7 +341,6 @@ export const useAppStore = defineStore('app', () => {
     clearPassword,
     currentIteration
   }
-
 })
 
 // 启用 Pinia store 热更新：dev 热替换时复用原 store 实例，避免新旧实例并存导致组件状态分裂、刷新链断裂

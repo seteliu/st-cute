@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { Skill, Hook, McpServer, AgentRule, AgentContextInfo } from '@/types'
+import { AgentContextInfo } from '@/types'
 
 /**
  * 一键获取当前会话关联的完整环境上下文信息 (Skills, Hooks, MCP, Tokens)

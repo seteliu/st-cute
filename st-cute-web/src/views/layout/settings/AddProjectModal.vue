@@ -3,16 +3,22 @@
   <n-modal
     :show="show"
     preset="card"
-    style="width: 480px; max-width: 90vw; border: 1px solid var(--border-color); box-shadow: var(--shadow-overlay);"
+    style="
+      width: 480px;
+      max-width: 90vw;
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-overlay);
+    "
     :title="t('sider.addProject')"
     size="medium"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
-    <div style="margin-top: 5px;">
+    <div style="margin-top: 5px">
       <n-form label-placement="left" label-width="110">
         <n-form-item>
           <template #label>
-            <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.projectPath') }}
+            <span style="color: var(--status-error); margin-right: 4px">*</span>
+            {{ t('sider.projectPath') }}
           </template>
           <n-input
             v-model:value="form.path"
@@ -20,14 +26,15 @@
             :autosize="{ minRows: 1, maxRows: 1 }"
             :placeholder="t('sider.projectPathPlaceholder')"
             spellcheck="false"
+            maxlength="255"
             @input="onPathInput"
             @keydown.enter.prevent="submit"
-            maxlength="255"
           />
         </n-form-item>
         <n-form-item>
           <template #label>
-            <span style="color: var(--status-error); margin-right: 4px;">*</span>{{ t('sider.projectName') }}
+            <span style="color: var(--status-error); margin-right: 4px">*</span>
+            {{ t('sider.projectName') }}
           </template>
           <n-input
             v-model:value="form.name"
@@ -35,14 +42,14 @@
             :autosize="{ minRows: 1, maxRows: 1 }"
             :placeholder="t('sider.projectNamePlaceholder')"
             spellcheck="false"
-            @keydown.enter.prevent="submit"
             maxlength="50"
+            @keydown.enter.prevent="submit"
           />
         </n-form-item>
       </n-form>
     </div>
     <template #footer>
-      <div style="display: flex; justify-content: flex-end; gap: 12px;">
+      <div style="display: flex; justify-content: flex-end; gap: 12px">
         <n-button type="primary" @click="submit">{{ t('common.confirm') }}</n-button>
         <n-button @click="emit('update:show', false)">{{ t('common.cancel') }}</n-button>
       </div>
@@ -73,12 +80,15 @@ const form = ref({ name: '', path: '' })
 const lastExtractedName = ref('')
 
 // 每次打开重置表单
-watch(() => props.show, (v) => {
-  if (v) {
-    form.value = { name: '', path: '' }
-    lastExtractedName.value = ''
+watch(
+  () => props.show,
+  (v) => {
+    if (v) {
+      form.value = { name: '', path: '' }
+      lastExtractedName.value = ''
+    }
   }
-})
+)
 
 const onPathInput = (val: string) => {
   if (!val) return
