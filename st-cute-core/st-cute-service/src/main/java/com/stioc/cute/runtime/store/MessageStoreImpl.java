@@ -15,6 +15,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 
@@ -31,6 +32,19 @@ public class MessageStoreImpl implements MessageStore {
 
     @Resource
     private MessageMapper messageMapper;
+
+    /**
+     * 统一微秒精度取时。
+     * <p>
+     * 落库 TypeHandler 将 LocalDateTime 格式化为固定 6 位微秒（亚微秒尾数被截断丢弃），
+     * 若取时保留纳秒尾数，实体内存值与落库读回值将恒差 0~999 纳秒；
+     * 一旦两次取时落入同一微秒窗口，「库读回时间早于内存时间」的比较
+     * （如 updateTime 单调不减断言）必然误判。取时即截断到微秒，保证内存值与落库读回值恒等。
+     * </p>
+     */
+    private static LocalDateTime now() {
+        return LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+    }
 
     // ── 1. 单实体查询 ──
 
@@ -90,10 +104,10 @@ public class MessageStoreImpl implements MessageStore {
             return;
         }
         if (entity.getCreateTime() == null) {
-            entity.setCreateTime(LocalDateTime.now());
+            entity.setCreateTime(now());
         }
         if (entity.getUpdateTime() == null) {
-            entity.setUpdateTime(LocalDateTime.now());
+            entity.setUpdateTime(now());
         }
         MessageEntity po = toEntity(entity);
         messageMapper.insert(po);
@@ -115,7 +129,7 @@ public class MessageStoreImpl implements MessageStore {
         if (entity == null || entity.getId() == null) {
             return 0;
         }
-        entity.setUpdateTime(LocalDateTime.now());
+        entity.setUpdateTime(now());
         return messageMapper.update(toEntity(entity));
     }
 
@@ -180,7 +194,7 @@ public class MessageStoreImpl implements MessageStore {
         if (patch.has(Message::getUpdateTime)) {
             updater.setUpdateTime(patch.get(Message::getUpdateTime));
         } else {
-            updater.setUpdateTime(LocalDateTime.now());
+            updater.setUpdateTime(now());
         }
         return messageMapper.update(updater);
     }
@@ -191,7 +205,7 @@ public class MessageStoreImpl implements MessageStore {
             return 0;
         }
         if (entity.getUpdateTime() == null) {
-            entity.setUpdateTime(LocalDateTime.now());
+            entity.setUpdateTime(now());
         }
         return messageMapper.updateByQuery(toEntity(entity), buildQueryWrapper(query));
     }

@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +50,19 @@ public class ConversationStoreImpl implements ConversationStore {
     @Resource
     @Lazy
     private AgentEngine agentEngine;
+
+    /**
+     * 统一微秒精度取时。
+     * <p>
+     * 落库 TypeHandler 将 LocalDateTime 格式化为固定 6 位微秒（亚微秒尾数被截断丢弃），
+     * 若取时保留纳秒尾数，实体内存值与落库读回值将恒差 0~999 纳秒；
+     * 一旦两次取时落入同一微秒窗口，「库读回时间早于内存时间」的比较
+     * （如 updateTime 单调不减断言）必然误判。取时即截断到微秒，保证内存值与落库读回值恒等。
+     * </p>
+     */
+    private static LocalDateTime now() {
+        return LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+    }
 
     // ── 1. 单实体查询 ──
 
@@ -108,10 +122,10 @@ public class ConversationStoreImpl implements ConversationStore {
             return null;
         }
         if (entity.getCreateTime() == null) {
-            entity.setCreateTime(LocalDateTime.now());
+            entity.setCreateTime(now());
         }
         if (entity.getUpdateTime() == null) {
-            entity.setUpdateTime(LocalDateTime.now());
+            entity.setUpdateTime(now());
         }
         ConversationEntity po = toEntity(entity);
         conversationMapper.insert(po);
@@ -135,7 +149,7 @@ public class ConversationStoreImpl implements ConversationStore {
         if (entity == null || entity.getId() == null) {
             return 0;
         }
-        entity.setUpdateTime(LocalDateTime.now());
+        entity.setUpdateTime(now());
         ConversationEntity po = toEntity(entity);
         return conversationMapper.update(po);
     }
@@ -162,7 +176,7 @@ public class ConversationStoreImpl implements ConversationStore {
         if (patch.has(Conversation::getUpdateTime)) {
             updater.setUpdateTime(patch.get(Conversation::getUpdateTime));
         } else {
-            updater.setUpdateTime(LocalDateTime.now());
+            updater.setUpdateTime(now());
         }
         if (patch.has(Conversation::getWorkspaceId)) {
             updater.setWorkspaceId(patch.get(Conversation::getWorkspaceId));
@@ -212,7 +226,7 @@ public class ConversationStoreImpl implements ConversationStore {
             return 0;
         }
         if (entity.getUpdateTime() == null) {
-            entity.setUpdateTime(LocalDateTime.now());
+            entity.setUpdateTime(now());
         }
         return conversationMapper.updateByQuery(toEntity(entity), buildQueryWrapper(query));
     }
@@ -259,7 +273,7 @@ public class ConversationStoreImpl implements ConversationStore {
             ConversationEntity updater = UpdateEntity.of(ConversationEntity.class);
             updater.setId(cid);
             accessor.setter().accept(updater, newVal);
-            updater.setUpdateTime(LocalDateTime.now());
+            updater.setUpdateTime(now());
             conversationMapper.update(updater);
         } finally {
             lock.unlock();
