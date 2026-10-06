@@ -1,26 +1,18 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { wsService } from '@/services/websocket'
 import { getContextInfoApi } from '@/api/agent-context'
 import { trimMessagesArray } from '@/utils/trimMessages'
 import { normalizeMessageList } from '@/utils/message'
 import { useConversationStore } from './conversation'
 import { useAppStore } from './app'
 import { cancelConversationApi, getConversationMessages } from '@/api/conversation'
-import {
-  SubAgent,
-  Skill,
-  Hook,
-  McpServer,
-  AgentRule
-} from '@/types'
+import { SubAgent, Skill, Hook, McpServer, AgentRule } from '@/types'
 import { t } from '@/i18n'
 
 export const useAgentStore = defineStore('agent', () => {
   const subAgents = ref<SubAgent[]>([])
   const activeSubAgentCid = ref<number | null>(null)
   const showSubAgentDrawer = ref(false)
-
 
   const skillsList = ref<Skill[]>([])
 
@@ -32,7 +24,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   const activeSubAgent = computed(() => {
     if (!activeSubAgentCid.value) return null
-    return subAgents.value.find(s => Number(s.cid) === activeSubAgentCid.value) || null
+    return subAgents.value.find((s) => Number(s.cid) === activeSubAgentCid.value) || null
   })
 
   const openSubAgentDrawer = async (cid: number) => {
@@ -70,7 +62,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   const getTargetAgent = (cid: number): SubAgent => {
     const cidStr = String(cid)
-    let sub = subAgents.value.find(s => s.cid === cidStr)
+    let sub = subAgents.value.find((s) => s.cid === cidStr)
     if (!sub) {
       sub = {
         role: 'SubAgent',
@@ -93,14 +85,10 @@ export const useAgentStore = defineStore('agent', () => {
 
   const handleKillMember = () => {
     if (!activeSubAgent.value || !activeSubAgent.value.cid) return
-    cancelConversationApi(Number(activeSubAgent.value.cid)).catch(err => {
+    // 仅发起取消：子会话消息终态（CANCELED）与主会话 BRANCH 工作报告均由后端事件链承载，
+    // 前端不做本地乐观改写与合成消息（消息源唯一收口后端）
+    cancelConversationApi(Number(activeSubAgent.value.cid)).catch((err) => {
       console.error('强杀成员会话失败:', err)
-    })
-    activeSubAgent.value.status = 'failed'
-    activeSubAgent.value.messages.push({
-      id: -Date.now(),
-      role: 'system',
-      content: '🚨 发送 CANCEL_LOOP 信号强杀会话！'
     })
   }
 
@@ -108,7 +96,7 @@ export const useAgentStore = defineStore('agent', () => {
     const conversationStore = useConversationStore()
     try {
       await conversationStore.deleteConversation(cid)
-      subAgents.value = subAgents.value.filter(s => {
+      subAgents.value = subAgents.value.filter((s) => {
         return Number(s.cid) !== cid
       })
       if (activeSubAgentCid.value === cid) {
@@ -123,11 +111,11 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   const syncSubAgents = (conversations: any[]) => {
-    conversations.forEach(ce => {
+    conversations.forEach((ce) => {
       if (ce.parentCid) {
         const subCidStr = String(ce.id)
         const parentCidStr = String(ce.parentCid)
-        let sub = subAgents.value.find(s => String(s.cid) === subCidStr)
+        let sub = subAgents.value.find((s) => String(s.cid) === subCidStr)
         let role = ce.title || 'SubAgent'
         if (role.startsWith('SubAgent: ')) {
           role = role.substring('SubAgent: '.length)
@@ -180,14 +168,17 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  // 视图裁剪监听：只追踪各子 Agent 的消息条数快照（而非深度遍历整棵响应式树）。
+  // 流式期间消息 content 原地追加不再触发 watcher，仅条数变化（append/删除/裁剪）才执行裁剪，
+  // 裁剪语义与原 deep watch 完全一致——超限时刻即裁剪时刻。
   watch(
-    () => subAgents.value,
-    (agents) => {
+    () => subAgents.value.map((s) => s.messages.length),
+    () => {
       const appStore = useAppStore()
       const limit = appStore.maxViewHistoryLimit || 2000
       const buffer = 100
 
-      agents.forEach((sub) => {
+      subAgents.value.forEach((sub) => {
         if (sub.messages && sub.messages.length > limit + buffer) {
           const res = trimMessagesArray(sub.messages, limit)
           if (res.truncated) {
@@ -196,8 +187,7 @@ export const useAgentStore = defineStore('agent', () => {
           }
         }
       })
-    },
-    { deep: true }
+    }
   )
 
   return {

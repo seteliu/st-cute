@@ -1,22 +1,14 @@
 <template>
-  <div
-    ref="scrollerRef"
-    class="virtual-scroller"
-    @scroll="handleScroll"
-  >
+  <div ref="scrollerRef" class="virtual-scroller" @scroll="handleScroll">
     <div class="virtual-list-wrapper">
       <div
         v-for="(item, index) in items"
         :key="getItemKey(item, index)"
-        :ref="el => setItemRef(el, index)"
+        :ref="(el) => setItemRef(el, index)"
         class="virtual-item-container"
         :style="getItemStyle(index)"
       >
-        <slot
-          v-if="isItemRendered(index)"
-          :item="item"
-          :index="index"
-        ></slot>
+        <slot v-if="isItemRendered(index)" :item="item" :index="index"></slot>
       </div>
     </div>
   </div>
@@ -25,10 +17,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useConversationStore } from '@/stores/conversation'
+import type { VirtualListItem } from '@/utils/foldEngine'
 
+// items 类型收敛：items 元素类型 = RenderItem（foldEngine 单点维护，新条目形态在
+// VirtualListItem 别名处扩展），替代历史 any[]，让插槽与 key 计算获得类型约束
 const props = withDefaults(
   defineProps<{
-    items: any[]
+    items: VirtualListItem[]
     estimatedItemSize?: number
     buffer?: number
   }>(),
@@ -94,9 +89,22 @@ const isNearBottom = () => {
 // 锁，用于防止高度更新时的重入冲突
 let isUpdatingHeights = false
 
-// 根据 index 获取该 item 的 Key
-const getItemKey = (item: any, index: number) => {
-  return item.id !== undefined ? item.id : index
+// 根据 RenderItem 变体提取稳定 key：后端消息 id 唯一（SQLite 自增），折叠块 id 取区间
+// 最小 id，孤儿工具组为单例 'orphan_tools'，truncated_tip 全列表至多一个用静态字符串。
+// default 兜底 index：防御未来新增变体漏配 key 时仍可渲染（与类型单点扩展设计一致）
+const getItemKey = (item: VirtualListItem, index: number): number | string => {
+  switch (item.type) {
+    case 'message':
+      return item.data.id
+    case 'folded':
+      return item.folded.id
+    case 'tool_group':
+      return item.parentMessageId
+    case 'truncated_tip':
+      return 'truncated-tip'
+    default:
+      return index
+  }
 }
 
 // 缓存 DOM 引用
@@ -372,10 +380,13 @@ defineExpose({
   overflow-y: auto;
   position: relative;
   box-sizing: border-box;
+
   /* 隐藏默认的原生闪烁，提升虚拟列表平滑滑动手感 */
-  scroll-behavior: auto; 
+  scroll-behavior: auto;
+
   /* 禁用浏览器原生滚动锚定，由虚拟列表的高度补偿机制接管，解决滚动抖动与白屏 */
   overflow-anchor: none;
+
   /* 左右边距由子项容器承担（保证与底部输入框区 24px 对齐），此处仅保留上下边距，避免滚动条宽度叠加导致左右视觉间隙不一致 */
   padding: 20px 0;
 }
@@ -389,6 +400,7 @@ defineExpose({
 .virtual-item-container {
   width: 100%;
   box-sizing: border-box;
+
   /* 左右各 24px，与输入框区（.chat-footer padding 24px）严格对齐；用 padding-bottom 代替 gap，确保消息间距能够被 ResizeObserver 物理测量并纳入高度计算 */
   padding: 0 24px 20px;
 }

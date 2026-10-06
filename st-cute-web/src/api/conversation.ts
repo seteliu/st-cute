@@ -1,5 +1,12 @@
 import request from '@/utils/request'
-import { Message, Conversation, LimitMessageDto, ApproveToolPayload, ActiveProcessInfo, ActiveLlmCallInfo } from '@/types'
+import {
+  Message,
+  Conversation,
+  LimitMessageDto,
+  ApproveToolPayload,
+  ActiveProcessInfo,
+  ActiveLlmCallInfo
+} from '@/types'
 
 // silent=true 标识后台静默请求（断线重连强刷场景）：失败时拦截器不弹全局错误提示，由调用方兜底
 export const getConversations = async (silent = false): Promise<Conversation[]> => {
@@ -26,27 +33,41 @@ export const batchDeleteConversationsApi = async (ids: number[]): Promise<void> 
   return request.post('/api/conversation/batch-delete', ids)
 }
 
-export const createConversationApi = async (conversation: Partial<Conversation>): Promise<Conversation> => {
+export const createConversationApi = async (
+  conversation: Partial<Conversation>
+): Promise<Conversation> => {
   return request.post('/api/conversation/create', conversation)
 }
 
-export const updateConversationProviderApi = async (cid: number, providerGroup: string, providerModelName: string): Promise<void> => {
-  return request.post(`/api/conversation/update-provider?id=${cid}&providerGroup=${encodeURIComponent(providerGroup)}&providerModelName=${encodeURIComponent(providerModelName)}`)
+export const updateConversationProviderApi = async (
+  cid: number,
+  providerGroup: string,
+  providerModelName: string
+): Promise<void> => {
+  return request.post(
+    `/api/conversation/update-provider?id=${cid}&providerGroup=${encodeURIComponent(providerGroup)}&providerModelName=${encodeURIComponent(providerModelName)}`
+  )
 }
 
-export const clearConversationMessagesApi = async (cid: number): Promise<void> => {
-  return request.post(`/api/message/clear?cid=${cid}`)
-}
-
-export const resetConversationMessagesApi = async (cid: number, messageId: number): Promise<void> => {
+export const resetConversationMessagesApi = async (
+  cid: number,
+  messageId: number
+): Promise<void> => {
   return request.post(`/api/message/reset?cid=${cid}&messageId=${messageId}`)
 }
 
-export const sendMessageApi = async (cid: number, data: { text: string; attachments?: string; agentId?: string }): Promise<void> => {
+export const sendMessageApi = async (
+  cid: number,
+  data: { text: string; attachments?: string; agentId?: string }
+): Promise<void> => {
   return request.post(`/api/message/send?cid=${cid}`, data)
 }
 
-export const retryMessageApi = async (cid: number, messageId: number, data: { agentId?: string }): Promise<void> => {
+export const retryMessageApi = async (
+  cid: number,
+  messageId: number,
+  data: { agentId?: string }
+): Promise<void> => {
   return request.post(`/api/message/retry?cid=${cid}&messageId=${messageId}`, data)
 }
 
@@ -58,11 +79,17 @@ export const cancelConversationApi = async (cid: number): Promise<void> => {
   return request.post(`/api/conversation/cancel?id=${cid}`)
 }
 
-export const updateConversationConfigApi = async (cid: number, data: { permissionMode?: string }): Promise<void> => {
+export const updateConversationConfigApi = async (
+  cid: number,
+  data: { permissionMode?: string }
+): Promise<void> => {
   return request.post(`/api/conversation/config?id=${cid}`, data)
 }
 
-export const approveConversationPermissionApi = async (cid: number, data: ApproveToolPayload): Promise<void> => {
+export const approveConversationPermissionApi = async (
+  cid: number,
+  data: ApproveToolPayload
+): Promise<void> => {
   return request.post(`/api/message/approve?cid=${cid}`, data)
 }
 
@@ -74,7 +101,10 @@ export const getConversationProcessesApi = async (cid: number): Promise<ActivePr
   return request.get(`/api/conversation/processes?id=${cid}`)
 }
 
-export const killConversationProcessApi = async (cid: number, toolCallId?: string): Promise<boolean> => {
+export const killConversationProcessApi = async (
+  cid: number,
+  toolCallId?: string
+): Promise<boolean> => {
   let url = `/api/conversation/processes/kill?id=${cid}`
   if (toolCallId) {
     url += `&toolCallId=${encodeURIComponent(toolCallId)}`

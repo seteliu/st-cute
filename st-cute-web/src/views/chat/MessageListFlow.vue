@@ -18,10 +18,7 @@
         :show-empty-dots="index === lastEmptyAssistantIndex"
         :running="running"
       />
-      <div
-        v-else-if="item.type === 'tool_group'"
-        class="tool-group-wrapper"
-      >
+      <div v-else-if="item.type === 'tool_group'" class="tool-group-wrapper">
         <tool-group-card
           :parent-message-id="item.parentMessageId"
           :tools="item.tools"
@@ -30,19 +27,10 @@
           :running="running"
         />
       </div>
-      <div
-        v-else-if="item.type === 'folded'"
-        class="folded-wrapper"
-      >
-        <folded-message-card
-          :folded="item.folded"
-          :cid="cid"
-        />
+      <div v-else-if="item.type === 'folded'" class="folded-wrapper">
+        <folded-message-card :folded="item.folded" :cid="cid" />
       </div>
-      <div
-        v-else-if="item.type === 'truncated_tip'"
-        class="truncated-tip-wrapper"
-      >
+      <div v-else-if="item.type === 'truncated_tip'" class="truncated-tip-wrapper">
         <div class="glass-alert">
           <span class="icon">💡</span>
           <span class="text">更早的历史消息已被智能隐藏</span>
@@ -64,11 +52,8 @@ import { useAppStore } from '@/stores/app'
 // 应用全局状态：读取头像展示开关，动态控制工具卡片/折叠卡片的缩进变量
 const appStore = useAppStore()
 
-export type RenderItem =
-  | { type: 'message'; data: Message; tools?: Message[] }
-  | { type: 'tool_group'; parentMessageId: number | string; tools: Message[] }
-  | { type: 'folded'; folded: Message }
-  | { type: 'truncated_tip' }
+// 渲染序列条目：统一复用 foldEngine 导出的 RenderItem（主会话/子会话/本组件三处同源）
+import type { RenderItem } from '@/utils/foldEngine'
 
 const props = defineProps<{
   messages: RenderItem[]
@@ -119,7 +104,7 @@ const lastPendingBatchIndex = computed(() => {
   // 批内工具细则是否全部成功：任一条未达 SUCCESS（执行中/待审批/失败/取消）即不算收口。
   // 状态归一为大小写不敏感，避免后端字段大小写差异导致误判
   const allToolsSucceeded = batchTools.every(
-    tool => (tool.status || '').toUpperCase() === 'SUCCESS'
+    (tool) => (tool.status || '').toUpperCase() === 'SUCCESS'
   )
   return allToolsSucceeded ? lastIndex : -1
 })
@@ -188,6 +173,7 @@ defineExpose({
 .folded-wrapper {
   /* 缩进跟随头像开关收缩：展示头像时为 36px avatar + 16px gap，隐藏时收缩为 0（变量由根节点动态注入） */
   padding-left: var(--avatar-indent, 52px);
+
   /* 与助手消息 .message-item-wrapper 同构的 flex 纵列：卡片宽度隐式收缩到内容宽（不再依赖卡片自身 fit-content），超宽时由卡片 max-width 封顶 */
   display: flex;
   flex-direction: column;
@@ -216,8 +202,14 @@ defineExpose({
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
-

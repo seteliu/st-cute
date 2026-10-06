@@ -8,7 +8,6 @@ import {
   batchDeleteConversationsApi,
   createConversationApi,
   updateConversationProviderApi,
-  clearConversationMessagesApi,
   resetConversationMessagesApi,
   sendMessageApi,
   retryMessageApi,
@@ -70,7 +69,7 @@ export const useConversationStore = defineStore('conversation', () => {
   const disposeStagedFiles = (cid: number) => {
     const list = stagedFilesMap.value[cid]
     if (list) {
-      list.forEach(item => {
+      list.forEach((item) => {
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
       })
       delete stagedFilesMap.value[cid]
@@ -90,7 +89,7 @@ export const useConversationStore = defineStore('conversation', () => {
     cachedTokens.value = 0
     // 清空环境的同时清掉全部按会话草稿与暂存附件，防止脏数据滞留
     draftMap.value = {}
-    Object.keys(stagedFilesMap.value).forEach(key => {
+    Object.keys(stagedFilesMap.value).forEach((key) => {
       disposeStagedFiles(Number(key))
     })
     appStore.userInput = ''
@@ -101,7 +100,7 @@ export const useConversationStore = defineStore('conversation', () => {
   // 重试期间保持静默（不弹全局错误），全部耗尽才降级为一次性提示
   const SILENT_RETRY_TIMES = 2
   const SILENT_RETRY_INTERVAL = 1500
-  const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
   // 加载会话列表
   // silent: 静默模式（断线重连强刷场景）——HTTP 层不弹全局错误提示，失败仅记 console
@@ -110,11 +109,13 @@ export const useConversationStore = defineStore('conversation', () => {
       const data = await getConversations(silent)
       // 过滤出绑定了有效项目的会话，防止历史孤儿脏数据干扰
       // （workspaceId 为项目 ID 字符串，与项目列表 id 数值比对需弱等转换）
-      const validConversations = data.filter(s =>
-        s.workspaceId && projectStore.projectList.some(p => String(p.id) === String(s.workspaceId))
+      const validConversations = data.filter(
+        (s) =>
+          s.workspaceId &&
+          projectStore.projectList.some((p) => String(p.id) === String(s.workspaceId))
       )
       conversationList.value = validConversations
-      
+
       // 自动从历史会话中提取并同步子智能体到 agentStore 中
       const agentStore = useAgentStore()
       agentStore.syncSubAgents(validConversations)
@@ -126,15 +127,17 @@ export const useConversationStore = defineStore('conversation', () => {
       }
 
       // 如果当前的 activeCid 不为空，但其指向的会话不在有效列表中（即它已经被级联删除了）
-      if (activeCid.value !== null && !validConversations.some(s => s.id === activeCid.value)) {
+      if (activeCid.value !== null && !validConversations.some((s) => s.id === activeCid.value)) {
         activeCid.value = null
       }
 
       if (activeCid.value === null) {
         // 默认选中时，优先选择当前活跃项目下的主会话
-        const mainConversations = validConversations.filter(s => !s.parentCid)
-        const activeProjectConv = mainConversations.find(s =>
-          projectStore.activeProjectId !== null && String(s.workspaceId) === String(projectStore.activeProjectId)
+        const mainConversations = validConversations.filter((s) => !s.parentCid)
+        const activeProjectConv = mainConversations.find(
+          (s) =>
+            projectStore.activeProjectId !== null &&
+            String(s.workspaceId) === String(projectStore.activeProjectId)
         )
         if (activeProjectConv) {
           await selectConversation(activeProjectConv.id)
@@ -179,7 +182,7 @@ export const useConversationStore = defineStore('conversation', () => {
 
     // 联动切换当前选中的项目并初始化 Token 用量展示
     // （workspaceId 为项目 ID 字符串，changeActiveProject 需要数值 ID，做安全转换）
-    const sess = conversationList.value.find(s => s.id === id)
+    const sess = conversationList.value.find((s) => s.id === id)
     if (sess) {
       const projectIdNum = sess.workspaceId ? Number(sess.workspaceId) : NaN
       if (!Number.isNaN(projectIdNum)) {
@@ -251,8 +254,8 @@ export const useConversationStore = defineStore('conversation', () => {
       ;(window as any).$message?.error(hint)
     }
 
-        // 环境资产静默加载：消息列表就绪后执行，独立 try 且不阻塞本函数返回，全程不触发转圈。
-        // 顺序：先拉环境上下文 info（权限模式、Token 用量、技能等）；git 分支与变动列表优先级最低，info 完成后再拉。
+    // 环境资产静默加载：消息列表就绪后执行，独立 try 且不阻塞本函数返回，全程不触发转圈。
+    // 顺序：先拉环境上下文 info（权限模式、Token 用量、技能等）；git 分支与变动列表优先级最低，info 完成后再拉。
     // 守卫：回包时若已切走到其他会话则整体中止，避免旧会话慢响应污染新会话状态（新会话会自行触发加载）
     const loadEnvAssets = async () => {
       try {
@@ -302,7 +305,9 @@ export const useConversationStore = defineStore('conversation', () => {
     const list = providerStore.providerList
     if (!list || list.length === 0) {
       if ((window as any).$message) {
-        ;(window as any).$message.warning('暂无可用的大模型供应商，请先在“系统设置”中配置后再创建会话。')
+        ;(window as any).$message.warning(
+          '暂无可用的大模型供应商，请先在“系统设置”中配置后再创建会话。'
+        )
       } else {
         console.warn('暂无可用的大模型供应商，无法创建会话')
       }
@@ -311,14 +316,20 @@ export const useConversationStore = defineStore('conversation', () => {
 
     // 解析默认绑定供应商：优先取当前活跃会话绑定的供应商（且在列表中仍有效），
     // 否则取列表第一个（全新会话取下拉第一个）
-    const activeSess = activeCid.value !== null
-      ? conversationList.value.find(s => s.id === activeCid.value)
-      : null
-    const recentBound = activeSess && list.find(p => p.group === activeSess.providerGroup && p.modelName === activeSess.providerModelName)
-      ? activeSess
-      : null
+    const activeSess =
+      activeCid.value !== null ? conversationList.value.find((s) => s.id === activeCid.value) : null
+    const recentBound =
+      activeSess &&
+      list.find(
+        (p) => p.group === activeSess.providerGroup && p.modelName === activeSess.providerModelName
+      )
+        ? activeSess
+        : null
     const target = recentBound
-      ? { group: recentBound.providerGroup as string, modelName: recentBound.providerModelName as string }
+      ? {
+          group: recentBound.providerGroup as string,
+          modelName: recentBound.providerModelName as string
+        }
       : { group: list[0].group, modelName: list[0].modelName || '' }
 
     // workspaceId 为项目 ID 的字符串形态（Coding 宿主语义，由后端 WorkspaceResolver 解释）
@@ -335,7 +346,7 @@ export const useConversationStore = defineStore('conversation', () => {
       wsService.setCid(saved.id)
       messages.value = []
       conversationList.value.unshift(saved)
-      
+
       // 关键！主动触发选中会话与加载最新的环境上下文资产
       await selectConversation(saved.id, true)
     } catch (e) {
@@ -352,7 +363,7 @@ export const useConversationStore = defineStore('conversation', () => {
     // 优先在当前选中项目的会话中选择
     const currentProjectId = projectStore.activeProjectId
     const projectConversations = currentProjectId
-      ? conversationList.value.filter(s => String(s.workspaceId) === String(currentProjectId))
+      ? conversationList.value.filter((s) => String(s.workspaceId) === String(currentProjectId))
       : []
 
     if (projectConversations.length > 0) {
@@ -375,7 +386,7 @@ export const useConversationStore = defineStore('conversation', () => {
   const deleteConversation = async (id: number) => {
     try {
       await deleteConversationById(id)
-      conversationList.value = conversationList.value.filter(s => s.id !== id)
+      conversationList.value = conversationList.value.filter((s) => s.id !== id)
       // 会话已删除，同步清理其草稿与暂存附件记录，防止滞留造成内存与状态残留
       delete draftMap.value[id]
       disposeStagedFiles(id)
@@ -393,9 +404,9 @@ export const useConversationStore = defineStore('conversation', () => {
     if (!ids || ids.length === 0) return
     try {
       await batchDeleteConversationsApi(ids)
-      conversationList.value = conversationList.value.filter(s => !ids.includes(s.id))
+      conversationList.value = conversationList.value.filter((s) => !ids.includes(s.id))
       // 批量删除的会话同步清理草稿与暂存附件记录
-      ids.forEach(mid => {
+      ids.forEach((mid) => {
         delete draftMap.value[mid]
         disposeStagedFiles(mid)
       })
@@ -425,29 +436,30 @@ export const useConversationStore = defineStore('conversation', () => {
     // ① 会话绑定的供应商（group+modelName）在列表中精确命中 → 直接发送；
     // ② 绑定失效或未绑定，但列表非空 → 先把降级目标（列表第一个）持久化绑定到会话再发送；
     // ③ 列表为空 → 拦截发送并提示
-    const sess = conversationList.value.find(s => s.id === id)
+    const sess = conversationList.value.find((s) => s.id === id)
     const providerStore = useProviderStore()
     const list = providerStore.providerList
     if (!list || list.length === 0) {
       if ((window as any).$message) {
-        ;(window as any).$message.warning('暂无可用的大模型供应商，请先在左侧“系统设置”中配置并添加。')
+        ;(window as any).$message.warning(
+          '暂无可用的大模型供应商，请先在左侧“系统设置”中配置并添加。'
+        )
       } else {
         console.warn('暂无可用的大模型供应商，当前无法发起对话。')
       }
       return
     }
 
+    // 绑定有效沿用会话已绑定供应商；失效或未绑定则降级取列表第一个并持久化写回（接口会联动更新子会话）
+    const bound = sess?.providerGroup
+      ? list.find((p) => p.group === sess.providerGroup && p.modelName === sess.providerModelName)
+      : undefined
     let pGroup: string
     let pModel: string
-    const bound = sess?.providerGroup
-      ? list.find(p => p.group === sess.providerGroup && p.modelName === sess.providerModelName)
-      : undefined
     if (bound) {
-      // 绑定有效，沿用会话已绑定的供应商
       pGroup = bound.group
       pModel = bound.modelName
     } else {
-      // 绑定失效或未绑定：降级取列表第一个并持久化写回（接口会联动更新子会话）
       const eff = list[0]
       pGroup = eff.group
       pModel = eff.modelName || ''
@@ -456,65 +468,46 @@ export const useConversationStore = defineStore('conversation', () => {
       } catch (e) {
         console.error('发送前绑定降级供应商失败:', e)
       }
-      if (sess) {
-        sess.providerGroup = pGroup
-        sess.providerModelName = pModel
-      }
+    }
+    if (sess) {
+      sess.providerGroup = pGroup
+      sess.providerModelName = pModel
+    }
+    if (!bound) {
       if ((window as any).$message) {
         ;(window as any).$message.warning(`原供应商已失效，本次发送将使用 ${pGroup}/${pModel}`)
       }
     }
 
     appStore.currentIteration = 0
-    
+
     const oldInput = appStore.userInput
     // 发送前暂存本会话草稿：发送成功后清除，失败时保留供输入框原样恢复
     draftMap.value[id] = oldInput
     appStore.userInput = ''
     appStore.loopRunning = true
-    
-    sendMessageApi(id, { text, attachments }).then(() => {
-      // 成功发送后无需手动在此处更新，等待 WebSocket 推送 S2C_MESSAGE_CREATED 事件后自动追加。
-      // 发送成功：彻底释放本会话暂存附件（回收预览 ObjectURL 与 map 记录）并清除草稿暂存；
-      // 发送失败：两者均原样保留，供用户重试
-      disposeStagedFiles(id)
-      delete draftMap.value[id]
-    }).catch(err => {
-      console.error('发送消息失败:', err)
-      appStore.loopRunning = false
-      appStore.userInput = oldInput
-      const errMsg = err.response?.data?.msg || err.message || '发送消息失败，请检查网络或后端状态'
-      if ((window as any).$message) {
-        ;(window as any).$message.error(errMsg)
-      } else {
-        console.error(errMsg)
-      }
-    })
-  }
 
-  // 清空当前会话历史
-  const clearConversation = async () => {
-    const id = activeCid.value
-    if (id === null) return
-    try {
-      await clearConversationMessagesApi(id)
-      truncated.value = false
-      messages.value = [
-        {
-          id: -Date.now(),
-          role: 'system',
-          content: '✨ 对话上下文已清空，重置 Token 计数'
+    sendMessageApi(id, { text, attachments })
+      .then(() => {
+        // 成功发送后无需手动在此处更新，等待 WebSocket 推送 S2C_MESSAGE_CREATED 事件后自动追加。
+        // 发送成功：彻底释放本会话暂存附件（回收预览 ObjectURL 与 map 记录）并清除草稿暂存；
+        // 发送失败：两者均原样保留，供用户重试
+        disposeStagedFiles(id)
+        delete draftMap.value[id]
+      })
+      .catch((err) => {
+        console.error('发送消息失败:', err)
+        appStore.loopRunning = false
+        appStore.userInput = oldInput
+        const errMsg =
+          err.response?.data?.msg || err.message || '发送消息失败，请检查网络或后端状态'
+        if ((window as any).$message) {
+          ;(window as any).$message.error(errMsg)
+        } else {
+          console.error(errMsg)
         }
-      ]
-      inputTokens.value = 0
-      outputTokens.value = 0
-      cachedTokens.value = 0
-      appStore.currentIteration = 0
-    } catch (e) {
-      console.error('清空会话失败:', e)
-    }
+      })
   }
-
 
   // 手动重试消息
   const retryMessage = (messageId: number) => {
@@ -523,7 +516,7 @@ export const useConversationStore = defineStore('conversation', () => {
     appStore.loopRunning = true
 
     // 即时本地清空旧的生成内容与状态，提供更敏捷的用户视觉反馈
-    const target = messages.value.find(m => m.id === messageId)
+    const target = messages.value.find((m) => m.id === messageId)
     if (target) {
       target.content = ''
       target.thought = ''
@@ -531,12 +524,14 @@ export const useConversationStore = defineStore('conversation', () => {
       target.toolCalls = undefined
     }
 
-    retryMessageApi(id, messageId, { agentId: 'main' }).then(() => {
-      // 重试成功后，WS 会广播对应的 S2C_MESSAGE_UPDATED 事件来刷新列表状态，此处无需手动更新
-    }).catch(err => {
-      console.error('重试消息失败:', err)
-      appStore.loopRunning = false
-    })
+    retryMessageApi(id, messageId, { agentId: 'main' })
+      .then(() => {
+        // 重试成功后，WS 会广播对应的 S2C_MESSAGE_UPDATED 事件来刷新列表状态，此处无需手动更新
+      })
+      .catch((err) => {
+        console.error('重试消息失败:', err)
+        appStore.loopRunning = false
+      })
   }
 
   // 重置会话至指定消息节点
@@ -583,7 +578,7 @@ export const useConversationStore = defineStore('conversation', () => {
   const renameConversation = async (id: number, title: string) => {
     try {
       await renameConversationApi(id, title)
-      const sess = conversationList.value.find(s => s.id === id)
+      const sess = conversationList.value.find((s) => s.id === id)
       if (sess) {
         sess.title = title
       }
@@ -625,7 +620,6 @@ export const useConversationStore = defineStore('conversation', () => {
     createConversation,
     deleteConversation,
     sendUserMsg,
-    clearConversation,
     retryMessage,
     resetToMessage,
     reloadProjectAssets,

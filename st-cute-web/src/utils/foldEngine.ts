@@ -28,12 +28,19 @@
  */
 import { Message } from '@/types'
 
-/** 渲染序列条目（主会话 ChatContainer / 子会话 SubAgentDrawer 共用） */
+/** 渲染序列条目（主会话 ChatContainer / 子会话 SubAgentDrawer / MessageListFlow 共用） */
 export type RenderItem =
   | { type: 'message'; data: Message; tools?: Message[] }
   | { type: 'tool_group'; parentMessageId: number | string; tools: Message[] }
   | { type: 'folded'; folded: Message }
   | { type: 'truncated_tip' }
+
+/**
+ * 虚拟列表渲染条目：当前全部消费方（主会话/子会话/折叠详情）均使用 RenderItem，
+ * VirtualChatList 以此为 items 元素类型，替代 any[] 实现类型收敛。
+ * 未来出现新条目形态时扩展本别名即可（单点修改）
+ */
+export type VirtualListItem = RenderItem
 
 /** 折叠明细异常结构化条目（与后端 MessageVo.ErrorDetail 对齐） */
 export interface FoldErrorDetail {
@@ -94,7 +101,11 @@ export const buildRenderItems = (messages: Message[]): RenderItem[] => {
 
   // 兜底渲染没有任何父消息的孤儿工具消息
   if (toolMap.has('orphan_tools')) {
-    result.push({ type: 'tool_group', parentMessageId: 'orphan_tools', tools: toolMap.get('orphan_tools')! })
+    result.push({
+      type: 'tool_group',
+      parentMessageId: 'orphan_tools',
+      tools: toolMap.get('orphan_tools')!
+    })
   }
 
   return result
@@ -107,11 +118,17 @@ export const buildRenderItems = (messages: Message[]): RenderItem[] => {
 const locateSegment = (messages: Message[], idx: number): [number, number] => {
   let start = 0
   for (let i = idx; i >= 0; i--) {
-    if (messages[i].role === 'user') { start = i; break }
+    if (messages[i].role === 'user') {
+      start = i
+      break
+    }
   }
   let end = messages.length
   for (let i = idx + 1; i < messages.length; i++) {
-    if (messages[i].role === 'user') { end = i; break }
+    if (messages[i].role === 'user') {
+      end = i
+      break
+    }
   }
   return [start, end]
 }
@@ -153,11 +170,15 @@ const foldUpTo = (messages: Message[], anchorIdx: number): void => {
   // 找段内最后一个 FOLDED 块（动态演化下每段至多一个，位于 USER 之后）
   let foldIdx = -1
   for (let i = anchorIdx - 1; i >= segStart; i--) {
-    if (messages[i].role === 'folded') { foldIdx = i; break }
+    if (messages[i].role === 'folded') {
+      foldIdx = i
+      break
+    }
   }
 
   // 收集区间：FOLDED 块之后（或段头 USER 之后）到 anchor 之前，全部并入
-  const startIndex = foldIdx !== -1 ? foldIdx + 1 : segStart + (messages[segStart].role === 'user' ? 1 : 0)
+  const startIndex =
+    foldIdx !== -1 ? foldIdx + 1 : segStart + (messages[segStart].role === 'user' ? 1 : 0)
   if (startIndex >= anchorIdx) return
   const pending = messages.slice(startIndex, anchorIdx)
   if (pending.length === 0) return
@@ -187,8 +208,8 @@ const foldUpTo = (messages: Message[], anchorIdx: number): void => {
 
 /** 将 pending 明细的元信息合并进既有 FOLDED 块（区间扩张 + 计数累加 + 异常追加） */
 const absorb = (folded: Message, pending: Message[]): void => {
-  folded.foldedMinId = Math.min(folded.foldedMinId ?? folded.id, ...pending.map(m => m.id))
-  folded.foldedMaxId = Math.max(folded.foldedMaxId ?? folded.id, ...pending.map(m => m.id))
+  folded.foldedMinId = Math.min(folded.foldedMinId ?? folded.id, ...pending.map((m) => m.id))
+  folded.foldedMaxId = Math.max(folded.foldedMaxId ?? folded.id, ...pending.map((m) => m.id))
   let assistantCount = folded.assistantCount || 0
   let toolCount = folded.toolCount || 0
   const errorDetails: FoldErrorDetail[] = [...(folded.errorDetails || [])]
@@ -198,7 +219,8 @@ const absorb = (folded: Message, pending: Message[]): void => {
       if (m.status === 'FAILED') errorDetails.push({ kind: 'assistant' })
     } else if (m.role === 'tool') {
       toolCount++
-      if (m.status === 'FAILED') errorDetails.push({ kind: 'tool', toolName: m.toolName || undefined })
+      if (m.status === 'FAILED')
+        errorDetails.push({ kind: 'tool', toolName: m.toolName || undefined })
     }
   }
   folded.assistantCount = assistantCount
@@ -223,7 +245,8 @@ const summarize = (msgs: Message[]) => {
       if (m.status === 'FAILED') errorDetails.push({ kind: 'assistant' })
     } else if (m.role === 'tool') {
       toolCount++
-      if (m.status === 'FAILED') errorDetails.push({ kind: 'tool', toolName: m.toolName || undefined })
+      if (m.status === 'FAILED')
+        errorDetails.push({ kind: 'tool', toolName: m.toolName || undefined })
     }
   }
   return { minId, maxId, assistantCount, toolCount, errorDetails }
@@ -234,7 +257,7 @@ const summarize = (msgs: Message[]) => {
  * 已存在同 id 消息时忽略（CREATED 不覆盖已有状态）；id 撞上 FOLDED 块时忽略（D4）。
  */
 export const appendIncomingMessage = (messages: Message[], incoming: Message): void => {
-  const existIdx = messages.findIndex(m => m.id === incoming.id)
+  const existIdx = messages.findIndex((m) => m.id === incoming.id)
   if (existIdx !== -1) {
     // 已存在同 id：CREATED 是占位事件，不覆盖本地已累积的状态/内容
     return
@@ -248,7 +271,7 @@ export const appendIncomingMessage = (messages: Message[], incoming: Message): v
  * 由 UPDATED 终态事件触发。
  */
 export const onAssistantTerminal = (messages: Message[], msgId: number): void => {
-  const idx = messages.findIndex(m => m.id === msgId)
+  const idx = messages.findIndex((m) => m.id === msgId)
   if (idx === -1) return
   const anchor = messages[idx]
   if (anchor.role === 'folded') return // D4 防御：id 撞上折叠块
@@ -263,7 +286,7 @@ export const onAssistantTerminal = (messages: Message[], msgId: number): void =>
  * 它所在小组整体起外露，之前的小组（含原外露终态助手）并入折叠块。
  */
 export const onToolWaitingApproval = (messages: Message[], toolId: number): void => {
-  const idx = messages.findIndex(m => m.id === toolId)
+  const idx = messages.findIndex((m) => m.id === toolId)
   if (idx === -1) return
   const tool = messages[idx]
   if (tool.role !== 'tool') return
@@ -279,7 +302,7 @@ export const onToolWaitingApproval = (messages: Message[], toolId: number): void
  * USER 消息不在折叠块内部，不存在跨界问题。
  */
 export const applyResetDeletion = (messages: Message[], targetId: number): void => {
-  const keep = messages.filter(m => {
+  const keep = messages.filter((m) => {
     if (m.role === 'folded') return (m.foldedMaxId ?? m.id) <= targetId
     return m.id <= targetId
   })
