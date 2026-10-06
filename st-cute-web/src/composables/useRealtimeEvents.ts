@@ -55,7 +55,7 @@ export function useRealtimeEvents() {
     }
     listReloadTimer = setTimeout(() => {
       listReloadTimer = null
-      conversationStore.loadConversations().catch(e => {
+      conversationStore.loadConversations().catch((e) => {
         console.error('防抖重拉会话列表失败:', e)
       })
     }, LIST_RELOAD_DEBOUNCE_MS)
@@ -122,7 +122,7 @@ export function useRealtimeEvents() {
         if (conversationStore.activeCid !== null) {
           conversationStore.selectConversation(conversationStore.activeCid, true, true)
         }
-        conversationStore.loadConversations(true).catch(e => {
+        conversationStore.loadConversations(true).catch((e) => {
           console.error('断线重连后会话列表静默刷新失败:', e)
         })
       }
@@ -204,7 +204,7 @@ export function useRealtimeEvents() {
       }
 
       // 同步更新会话列表中对应的那个（包括改名、更新时间、running 转圈监控、Token等）
-      const currentSess = conversationStore.conversationList.find(s => s.id === cid)
+      const currentSess = conversationStore.conversationList.find((s) => s.id === cid)
       if (currentSess) {
         if (payload.title) currentSess.title = payload.title
         if (payload.updateTime) currentSess.updateTime = payload.updateTime
@@ -225,7 +225,9 @@ export function useRealtimeEvents() {
       const deletedCid = Number(event.payload)
       if (!deletedCid) return
 
-      conversationStore.conversationList = conversationStore.conversationList.filter(s => s.id !== deletedCid)
+      conversationStore.conversationList = conversationStore.conversationList.filter(
+        (s) => s.id !== deletedCid
+      )
 
       if (conversationStore.activeCid === deletedCid) {
         conversationStore.activeCid = null
@@ -317,7 +319,11 @@ export function useRealtimeEvents() {
           }
 
           // D3 助手转终态
-          if (normalized.role === 'assistant' || normalized.role === 'branch' || normalized.role === 'compressed') {
+          if (
+            normalized.role === 'assistant' ||
+            normalized.role === 'branch' ||
+            normalized.role === 'compressed'
+          ) {
             const m = targetMessages.find((m: any) => m.id === normalized.id)
             if (m && (m.status === 'SUCCESS' || m.status === 'FAILED' || m.status === 'CANCELED')) {
               onAssistantTerminal(targetMessages, normalized.id)
@@ -328,9 +334,11 @@ export function useRealtimeEvents() {
         if (isSub) {
           const sub = agentStore.getTargetAgent(Number(cid))
           if (sub) {
-            if (normalized.status === 'SUCCESS') {
-              sub.status = 'success'
-            } else if (normalized.status === 'FAILED' || normalized.status === 'CANCELED') {
+            // 仅保留失败/取消的不可逆红标；正常结束的权威信号是 loopRunning=0 的
+            // CONVERSATION_UPDATED 广播（终态必然经 updateLoopRunningToFinished / clearLoopState 收口触发）。
+            // 消息级 SUCCESS 不充分：子会话派发 USER 消息被消费、工具执行完成、带工具调用的
+            // ASSISTANT 落地均为 SUCCESS，曾导致启动窗口期卡片闪现「正常结束」再跳回「运行中」
+            if (normalized.status === 'FAILED' || normalized.status === 'CANCELED') {
               sub.status = 'failed'
             }
           }
@@ -391,7 +399,9 @@ export function useRealtimeEvents() {
       const targetMessages = resolveTargetMessages(parentCid, cid)
       let currentMsg = targetMessages.find((m: any) => m.id === msgId)
       if (!currentMsg) {
-        currentMsg = targetMessages.find((m: any) => m.role === 'assistant' && (m.status === 'RUNNING' || m.status === 'PENDING'))
+        currentMsg = targetMessages.find(
+          (m: any) => m.role === 'assistant' && (m.status === 'RUNNING' || m.status === 'PENDING')
+        )
       }
       if (!currentMsg) {
         const newMsg: Message = {
@@ -447,7 +457,8 @@ export function useRealtimeEvents() {
       if (!tool || tool.status !== 'RUNNING') return
 
       const merged = (tool.content || '') + text
-      tool.content = merged.length > TOOL_LOG_KEEP_LENGTH ? merged.slice(-TOOL_LOG_KEEP_LENGTH) : merged
+      tool.content =
+        merged.length > TOOL_LOG_KEEP_LENGTH ? merged.slice(-TOOL_LOG_KEEP_LENGTH) : merged
     }
     wsService.on(WS_EVENTS.TOOL_LOG_STREAM, handleToolLogStream)
 
@@ -456,7 +467,7 @@ export function useRealtimeEvents() {
     // 若后端未来恢复推送，在 constants/ws-events.ts 登记常量并在此补监听即可。
 
     // ---------------- 配置与资产广播 ----------------
-    wsService.on(WS_EVENTS.PROJECT_CREATED, async (event) => {
+    wsService.on(WS_EVENTS.PROJECT_CREATED, async () => {
       await projectStore.loadProjects()
     })
 
@@ -479,10 +490,12 @@ export function useRealtimeEvents() {
       if (payload.newlineKey !== undefined) appStore.newlineKey = payload.newlineKey
       if (payload.httpLog !== undefined) appStore.httpLog = payload.httpLog
       if (payload.httpLogDays !== undefined) appStore.httpLogDays = payload.httpLogDays
-      if (payload.httpLogIncludeResponse !== undefined) appStore.httpLogIncludeResponse = payload.httpLogIncludeResponse
+      if (payload.httpLogIncludeResponse !== undefined)
+        appStore.httpLogIncludeResponse = payload.httpLogIncludeResponse
       // 密码广播不携带密码值，仅同步"是否已设置"状态标记
       if (payload.passwordSet !== undefined) appStore.passwordSet = payload.passwordSet
-      if (payload.minimalSkillMode !== undefined) appStore.minimalSkillMode = payload.minimalSkillMode
+      if (payload.minimalSkillMode !== undefined)
+        appStore.minimalSkillMode = payload.minimalSkillMode
       if (payload.theme !== undefined && (payload.theme === 'dark' || payload.theme === 'light')) {
         appStore.theme = payload.theme
         if (currentTheme.value !== payload.theme) {

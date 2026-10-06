@@ -108,6 +108,11 @@ public class InvokeSubagentTool implements CuteTool {
         subSession.setProviderGroup(agentContext.getProviderGroup());
         subSession.setProviderModelName(agentContext.getProviderModelName());
         subSession.setTitle("子任务: " + role);
+        // 拉起即声明运行：消除「创建→异步 loop 启动」窗口期 loopRunning=0 的中间态，
+        // 使 CONVERSATION_CREATED 广播与列表查询在窗口期即呈现运行中（循环发起不受影响：
+        // executeLoopSync 的防重入守卫本就因窗口期存在 PENDING 消息而放行；
+        // 窗口期内父会话停止/断电时，级联与自愈对子会话的定性也从误判「已完成」变为准确）
+        subSession.setLoopRunning(1);
 
         // 发布会话创建命令（由于第一层是同步写盘，发布返回后 subSession 中已回填自增 id）
         agentContext.publishEvent(AgentEventFactory.createConversationCreate(agentContext, subSession));
