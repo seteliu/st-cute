@@ -71,8 +71,7 @@
         - HOOK
         - RULE
     - 权限管控
-        - 只读
-        - 智能审批
+        - 多粒审批（严格审批、宽松审批、全部放行）
         - 路径沙箱
     - 自定义供应商
         - 支持 OpenAI Chat、OpenAI Response、Anthropic Claude 三种协议

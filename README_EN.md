@@ -71,8 +71,7 @@
         - HOOK
         - RULE
     - Permission Control
-        - Read-Only
-        - Smart Approval
+        - Granular approvals (Strict Approval, Relaxed Approval, Allow All)
         - Path Sandbox
     - Custom Model Providers
         - Supports OpenAI Chat, OpenAI Response, and Anthropic Claude protocols
