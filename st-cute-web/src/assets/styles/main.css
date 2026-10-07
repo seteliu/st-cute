@@ -863,8 +863,9 @@ body.sider-resizing .tool-calls-container {
   overflow: hidden !important;
 }
 
+/* 供应商（大模型）下拉框宽度：收窄以给输入区底行留出呼吸空间，避免窄窗口下底行控件拥挤换行 */
 .provider-select {
-  width: 220px;
+  width: 180px;
 }
 
 .permission-select {

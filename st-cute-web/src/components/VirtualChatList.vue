@@ -86,6 +86,138 @@ const isNearBottom = () => {
   return el.scrollHeight - el.scrollTop - el.clientHeight < 10
 }
 
+// ------------------------------------------------------------------
+// 宽度变化重锚定：宽度突变（断点切换侧栏抽屉化/还原、拖拽侧栏、拉伸窗口）会让
+// 全部消息重新换行，旧宽度下实测的高度缓存整体失效。若不清空，虚拟偏移表混用
+// 新旧高度导致可视切片错位，叠加逐项高度补偿与浏览器 clamp，表现为滚动位置
+// 漂移甚至跳顶（复现于窄桌面还原三栏时）。
+// 处理：宽度变化当帧立即进入「重锚定」状态——按旧布局捕获锚点（视口首项/是否贴底）
+// 并清空缓存，抢在旧高度参与补偿运算之前止血；重锚定期间抑制一切滚动迁移
+// （高度补偿/贴底校准），待新宽度下高度测量收敛后统一恢复到锚点位置
+// ------------------------------------------------------------------
+
+// 上一次观测到的滚动容器宽度（用于过滤同值触发的 Observer 回调）
+let lastObservedWidth = 0
+// 重锚定进行中标志：true 时逐项高度只记录不迁移滚动。
+// 用 ref 而非普通变量：visibleStartIndex 的早退分支需依赖它做响应式失效，
+// 否则解冻后该 computed 会因早退而缓存住锚点索引，渲染窗口不再跟随滚动
+const isWidthResettling = ref(false)
+// 重锚定锚点：宽度变化前视口首项索引
+let reanchorIndex = -1
+// 锚点条目的稳定 key（与 getItemKey 同源）：抑制窗口内渲染序列可能被流式折叠重组
+// （foldEngine 动态折叠会把已完成工具组并入折叠块，索引随之失配），故同时记录 key，
+// 恢复时优先按 key 找回条目当前索引，查不到再回退捕获时索引
+let reanchorKey: number | string | null = null
+// 重锚定前用户是否停留在底部：贴底则恢复为贴底，否则恢复锚点消息贴顶
+let reanchorAtBottom = false
+// 重锚定落定计时器：连续宽度变化（拖拽侧栏/窗口边缘）只在静默 120ms 后恢复一次
+let widthSettleTimer: ReturnType<typeof setTimeout> | null = null
+// 重锚定世代令牌：每次宽度变化即自增，落定恢复链在入口、恢复前、解除抑制前三处校验，
+// 防止上一次恢复的延迟帧（rAF 链较长）在新一轮重锚定期间提前解除抑制、跳过新锚点恢复
+let resettleGeneration = 0
+// 落定恢复链的 rAF 句柄集合：卸载时统一取消，避免回调在组件销毁后继续执行
+const pendingResettleFrames = new Set<number>()
+// 观测滚动容器自身宽度的 Observer 实例
+let scrollerWidthObserver: ResizeObserver | null = null
+
+// 登记并执行一个 rAF：句柄入集合便于卸载时统一取消
+const scheduleResettleFrame = (callback: () => void) => {
+  const frameId = requestAnimationFrame(() => {
+    pendingResettleFrames.delete(frameId)
+    callback()
+  })
+  pendingResettleFrames.add(frameId)
+}
+
+/**
+ * 重锚定落定：宽度停止变化 120ms 后，新布局下的逐项高度已测量收敛，
+ * 此时统一恢复滚动位置——贴底用户磁吸回底部，翻阅历史的用户回到锚点消息贴顶，
+ * 恢复完成后再解除抑制，让既有的高度补偿/贴底校准机制重新接管
+ */
+const finishWidthResettle = (generation: number) => {
+  widthSettleTimer = null
+  // 世代已过期（期间又发生了新的宽度变化）：本轮恢复作废，交由新一轮处理
+  if (!isWidthResettling.value || generation !== resettleGeneration) return
+  nextTick(() => {
+    scheduleResettleFrame(() => {
+      // 等一帧：落定前高度尚在测量中，offsets 尚未收敛
+      scheduleResettleFrame(() => {
+        if (!isWidthResettling.value || generation !== resettleGeneration) return
+        if (reanchorAtBottom) {
+          scrollToBottom(false)
+        } else {
+          // 锚点索引可能因抑制窗口内流式折叠重组而失配，优先按稳定 key 找回当前索引
+          const targetIndex =
+            reanchorKey !== null ? findIndexByKey(reanchorKey, reanchorIndex) : reanchorIndex
+          if (targetIndex >= 0) {
+            scrollToIndex(targetIndex, false)
+          }
+        }
+        // 再等一帧确保恢复滚动已生效，随后解除抑制；解除后立即回同步一次虚拟滚动位置——
+        // 恢复滚动产生的原生 scroll 事件在抑制期内被吞掉，此处补齐最终同步，
+        // 确保渲染窗口切片与实际滚动位置严格一致
+        scheduleResettleFrame(() => {
+          if (generation !== resettleGeneration) return
+          isWidthResettling.value = false
+          // 解冻后回写一次滚动位置：把抑制期被冻结的最终 scrollTop 同步进虚拟状态，
+          // 使渲染窗口切片与实际滚动位置对齐
+          handleScroll()
+        })
+      })
+    })
+  })
+}
+
+// 按稳定 key 在当前渲染序列中定位条目索引；查不到时回退传入的旧索引
+const findIndexByKey = (key: number | string, fallbackIndex: number): number => {
+  const idx = props.items.findIndex((item, index) => getItemKey(item, index) === key)
+  return idx !== -1 ? idx : fallbackIndex
+}
+
+// 宽度变化入口（Observer 当帧同步调用）：首帧变化时立即捕获锚点并清空高度缓存，
+// 抢在旧高度参与补偿运算之前止血；连续变化仅续期落定计时器，避免拖拽过程反复重建
+const handleScrollerWidthChange = () => {
+  const el = scrollerRef.value
+  if (!el) return
+  // 每次宽度变化都自增世代：使上一轮可能仍在 rAF 链中的恢复流程立即作废，
+  // 否则过期链条会在新一轮重锚定中途解除抑制，导致新锚点恢复被跳过
+  resettleGeneration += 1
+  if (!isWidthResettling.value) {
+    // 先读锚点再置位抑制标志：置位会让 visibleStartIndex 命中重锚定早退分支，
+    // 若先置位后读取且该 computed 恰处于失效态，会拿到上一轮的残留锚点
+    reanchorIndex = visibleStartIndex.value
+    const anchorItem = reanchorIndex < props.items.length ? props.items[reanchorIndex] : undefined
+    reanchorKey = anchorItem !== undefined ? getItemKey(anchorItem, reanchorIndex) : null
+    // 贴底锁激活时一并视为「应贴底」：加载/贴底锁存期间列表尚未撑开，
+    // isNearBottom 可能失真，若不加此条件会把正在加载的会话误判为翻阅历史
+    reanchorAtBottom = isNearBottom() || initialScrollPending.value
+    isWidthResettling.value = true
+  }
+  // 高度缓存随每次宽度变化全量失效，不与锚点捕获绑在同一分支：连续轮次间隔内
+  // 新实测的已是新宽度高度，旧残留混入 offsets 会造成恢复落点偏移
+  heights.value = {}
+  lastObservedWidth = el.clientWidth
+  if (widthSettleTimer) {
+    clearTimeout(widthSettleTimer)
+  }
+  const generation = resettleGeneration
+  widthSettleTimer = setTimeout(() => finishWidthResettle(generation), 120)
+}
+
+// 初始化滚动容器自身宽度观测：仅宽度变化具有 reflow 语义（纵向拉伸不影响换行），忽略高度
+const initScrollerWidthWatcher = () => {
+  if (typeof window === 'undefined' || !window.ResizeObserver || !scrollerRef.value) return
+  lastObservedWidth = scrollerRef.value.clientWidth
+  scrollerWidthObserver = new window.ResizeObserver((entries) => {
+    for (const entry of entries) {
+      if ((entry.target as HTMLElement).clientWidth !== lastObservedWidth) {
+        handleScrollerWidthChange()
+      }
+    }
+  })
+  scrollerWidthObserver.observe(scrollerRef.value)
+}
+
 // 锁，用于防止高度更新时的重入冲突
 let isUpdatingHeights = false
 
@@ -147,6 +279,13 @@ const offsets = computed(() => {
 
 // 计算可视区间首项索引
 const visibleStartIndex = computed(() => {
+  // 宽度重锚定时 heights 已清空、新宽度下高度尚未测出，按旧 scrollTop 二分只能得到
+  // 基于估算高度的错位索引（冻结期不更新 scrollTop，故该计算不会被触发修正）。
+  // 此时直接返回宽度变化前捕获的锚点索引，保证冻结期渲染窗口稳定在用户原本观看的位置。
+  // isWidthResettling 为 ref，其翻转本身即会让本 computed 失效重算，无需依赖解冻处的 scrollTop 回写
+  if (isWidthResettling.value && reanchorIndex >= 0) {
+    return reanchorIndex
+  }
   const top = scrollTop.value
   const list = offsets.value
   let low = 0
@@ -166,6 +305,13 @@ const visibleStartIndex = computed(() => {
 
 // 计算可视区间尾项索引
 const visibleEndIndex = computed(() => {
+  // 宽度重锚定期间：offsets 全为估算高度、与冻结的 scrollTop 不同源，二分结果不可信
+  // （scrollTop 较大时 low 会一路越过列表末尾，直接把渲染区间撑到尾部、渲染上百项）。
+  // 改为「锚点 + 按视口高度估算的条目数」这一稳定小窗口，冻结点渲染量可控
+  if (isWidthResettling.value && reanchorIndex >= 0) {
+    const roughCount = Math.ceil(clientHeight.value / props.estimatedItemSize) + 1
+    return Math.min(props.items.length - 1, reanchorIndex + roughCount)
+  }
   const bottom = scrollTop.value + clientHeight.value
   const list = offsets.value
   let low = visibleStartIndex.value
@@ -200,8 +346,12 @@ const isItemRendered = (index: number) => {
 // 滚动事件处理
 const handleScroll = () => {
   if (!scrollerRef.value) return
-  scrollTop.value = scrollerRef.value.scrollTop
   clientHeight.value = scrollerRef.value.clientHeight
+  // 宽度重锚定期间冻结虚拟滚动位置同步：清缓存瞬间浏览器会钳制/重置原生 scrollTop，
+  // 此时同步会让渲染窗口错移到列表顶部造成「跳顶闪现」；落定恢复锚点后由解冻逻辑统一回同步
+  if (!isWidthResettling.value) {
+    scrollTop.value = scrollerRef.value.scrollTop
+  }
 }
 
 // ResizeObserver 统一实例
@@ -250,8 +400,9 @@ const initResizeObserver = () => {
       }
     }
 
-    // 执行滚动条高度补偿，防范向上滚动白屏/抖动
-    if (scrollTopAdjustment !== 0 && scrollerRef.value) {
+    // 执行滚动条高度补偿，防范向上滚动白屏/抖动。
+    // 宽度重锚定期间抑制：旧高度已清空、新高度未收敛，此时迁移滚动必错位（跳顶根因之一）
+    if (scrollTopAdjustment !== 0 && scrollerRef.value && !isWidthResettling.value) {
       scrollerRef.value.scrollTop += scrollTopAdjustment
       // 瞬时同步数据，防止 nextTick 延迟抖动
       scrollTop.value = scrollerRef.value.scrollTop
@@ -265,6 +416,10 @@ const initResizeObserver = () => {
       // 异步刷新滚动高度
       nextTick(() => {
         handleScroll()
+        if (isWidthResettling.value) {
+          // 宽度重锚定期间只刷新偏移数据，不做任何滚动迁移；待落定后统一恢复锚点
+          return
+        }
         if (initialScrollPending.value) {
           scrollToBottom(false)
         } else if (lastItemChanged && isNearBottom()) {
@@ -317,11 +472,13 @@ const scrollToIndex = (index: number, smooth = true) => {
   })
 }
 
-// 自动追踪触底逻辑：只要原本处于底部，在有任何数据变动时就瞬时定位贴底，杜绝抖动
+// 自动追踪触底逻辑：只要原本处于底部，在有任何数据变动时就瞬时定位贴底，杜绝抖动。
+// 宽度重锚定期间抑制：此时贴底会基于未收敛的偏移表乱跳，落定后由锚点恢复统一处理
 watch(
   () => props.items,
   (newVal) => {
     if (!scrollerRef.value || newVal.length === 0) return
+    if (isWidthResettling.value) return
 
     // 触底判定：必须完全在底部（距底 10px 容差内）才视为处于底部并自动维持贴底，
     // 避免用户稍向上翻阅历史消息时被流式输出强行拉回底部（复用 isNearBottom 判定）
@@ -350,6 +507,8 @@ onMounted(() => {
     scrollTop.value = scrollerRef.value.scrollTop
   }
   initResizeObserver()
+  // 观测滚动容器宽度：宽度突变时清空高度缓存并重新锚定（详见 handleScrollerWidthChange 注释）
+  initScrollerWidthWatcher()
   // 挂载后立即强力贴底
   scrollToBottom(false)
 })
@@ -359,6 +518,17 @@ onBeforeUnmount(() => {
   if (scrollLockTimer) {
     clearTimeout(scrollLockTimer)
     scrollLockTimer = null
+  }
+  // 清理宽度落定防抖计时器、在途 rAF 链与宽度观测器
+  if (widthSettleTimer) {
+    clearTimeout(widthSettleTimer)
+    widthSettleTimer = null
+  }
+  pendingResettleFrames.forEach((frameId) => cancelAnimationFrame(frameId))
+  pendingResettleFrames.clear()
+  if (scrollerWidthObserver) {
+    scrollerWidthObserver.disconnect()
+    scrollerWidthObserver = null
   }
   if (resizeObserver) {
     resizeObserver.disconnect()

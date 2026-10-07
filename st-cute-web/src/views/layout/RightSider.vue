@@ -66,8 +66,8 @@
       </n-tab-pane>
     </n-tabs>
 
-    <!-- 自定义拖拽边框条 -->
-    <div v-if="!isMobile" ref="resizeHandleRef" class="custom-resize-handle right-handle">
+    <!-- 自定义拖拽边框条：仅在常驻三栏布局（非抽屉承载）下显示 -->
+    <div v-if="!isOverlaySider" ref="resizeHandleRef" class="custom-resize-handle right-handle">
       <div class="resize-line"></div>
     </div>
   </n-layout-sider>
@@ -79,15 +79,16 @@ import { useAppStore } from '@/stores/app'
 import { useConversationStore } from '@/stores/conversation'
 import { useResponsive } from '@/utils/useResponsive'
 import { t } from '@/i18n'
+import { clampSiderWidth } from '@/constants/layout'
 
-const { isMobile } = useResponsive()
+const { isOverlaySider } = useResponsive()
 
 const collapsed = computed(() => {
-  return isMobile.value ? false : appStore.rightSiderCollapsed
+  return isOverlaySider.value ? false : appStore.rightSiderCollapsed
 })
 
 const width = computed(() => {
-  return isMobile.value ? '100%' : appStore.rightSiderWidth
+  return isOverlaySider.value ? '100%' : appStore.rightSiderWidth
 })
 import OverviewPane from '../inspector/OverviewPane.vue'
 import PreviewPane from '../inspector/PreviewPane.vue'
@@ -184,10 +185,12 @@ const handleMouseUp = () => {
 
 const handleMouseMove = (e: MouseEvent) => {
   if (!isResizing) return
-  let newWidth = window.innerWidth - e.clientX
-  if (newWidth < 240) newWidth = 240
-  if (newWidth > 600) newWidth = 600
-  scheduleWidthUpdate(newWidth)
+  // 期望宽度由鼠标位置自右缘换算（视口右边界为基准）；
+  // 对侧宽度一律按其记忆宽度扣减（不因当前折叠而放宽）：折叠只是临时不占位，
+  // 用户随时可能展开，若此处按折叠态放宽，展开后中间聊天区会被挤压变形
+  scheduleWidthUpdate(
+    clampSiderWidth('right', window.innerWidth - e.clientX, appStore.leftSiderWidth)
+  )
 }
 
 const initResizeEvents = () => {

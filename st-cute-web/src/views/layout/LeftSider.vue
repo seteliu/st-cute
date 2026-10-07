@@ -405,8 +405,8 @@
     <!-- 系统设置大弹窗（独立组件：基础设置 + 供应商管理 + 密码弹窗） -->
     <settings-modal v-model:show="showSettingsModal" />
 
-    <!-- 自定义拖拽边框条 -->
-    <div v-if="!isMobile" ref="resizeHandleRef" class="custom-resize-handle left-handle">
+    <!-- 自定义拖拽边框条：仅在常驻三栏布局（非抽屉承载）下显示 -->
+    <div v-if="!isOverlaySider" ref="resizeHandleRef" class="custom-resize-handle left-handle">
       <div class="resize-line"></div>
     </div>
   </n-layout-sider>
@@ -420,17 +420,18 @@ import { useConversationStore } from '@/stores/conversation'
 import { useProjectStore } from '@/stores/project'
 import { useAppStore } from '@/stores/app'
 import { t } from '@/i18n'
+import { clampSiderWidth } from '@/constants/layout'
 import AddProjectModal from './settings/AddProjectModal.vue'
 import SettingsModal from './settings/SettingsModal.vue'
 
-const { isMobile } = useResponsive()
+const { isOverlaySider } = useResponsive()
 
 const collapsed = computed(() => {
-  return isMobile.value ? false : appStore.leftSiderCollapsed
+  return isOverlaySider.value ? false : appStore.leftSiderCollapsed
 })
 
 const width = computed(() => {
-  return isMobile.value ? '100%' : appStore.leftSiderWidth
+  return isOverlaySider.value ? '100%' : appStore.leftSiderWidth
 })
 
 const message = useMessage()
@@ -803,10 +804,9 @@ const handleMouseUp = () => {
 
 const handleMouseMove = (e: MouseEvent) => {
   if (!isResizing) return
-  let newWidth = e.clientX
-  if (newWidth < 240) newWidth = 240
-  if (newWidth > 500) newWidth = 500
-  scheduleWidthUpdate(newWidth)
+  // 对侧宽度一律按其记忆宽度扣减（不因当前折叠而放宽）：折叠只是临时不占位，
+  // 用户随时可能展开，若此处按折叠态放宽，展开后中间聊天区会被挤压变形
+  scheduleWidthUpdate(clampSiderWidth('left', e.clientX, appStore.rightSiderWidth))
 }
 
 const initResizeEvents = () => {

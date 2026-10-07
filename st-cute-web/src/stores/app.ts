@@ -8,6 +8,7 @@ import { useUserStore } from './user'
 import { setLanguage, Language, t } from '@/i18n'
 import { currentTheme, switchTheme } from '@/styles/theme'
 import { ThemeName } from '@/styles/themeVars'
+import { DEFAULT_LEFT_SIDER_WIDTH, DEFAULT_RIGHT_SIDER_WIDTH } from '@/constants/layout'
 
 /**
  * 安全访问码复杂度策略：trim 后 8~32 位、须同时包含英文字母与数字、仅允许常见密码字符。
@@ -51,9 +52,9 @@ export const useAppStore = defineStore('app', () => {
   const leftSiderCollapsed = ref(false)
   const rightSiderCollapsed = ref(false)
 
-  // 左右侧边栏宽度控制，默认分别为 280 和 291
-  const leftSiderWidth = ref(280)
-  const rightSiderWidth = ref(291)
+  // 左右侧边栏宽度控制：初始值取自布局常量单一来源（窄桌面断点由二者之和派生，须同源）
+  const leftSiderWidth = ref(DEFAULT_LEFT_SIDER_WIDTH)
+  const rightSiderWidth = ref(DEFAULT_RIGHT_SIDER_WIDTH)
 
   // 【预留】聊天消息头像展示开关：控制对话消息是否展示角色头像。
   // 当前无任何设置入口修改此值，仅作后续扩展预留，默认关闭（false）。
