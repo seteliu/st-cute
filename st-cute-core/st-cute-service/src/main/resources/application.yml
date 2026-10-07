@@ -8,7 +8,7 @@ server:
         http-only: true
         same-site: lax
   # 反代场景关键配置：激活 Tomcat RemoteIpValve（NATIVE 策略），让后端正确识别
-  # X-Forwarded-Proto / X-Forwarded-For——反代终结 HTTPS 时会话 Cookie 才会被自动标记 Secure，
+  # X-Forwarded-Proto / X-Forwarded-For——经反向代理走 HTTPS 时会话 Cookie 才会被自动标记 Secure，
   # 防爆破计数也才能拿到真实客户端 IP。
   forward-headers-strategy: NATIVE
 
@@ -61,7 +61,7 @@ st-cute:
   search:
     searxng:
       # SearXNG 聚合搜索服务基地址（不含 /search 路径，宿主层联网搜索工具数据源）
-      base-url: http://61jun.com:9201
+      base-url: https://search.61jun.com/searxng
       # 访问令牌（部署级静态配置，不参与全局系统设置 config.json 的合并）
       # 注意，内置的为 61jun.com 公有搜索服务，token 并非忘记抹去敏感信息，而是此功能为系统内置，已获得授权允许提交并公开
       token: st-searxng-gogogo

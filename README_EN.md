@@ -28,11 +28,11 @@
 - **Multi-device sync**: deploy once, and desktop / web / mobile clients all get the full feature set with responsive adaptation — Vibe Coding anywhere, even on your phone.
 - **Office support**: PDF / Word / Excel read directly via built-in tools, no external conversion needed.
 - **Great experience**:
-  - Complete yet restrained built-in features that never weigh you down. Leave your creative stage to the componentized Harness.
+  - Complete yet restrained built-in features. Everything the industry takes for granted — RULE, SKILL, MCP, HOOK — is included, while other behemoths are left out, so nothing weighs you down.
   - Smart folding for noise reduction, ultra-smooth message list.
   - Full observability: thinking process, tool call chains, SubAgent execution status, active subprocesses, and complete LLM HTTP request/response logs — all traceable end to end.
 - **Unique features**:
-  - Minimal Skill mode (toggleable): when enabled, all Skills are triggered on demand via explicit commands, instead of dumping the whole catalog on the LLM — zero token cost in normal use. Perfect for users with many Skills: ultra token-saving, ultra low-noise!
+  - Minimal Skill mode (toggleable): when enabled, all Skills are triggered on demand via explicit commands, instead of handing the catalog directly to the LLM — zero token cost in normal use. Perfect for users with many Skills: ultra token-saving, and free from the noise of skill explosion!
   - Extreme Windows friendliness: auto-detects git bash and prefers bash, with deeply optimized character escaping. When bash is unavailable and it falls back to cmd, the command execution tool performs automatic line-level encoding detection, solving garbled output as much as possible. On Windows, the AI experience far surpasses comparable products — head and shoulders above the rest!
 - **Pure & secure**: 100% portable, no backdoors, with path sandbox support.
 
@@ -85,7 +85,6 @@
         - Built-in tools with native support for PDF / Word / Excel / PPT
     - Experience Enhancements
         - Custom Enter/line-break key
-        - Message aggregation display toggle
         - Path sandbox toggle
         - Complete LLM HTTP logging toggle
         - Access security code
@@ -95,8 +94,15 @@
     - Multi-language
         - Frontend supports both Chinese and English
     - Multiple theme colors
+        - Dark and light dual themes
 - **Not yet released, planned**
-    - Multi-language support for backend response messages and LLM built-in prompts
+    - Multi-language support for backend and LLM built-in prompts
+
+---
+
+## 📽️ Demo
+
+<img width="2270" height="1058" alt="showcase-gif-image" src="https://github.com/user-attachments/assets/e71314f7-1d26-45e9-b7cf-49f408f686cd" />
 
 ---
 
@@ -151,11 +157,11 @@ You can download the archive for your system directly from the GitHub **[Release
 > If you plan to map ports to the **public Internet**, or connect from **mobile devices (phones/tablets on external networks)** to your deployed ST-Cute:
 > 1. After the service starts, be sure to configure the **Access Security Code** in the **【Settings】** page first;
 > 2. Only map port `9661` to outside your LAN or the public network after the access code takes effect. Never expose an unprotected service directly to the public Internet!
-> 3. For public exposure it is **strongly recommended to terminate HTTPS at a reverse proxy**: over plain HTTP both the access code and the session cookie travel across the network in cleartext and can be sniffed by any node along the path.
+> 3. For public exposure it is **strongly recommended to serve HTTPS through a reverse proxy**: over plain HTTP both the access code and the session cookie travel across the network in cleartext and can be sniffed by any node along the path.
 
 #### Configuring the Access Code for Headless Deployments (Docker / Servers)
 
-The backend cannot obtain the plaintext of the access code (the page only uploads a digest when saving), so for headless scenarios such as containers, write the **plaintext** directly into the global config file. On startup the backend detects it automatically and upgrades it to a salted digest (after the upgrade the plaintext is no longer persisted):
+For headless scenarios such as containers, write the **plaintext** directly into the global config file. On startup the backend detects it automatically and upgrades it to a salted digest (after the upgrade the plaintext disappears automatically):
 
 ```bash
 # File location: ~/.st-cute/config.json (inside the container for Docker; mounting it as a data volume is recommended)
