@@ -146,7 +146,8 @@ export const useConversationStore = defineStore('conversation', () => {
         } else if (projectStore.projectList.length > 0 && projectStore.activeProjectId !== null) {
           // 只有当前项目确实存在且 activeProjectId 有效时，才自动创建会话
           // 避免删除项目后立即创建孤立会话
-          await createConversation(projectStore.activeProjectId || undefined)
+          // 经统一补建入口：与其他链路并发发现「无会话可用」时只落一次创建
+          await ensureConversation(projectStore.activeProjectId || undefined)
         }
       }
     } catch (e) {
@@ -354,8 +355,39 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  // 自动补建会话的并发闸门：持有在途创建 Promise，用于合并同一时刻的重复补建请求
+  let pendingCreatePromise: Promise<void> | null = null
+
   /**
-   * 删除会话后的「选中下一个」收口逻辑（单个/批量删除共用，原两处 20 行重复代码收拢）。
+   * 自动补建会话的统一入口（唯一收口点）。
+   * <p>
+   * 背景：多条链路都会在"当前无会话可用"时补建会话——本体删除收尾、WS 删除广播处理、
+   * 会话列表重拉。这几条链路在删除最后一条会话时会同时被触发（本端删除的 HTTP 回包与
+   * WS 广播几乎同时抵达），若各自独立发起创建，就会一次冒出多条空白会话。
+   * </p>
+   * <p>
+   * 因此以在途 Promise 做去重：已有活跃会话或补建在途时直接短路/复用，
+   * 保证同一轮补建只落一次创建请求。注意：用户显式新建仍走 {@link createConversation}，
+   * 不应被去重（连续点两次新建理应得到两条会话）。
+   * </p>
+   */
+  const ensureConversation = (projectId?: number): Promise<void> => {
+    // 已有活跃会话：说明无需补建（补建已完成或用户已选中其他会话），直接短路
+    if (activeCid.value !== null) {
+      return Promise.resolve()
+    }
+    // 已有补建在途：复用同一 Promise，绝不再发第二次创建请求
+    if (pendingCreatePromise !== null) {
+      return pendingCreatePromise
+    }
+    pendingCreatePromise = createConversation(projectId).finally(() => {
+      pendingCreatePromise = null
+    })
+    return pendingCreatePromise
+  }
+
+  /**
+   * 删除会话后的「选中下一个」收口逻辑（单个/批量删除、WS 删除广播三条链路共用）。
    * 优先级：当前项目剩余会话 > 无活跃项目时全局兜底 > 当前项目仍存在则在原项目新建 > 彻底清空
    */
   const selectNextAfterRemoval = async () => {
@@ -375,7 +407,8 @@ export const useConversationStore = defineStore('conversation', () => {
     } else if (currentProjectId !== null) {
       // 当前项目的会话已删光但项目还在：留在当前项目下新建会话，不跳其他项目的会话（与刷新后 loadConversations 行为一致）
       clearContext()
-      createConversation(currentProjectId || undefined)
+      // 经统一补建入口：本端删除回包与 WS 删除广播同时抵达时只落一次创建
+      await ensureConversation(currentProjectId || undefined)
     } else {
       // 没有项目了，彻底清空
       clearContext()
@@ -618,6 +651,8 @@ export const useConversationStore = defineStore('conversation', () => {
     loadConversations,
     selectConversation,
     createConversation,
+    ensureConversation,
+    selectNextAfterRemoval,
     deleteConversation,
     sendUserMsg,
     retryMessage,

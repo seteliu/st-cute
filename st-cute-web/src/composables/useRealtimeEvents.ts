@@ -229,13 +229,15 @@ export function useRealtimeEvents() {
         (s) => s.id !== deletedCid
       )
 
+      // 仅当被删的是当前活跃会话时才做收尾。此处复用 store 的统一收尾逻辑
+      // （selectNextAfterRemoval，内部经 ensureConversation 补建），原因有二：
+      // ① 本端删除最后一条会话时，删除 HTTP 回包与本条 WS 广播几乎同时抵达，
+      //    两条链路若各自独立补建就会一次冒出多条空白会话，统一入口内做了在途去重；
+      // ② 收尾优先级（优先留在当前项目）与刷新后 loadConversations 行为保持一致。
       if (conversationStore.activeCid === deletedCid) {
-        conversationStore.activeCid = null
-        if (conversationStore.conversationList.length > 0) {
-          conversationStore.selectConversation(conversationStore.conversationList[0].id)
-        } else {
-          conversationStore.createConversation()
-        }
+        conversationStore.selectNextAfterRemoval().catch((e) => {
+          console.error('WS 会话删除广播收尾失败:', e)
+        })
       }
     })
 
