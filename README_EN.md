@@ -102,7 +102,7 @@
 
 ## 📽️ Demo
 
-<img width="2270" height="1058" alt="showcase-gif-image" src="https://github.com/user-attachments/assets/e71314f7-1d26-45e9-b7cf-49f408f686cd" />
+<img width="100%" alt="showcase-gif-image" src="https://github.com/user-attachments/assets/e71314f7-1d26-45e9-b7cf-49f408f686cd" />
 
 ---
 

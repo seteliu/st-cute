@@ -102,7 +102,7 @@
 
 ## 📽️ 演示
 
-<img width="2270" height="1058" alt="st-cute-showcase" src="https://github.com/user-attachments/assets/30688805-90b9-4240-9081-87fdc31053c1" />
+<img width="100%" alt="st-cute-showcase" src="https://github.com/user-attachments/assets/30688805-90b9-4240-9081-87fdc31053c1" />
 
 ---
 
