@@ -46,9 +46,16 @@ public final class FileSearchConstants {
     /**
      * 排除规则说明文案：供 FindFilesTool、GrepSearchTool 的 includeExcludedDirs 参数描述共享引用，
      * 保证同一机制说明在模型侧全局只有单一出处（调整排除清单时只需同步此处文案，无需逐工具翻改）。
+     * <p>
+     * 文案经 .formatted() 注入 JSON schema 的 %s 占位，禁止出现百分号与未转义双引号。
+     * 措辞上刻意强调「保持默认即可」「开启会显著变慢」并给出 rootDir/首段点名替代路径，
+     * 抑制模型倾向「放行=更全面=更好」而无脑传 true 拖垮检索的行为。
+     * </p>
      */
     public static final String EXCLUDE_DIRS_DESC =
-            "是否放行常规排除清单（target, node_modules, .idea 等产物依赖与缓存目录），默认 false（即跳过）。"
+            "是否放行常规排除清单（target, node_modules, .idea 等产物依赖与缓存目录），默认 false（即跳过），保持默认即可。"
+                    + "开启 true 后 node_modules、target 等海量文件会全量遍历，检索显著变慢，仅当明确需要检索产物或依赖缓存内容时才开启；"
+                    + "优先用 rootDir 直接指向目标目录、或 find_files 的 pattern 首段点名（如 'node_modules/**'）精准放行单个目录，避免全局开启。"
                     + "跳过按目录名精确匹配：.git 等版本库内部目录任何情况都跳过；"
                     + "未列入清单的目录（含 .ai-work、.agents 等点开头目录）正常搜索";
 }
