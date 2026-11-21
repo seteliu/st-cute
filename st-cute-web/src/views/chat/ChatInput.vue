@@ -194,12 +194,12 @@
             :class="{
               'send-btn-active':
                 !appStore.loopRunning &&
-                (appStore.userInput || stagedFiles.length > 0) &&
+                appStore.userInput &&
                 !isSendBlocked
             }"
             :disabled="
               !appStore.loopRunning &&
-              ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)
+              (!appStore.userInput || isSendBlocked || isUploading)
             "
             @click="appStore.loopRunning ? appStore.cancelLoop() : executeSend()"
           >
@@ -299,12 +299,12 @@
             :class="{
               'send-btn-active':
                 !appStore.loopRunning &&
-                (appStore.userInput || stagedFiles.length > 0) &&
+                appStore.userInput &&
                 !isSendBlocked
             }"
             :disabled="
               !appStore.loopRunning &&
-              ((!appStore.userInput && stagedFiles.length === 0) || isSendBlocked || isUploading)
+              (!appStore.userInput || isSendBlocked || isUploading)
             "
             @click="appStore.loopRunning ? appStore.cancelLoop() : executeSend()"
           >
@@ -458,10 +458,13 @@ const inputPlaceholder = computed(() => {
 // 执行发送前上传流程与发消息联动
 const executeSend = async () => {
   if (appStore.loopRunning || isUploading.value) return
-  // 发送链路兜底：未连接服务端时静默拦截（按钮与 Enter 均已置灰，此处防程序化调用的漏网场景）
-  if (!appStore.isConnected) return
+  // 发送链路兜底：对齐 isSendBlocked 全量口径（未连接、无供应商、无会话等一律拦截，
+  // 按钮与 Enter 均已置灰，此处防程序化调用的漏网场景）
+  if (isSendBlocked.value) return
+  // 纯附件无文字时不发起发送：消息体要求文字非空（store 层 sendUserMsg 同口径拦截），
+  // 若此处放行，附件会先被物理上传、随后消息静默发不出，用户陷入附件白传且滞留的僵局
   const text = appStore.userInput.trim()
-  if (!text && stagedFiles.value.length === 0) return
+  if (!text) return
 
   const cid = conversationStore.activeCid
   if (!cid) return
@@ -535,6 +538,31 @@ watch(
         }
       })
     }
+  }
+)
+
+// autosize 镜像兜底同步：naive-ui 的 autosize 高度完全依赖隐藏镜像元素
+// .n-input__textarea-mirror 被内容撑高（textarea 本体绝对定位、height:100%，自身不撑高）。
+// 手动输入后 naive-ui 会在内部 syncSource 里记下最后 emit 出的值且从不清空，
+// 当程序化回填的值恰好等于 syncSource 时（典型场景：「发送消息后立即重置回退」回填同一段文本、
+// 「切走再切回会话」交割回上一次手动输入的草稿），其内部 watch 被 value !== syncSource 拦截，
+// 跳过镜像同步，输入框高度便滞留在 minRows 不随长文本撑开。
+// 此处在 nextTick 后比对镜像 textContent 与目标值（采用与 syncMirror 一致的「值 + \r\n」格式），
+// 仅在不一致时手动补写镜像、靠镜像内容高度驱动整条布局链回弹；
+// 手动输入路径下镜像已被 naive-ui 以相同格式写过，比对必然相等，不产生任何多余 DOM 写入。
+// 覆盖回退消息回填、会话切换草稿交割等一切程序化赋值路径。
+watch(
+  () => appStore.userInput,
+  (newVal) => {
+    nextTick(() => {
+      const wrapper = inputInstRef.value?.wrapperElRef as HTMLElement | undefined
+      const mirror = wrapper?.querySelector<HTMLElement>('.n-input__textarea-mirror')
+      if (!mirror) return
+      const expected = `${newVal ?? ''}\r\n`
+      if (mirror.textContent !== expected) {
+        mirror.textContent = expected
+      }
+    })
   }
 )
 

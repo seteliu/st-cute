@@ -222,6 +222,10 @@ const emit = defineEmits<{
   padding: 2px 4px;
   font-size: 0.75rem;
   border-radius: 4px;
+  /* 抬升层级压过 success 打勾遮罩：附件滞留 success 态（发送被拦截或失败待重试）时，
+     移除按钮必须保持可点，否则附件无法清理 */
+  position: relative;
+  z-index: 1;
   transition:
     color 0.2s,
     background-color 0.2s;
@@ -245,9 +249,11 @@ const emit = defineEmits<{
   color: var(--primary-color);
 }
 
+/* 上传完成打勾遮罩：纯视觉反馈，放行点击穿透，避免盖住下方移除按钮 */
 .success-overlay {
   background-color: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(1px);
+  pointer-events: none;
 }
 
 .spin-icon {
