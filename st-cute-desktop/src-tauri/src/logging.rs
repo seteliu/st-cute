@@ -1,5 +1,6 @@
 use chrono::Local;
 use std::fs::{create_dir_all, metadata, read_dir, remove_file, File, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -90,6 +91,20 @@ pub fn open_desktop_log_file() -> Result<File, String> {
         .append(true)
         .open(&path)
         .map_err(|e| format!("打开早期报错日志文件失败 ({}): {}", path.display(), e))
+}
+
+/// 追加一行壳侧运行期告警到 desktop 日志文件。
+///
+/// 适用于 release 构建下无控制台、`eprintln!` 会被直接丢弃的排障信息（如窗口自愈失败，
+/// 对用户表现为「窗口仍旧不可操作」的硬故障，必须留痕）。写入失败时静默放弃：
+/// 日志本身不可用时不应反过来影响主流程。
+pub fn append_desktop_log(message: &str) {
+    let Ok(mut file) = open_desktop_log_file() else {
+        return;
+    };
+    let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S");
+    let _ = writeln!(file, "[{}] {}", timestamp, message);
+    let _ = file.flush();
 }
 
 /// 启动每日清理守护线程：应用长驻不重启时，打开日志时的启动期清理不会再触发，

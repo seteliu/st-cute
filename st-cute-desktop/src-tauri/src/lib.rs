@@ -3,6 +3,7 @@ mod probe;
 mod process;
 mod shutdown;
 mod update;
+mod window_guard;
 
 use process::ProcessManager;
 use serde_json::json;
@@ -360,6 +361,13 @@ pub fn run() {
                     // 位置不持久化：未处于最大化时始终居中显示
                     let _ = window.center();
                 }
+                // 越界自愈：恢复出来的尺寸可能来自更大的屏幕（如 2K 下存的状态，
+                // 本次在 1080p 或远程桌面小分辨率下启动），需收缩并推回工作区，
+                // 否则标题栏连同最小化/最大化/关闭按钮会跑到屏幕外无法操作。
+                // 放在 center 之后、show 之前，保证用户看到的第一帧就是合法形态。
+                // 注：WebviewWindow 不直出 Window，经 as_ref() 取内层 Webview 后再取其宿主窗口
+                let raw_window = window.as_ref().window();
+                window_guard::ensure_window_in_work_area(&raw_window);
                 let _ = window.show();
                 let _ = window.set_focus();
             }
@@ -369,23 +377,32 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                // 1. 立即拦截并隐藏窗口，给用户秒关的视觉体验 (Hide-then-Shutdown)
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    // 1. 立即拦截并隐藏窗口，给用户秒关的视觉体验 (Hide-then-Shutdown)
+                    api.prevent_close();
+                    let _ = window.hide();
 
-                let mgr_arc = Arc::clone(&process_mgr_clone);
-                let app_handle = window.app_handle().clone();
+                    let mgr_arc = Arc::clone(&process_mgr_clone);
+                    let app_handle = window.app_handle().clone();
 
-                // 2. 后台异步执行优雅停机
-                thread::spawn(move || {
-                    let mut mgr = mgr_arc.lock().unwrap();
-                    if mgr.spawned {
-                        let token = mgr.token.clone();
-                        shutdown::shutdown_service(BASE_URL, &token, &mut mgr.child);
-                    }
-                    app_handle.exit(0);
-                });
+                    // 2. 后台异步执行优雅停机
+                    thread::spawn(move || {
+                        let mut mgr = mgr_arc.lock().unwrap();
+                        if mgr.spawned {
+                            let token = mgr.token.clone();
+                            shutdown::shutdown_service(BASE_URL, &token, &mut mgr.child);
+                        }
+                        app_handle.exit(0);
+                    });
+                }
+                // 越界自愈的运行期触发点：由系统托盘/其他程序切回本窗口时重新核对一次。
+                // 覆盖「进程不重启，但显示器分辨率已变（远程桌面接入、插拔换屏）」的场景，
+                // 内部只对「非聚焦 → 聚焦」的跳变响应，且无越界时不做任何改动
+                WindowEvent::Focused(focused) => {
+                    window_guard::on_window_focus_changed(window, *focused);
+                }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())
